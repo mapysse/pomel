@@ -1737,7 +1737,7 @@ function getSession() {
   try { const r = localStorage.getItem('pomel_session'); return r ? JSON.parse(r) : null; } catch { return null; }
 }
 function setSession(code) {
-  localStorage.setItem('pomel_session', JSON.stringify({ code }));
+  localStorage.setItem('pomel_session', JSON.stringify({ code, name: state ? state.name : '' }));
 }
 function clearSession() {
   localStorage.removeItem('pomel_session');
@@ -1770,34 +1770,28 @@ async function init() {
     return;
   }
 
-  // Timeout de sécurité : 12 secondes max
-  let timedOut = false;
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    hideLoading();
-    document.getElementById('loginScreen').classList.remove('hidden');
-  }, 12000);
+  // Lancer l'app immédiatement avec un état minimal basé sur la session
+  // pour ne pas faire attendre l'utilisateur
+  state = { code: session.code, name: session.name || '…', balance: 0, history: [], ownedTitles: [], activeTitles: [], group: null, createdAt: new Date().toISOString() };
+  launchApp();
+  hideLoading();
 
+  // Puis synchroniser avec Firebase en arrière-plan
   try {
     const acc = await getAccount(session.code);
-    if (timedOut) return; // trop tard, login déjà affiché
-    clearTimeout(timeoutId);
     if (acc) {
       state = migrateAccount(acc);
-      launchApp();
-      hideLoading();
+      refreshUI();
+      renderHome();
     } else {
-      // Session invalide (compte supprimé ?)
+      // Compte introuvable — déconnecter
       clearSession();
-      hideLoading();
+      state = null;
+      document.getElementById('app').classList.remove('visible');
       document.getElementById('loginScreen').classList.remove('hidden');
     }
   } catch(e) {
-    if (!timedOut) {
-      clearTimeout(timeoutId);
-      hideLoading();
-      document.getElementById('loginScreen').classList.remove('hidden');
-    }
+    // Firebase indisponible — l'app reste ouverte avec les données minimales
   }
 }
 
