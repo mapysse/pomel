@@ -681,17 +681,66 @@
   .profil-dots-empty { font-size: .82rem; color: var(--muted); font-style: italic; padding: 2px 0; }
 
   /* STREAK — Série quotidienne */
-  .streak-widget { display: flex; align-items: center; gap: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 100px; padding: 6px 14px; cursor: pointer; transition: border-color .2s, box-shadow .2s; user-select: none; }
-  .streak-widget:hover { border-color: var(--yellow); box-shadow: 0 0 10px rgba(240,192,64,0.2); }
-  .streak-widget.ready { border-color: var(--yellow); box-shadow: 0 0 12px rgba(240,192,64,0.35); animation: streak-pulse 1.6s ease-in-out infinite; }
-  @keyframes streak-pulse { 0%,100%{box-shadow:0 0 8px rgba(240,192,64,0.3)} 50%{box-shadow:0 0 22px rgba(240,192,64,0.6)} }
-  .streak-days { display: flex; gap: 3px; }
-  .streak-day { width: 10px; height: 10px; border-radius: 50%; background: var(--border); transition: background .2s; }
+  .streak-widget {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 8px 14px;
+    cursor: pointer; transition: all .2s; user-select: none;
+    position: relative;
+  }
+  .streak-widget:hover { border-color: var(--yellow); }
+  /* État DISPONIBLE — très visible */
+  .streak-widget.ready {
+    background: rgba(240,192,64,0.12);
+    border-color: var(--yellow);
+    box-shadow: 0 0 0 2px rgba(240,192,64,0.25), 0 0 18px rgba(240,192,64,0.35);
+    animation: streak-glow 1.4s ease-in-out infinite;
+  }
+  @keyframes streak-glow {
+    0%,100% { box-shadow: 0 0 0 2px rgba(240,192,64,0.2), 0 0 12px rgba(240,192,64,0.3); }
+    50%      { box-shadow: 0 0 0 3px rgba(240,192,64,0.4), 0 0 28px rgba(240,192,64,0.55); }
+  }
+  .streak-widget.ready .streak-label {
+    color: var(--yellow);
+    font-size: .85rem;
+    font-weight: 800;
+    animation: streak-label-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes streak-label-pulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: .75; }
+  }
+  /* Points de progression */
+  .streak-days { display: flex; gap: 4px; align-items: center; }
+  .streak-day {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--border); transition: background .2s, transform .15s;
+    flex-shrink: 0;
+  }
   .streak-day.done { background: var(--yellow); }
-  .streak-day.today-ready { background: var(--primary); animation: streak-pulse 1s ease-in-out infinite; }
-  .streak-day.final { width: 14px; height: 14px; }
-  .streak-label { font-size: .7rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
-  .streak-label.ready { color: var(--yellow); }
+  .streak-day.today-ready {
+    background: var(--yellow);
+    box-shadow: 0 0 6px rgba(240,192,64,0.8);
+    animation: streak-dot-bounce .8s ease-in-out infinite;
+  }
+  .streak-day.final { width: 15px; height: 15px; }
+  @keyframes streak-dot-bounce {
+    0%,100% { transform: scale(1); }
+    50%      { transform: scale(1.35); }
+  }
+  /* Séparateur visuel entre les jours */
+  .streak-sep { width: 4px; height: 2px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
+  .streak-sep.done { background: rgba(240,192,64,0.5); }
+  /* Label */
+  .streak-label { font-size: .75rem; font-weight: 700; color: var(--muted); white-space: nowrap; line-height: 1; }
+  .streak-label.ready { color: var(--yellow); font-size: .82rem; font-weight: 800; }
+  /* Emoji feu */
+  .streak-fire { font-size: 1rem; line-height: 1; flex-shrink: 0; }
+  .streak-fire.ready { animation: streak-fire-shake .5s ease-in-out infinite alternate; }
+  @keyframes streak-fire-shake {
+    0%   { transform: rotate(-8deg) scale(1.1); }
+    100% { transform: rotate(8deg)  scale(1.2); }
+  }
   @keyframes rainbow { 0%{color:#EB5846} 16%{color:#f0c040} 33%{color:#3ecf6e} 50%{color:#5b8def} 66%{color:#b05bef} 83%{color:#ef5bb0} 100%{color:#EB5846} }
   .rainbow-text { animation: rainbow 2s linear infinite; font-weight: 700; }
 
@@ -808,8 +857,9 @@
     </div>
     <!-- Série quotidienne -->
     <div class="streak-widget" id="streakWidget" onclick="claimStreak()" title="Série quotidienne — clique chaque jour !">
+      <span class="streak-fire" id="streakFire">🔥</span>
       <div class="streak-days" id="streakDays"></div>
-      <span class="streak-label" id="streakLabel">🔥</span>
+      <span class="streak-label" id="streakLabel"></span>
     </div>
     <div class="user-badge" id="userBadge" onclick="toggleUserMenu(event)">
       Bonjour, <strong id="headerName">—</strong>
@@ -4091,37 +4141,32 @@ const SNAKE_WEEKLY_CONSOLATION = 500;
 function getSnakeWeekKey() {
   const now = new Date();
   const day = now.getDay(); // 0=dim, 1=lun…
-  const diff = (day === 0 ? -6 : 1 - day); // décalage pour aller au lundi
+  const diff = (day === 0 ? -6 : 1 - day);
   const mon = new Date(now);
   mon.setDate(now.getDate() + diff);
   return `${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
 }
 
+// Même logique que saveSnakeScore mais sur snake_weekly_lb/
 async function saveSnakeWeeklyScore(score) {
   if (score === 0) return;
-  const weekKey = getSnakeWeekKey();
-  // Sanitise la clé : retire les caractères interdits par Firebase (. # $ [ ] /)
+  // Sanitise la clé (caractères interdits Firebase)
   const safeCode = state.code.replace(/[.#$[\]/]/g, '_');
-  const path = `snake_weekly/${weekKey}/${safeCode}`;
+  const path = 'snake_weekly_lb/' + safeCode;
   const existing = await dbGet(path);
   if (!existing || score > existing.score) {
     await dbSet(path, { name: state.name, code: state.code, score, date: new Date().toISOString() });
   }
 }
 
+// Même logique que renderSnakeLb mais sur snake_weekly_lb/ + récompenses
 async function renderSnakeWeeklyLb() {
   const list = document.getElementById('snakeWeeklyLbList');
   if (!list) return;
   list.innerHTML = '<div class="history-empty">Chargement…</div>';
-  const weekKey = getSnakeWeekKey();
-  const entries = await dbGetAll('snake_weekly/' + weekKey);
-
-  if (!entries || !entries.length) {
-    list.innerHTML = '<div class="history-empty">Aucun score cette semaine.</div>';
-    return;
-  }
-  entries.sort((a, b) => b.score - a.score);
-
+  const snap = await dbGet('snake_weekly_lb');
+  if (!snap) { list.innerHTML = '<div class="history-empty">Aucun score cette semaine.</div>'; return; }
+  const entries = Object.values(snap).sort((a, b) => b.score - a.score);
   list.innerHTML = '';
   const medals = ['🥇','🥈','🥉'];
   entries.forEach((e, i) => {
@@ -4142,26 +4187,26 @@ async function renderSnakeWeeklyLb() {
   });
 }
 
+// Reset + distribution des récompenses le lundi à 9h
 async function checkSnakeWeeklyReset() {
   const now = new Date();
   if (now.getDay() !== 1 || now.getHours() < 9) return;
 
-  const prevMon = new Date(now);
-  prevMon.setDate(now.getDate() - 7);
-  const prevKey = `${prevMon.getFullYear()}-${String(prevMon.getMonth()+1).padStart(2,'0')}-${String(prevMon.getDate()).padStart(2,'0')}`;
+  const weekKey = getSnakeWeekKey();
 
-  const distributed = await dbGet('snake_weekly_distributed/' + prevKey);
+  // Vérifier si déjà distribué cette semaine
+  const distributed = await dbGet('snake_weekly_distributed/' + weekKey);
   if (distributed) return;
 
-  const entries = await dbGetAll('snake_weekly/' + prevKey);
-  if (!entries || !entries.length) {
-    await dbSet('snake_weekly_distributed/' + prevKey, true);
-    return;
-  }
+  // Marquer immédiatement (anti-race condition)
+  await dbSet('snake_weekly_distributed/' + weekKey, true);
 
-  await dbSet('snake_weekly_distributed/' + prevKey, true);
+  // Lire le classement actuel (même logique que renderSnakeWeeklyLb)
+  const snap = await dbGet('snake_weekly_lb');
+  if (!snap) return;
+  const entries = Object.values(snap).sort((a, b) => b.score - a.score);
 
-  entries.sort((a, b) => b.score - a.score);
+  // Distribuer les récompenses
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const prize = i < 3 ? SNAKE_WEEKLY_PRIZES[i] : SNAKE_WEEKLY_CONSOLATION;
@@ -4174,6 +4219,9 @@ async function checkSnakeWeeklyReset() {
       if (e.code === state.code) { state = migrateAccount(acc); refreshUI(); }
     }
   }
+
+  // Reset du classement hebdo (le général snake_lb n'est PAS touché)
+  await dbDelete('snake_weekly_lb');
 }
 
 // ── SNAKE CONTROLS ───────────────────────────────
@@ -5815,15 +5863,23 @@ function renderStreakWidget() {
   const widget = document.getElementById('streakWidget');
   const daysEl = document.getElementById('streakDays');
   const label  = document.getElementById('streakLabel');
+  const fire   = document.getElementById('streakFire');
   if (!widget || !daysEl || !label) return;
 
-  const claimed = s.lastClaim === today;
-  const doneDays = claimed ? s.days : streakDayIndex(); // jours déjà faits (incluant aujourd'hui si claimé)
-  const todayIdx = claimed ? -1 : doneDays; // index du jour à réclamer aujourd'hui (0-based)
-  const ready = canClaimStreak();
+  const claimed  = s.lastClaim === today;
+  const doneDays = claimed ? s.days : streakDayIndex();
+  const todayIdx = claimed ? -1 : doneDays; // index (0-based) du jour à réclamer
+  const ready    = canClaimStreak();
 
+  // Points + séparateurs
   daysEl.innerHTML = '';
   for (let i = 0; i < 5; i++) {
+    // Séparateur entre les points
+    if (i > 0) {
+      const sep = document.createElement('div');
+      sep.className = 'streak-sep' + (i <= doneDays ? ' done' : '');
+      daysEl.appendChild(sep);
+    }
     const dot = document.createElement('div');
     const isFinal = i === 4;
     dot.className = 'streak-day' + (isFinal ? ' final' : '');
@@ -5840,20 +5896,26 @@ function renderStreakWidget() {
   }
 
   if (claimed) {
+    // Déjà réclamé aujourd'hui
     const nextReward = s.days < 5 ? STREAK_REWARDS[s.days] : STREAK_REWARDS[0];
-    label.textContent = `🔥 ${s.days}/5`;
+    label.textContent = `${s.days}/5`;
     label.className = 'streak-label';
+    if (fire) { fire.textContent = '🔥'; fire.className = 'streak-fire'; }
     widget.classList.remove('ready');
     widget.title = `Série : ${s.days}/5 — Reviens demain pour +${nextReward.toLocaleString('fr-FR')} 🪙`;
   } else if (ready) {
+    // Disponible — état très visible
     const reward = STREAK_REWARDS[todayIdx] || 500;
     label.textContent = `+${reward.toLocaleString('fr-FR')} 🪙`;
     label.className = 'streak-label ready';
+    if (fire) { fire.textContent = '🔥'; fire.className = 'streak-fire ready'; }
     widget.classList.add('ready');
     widget.title = `Clique pour réclamer +${reward.toLocaleString('fr-FR')} Pomels !`;
   } else {
-    label.textContent = `🔥 0/5`;
+    // Pas encore de streak
+    label.textContent = '0/5';
     label.className = 'streak-label';
+    if (fire) { fire.textContent = '🔥'; fire.className = 'streak-fire'; }
     widget.classList.remove('ready');
     widget.title = 'Série quotidienne — reviens demain !';
   }
