@@ -4783,6 +4783,7 @@ function renderHistory() {
 // ── PROFILE ──────────────────────────────────────
 function renderProfile() {
   const el = document.getElementById('profileInfo');
+  if (!el) return;
   const spins = (state.history || []).filter(h => h.type === 'roulette').length;
   const earned = (state.history || []).filter(h => h.amount > 0).reduce((s, h) => s + h.amount, 0);
   const sent = (state.history || []).filter(h => h.amount < 0).reduce((s, h) => s + Math.abs(h.amount), 0);
