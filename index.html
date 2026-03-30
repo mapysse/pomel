@@ -510,6 +510,9 @@
   .snake-lb-name { flex: 1; font-weight: 700; font-size: .9rem; }
   .snake-lb-score { font-family: 'Space Mono', monospace; font-size: .85rem; color: var(--primary); font-weight: 700; }
   .snake-lb-pomels { font-family: 'Space Mono', monospace; font-size: .78rem; color: var(--green); }
+  /* Classements côte à côte */
+  .snake-lb-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .snake-lb-row { grid-template-columns: 1fr; } }
 
   /* PROVERBE DU JOUR */
   .proverbe-wrap { display: flex; flex-direction: column; gap: 24px; }
@@ -517,6 +520,12 @@
   .proverbe-today-label { font-size: .7rem; font-weight: 700; color: var(--primary); letter-spacing: .12em; text-transform: uppercase; }
   .proverbe-today-author { font-size: .85rem; color: var(--muted); }
   .proverbe-today-author strong { color: var(--text); }
+  /* Réactions proverbe */
+  .prov-reactions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .prov-react-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-size: .92rem; cursor: pointer; transition: all .18s; display: flex; align-items: center; gap: 5px; color: var(--text); font-family: 'Syne', sans-serif; font-weight: 600; }
+  .prov-react-btn:hover { border-color: var(--primary); transform: scale(1.06); }
+  .prov-react-btn.reacted { background: rgba(235,88,70,0.15); border-color: var(--primary); }
+  .prov-react-count { font-family: 'Space Mono', monospace; font-size: .78rem; color: var(--muted); min-width: 10px; }
   .proverbe-input-zone { display: flex; flex-direction: column; gap: 12px; }
   .proverbe-submitted { background: rgba(62,207,110,0.1); border: 1px solid rgba(62,207,110,0.3); border-radius: 10px; padding: 14px 18px; color: var(--green); font-size: .9rem; font-weight: 600; }
   .proverbe-history-title { font-size: .75rem; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
@@ -637,6 +646,43 @@
   /* RAINBOW EFFECT */
   @keyframes rainbow { 0%{color:#EB5846} 16%{color:#f0c040} 33%{color:#3ecf6e} 50%{color:#5b8def} 66%{color:#b05bef} 83%{color:#ef5bb0} 100%{color:#EB5846} }
   .rainbow-text { animation: rainbow 2s linear infinite; font-weight: 700; }
+
+  /* SPARKLE EFFECT */
+  @keyframes sparkle-rotate { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+  .sparkle-text {
+    position: relative;
+    display: inline-block;
+    font-weight: 700;
+    background: linear-gradient(90deg, #EB5846, #f0c040, #3ecf6e, #5b8def, #b05bef, #ef5bb0, #EB5846);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: sparkle-shimmer 1.8s linear infinite;
+  }
+  @keyframes sparkle-shimmer {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+  .sparkle-text::before, .sparkle-text::after {
+    content: '✦';
+    position: absolute;
+    font-size: .55em;
+    -webkit-text-fill-color: initial;
+    background: none;
+    animation: sparkle-star 1.2s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  .sparkle-text::before { top: -4px; left: -10px; color: #f0c040; animation-delay: 0s; }
+  .sparkle-text::after  { bottom: -4px; right: -10px; color: #3ecf6e; animation-delay: .6s; }
+  @keyframes sparkle-star { 0%{opacity:.2;transform:scale(.7)} 100%{opacity:1;transform:scale(1.2)} }
+
+  /* PSEUDO COLOR CLASSES */
+  .name-color-green  { color: #3ecf6e !important; -webkit-text-fill-color: #3ecf6e; }
+  .name-color-blue   { color: #5b8def !important; -webkit-text-fill-color: #5b8def; }
+  .name-color-orange { color: #f0a040 !important; -webkit-text-fill-color: #f0a040; }
+  .name-color-red    { color: #EB5846 !important; -webkit-text-fill-color: #EB5846; }
+  .name-color-brown  { color: #a0622a !important; -webkit-text-fill-color: #a0622a; }
 
   /* BADGES */
   .user-badge-emoji { font-size: 1rem; }
@@ -1071,7 +1117,7 @@
         <div class="clicker-upgrade-card" id="upgradeSecondFruit">
           <div class="clicker-upgrade-info">
             <div class="clicker-upgrade-name">🍎 Second Fruit</div>
-            <div class="clicker-upgrade-desc">Un deuxième fruit cliquable — l'auto-clicker génère une graine supplémentaire par fruit débloqué. Stock auto +1 000.</div>
+            <div class="clicker-upgrade-desc">Un deuxième fruit cliquable — chaque clic rapporte <strong>2 graines</strong> au lieu de 1. L'auto-clicker génère une graine supplémentaire par fruit. Stock auto +1 000.</div>
             <div class="clicker-upgrade-price">10 000 🌱</div>
           </div>
           <button class="btn-buy" id="btnSecondFruit" onclick="buyUpgrade('secondFruit')">Acheter</button>
@@ -1123,11 +1169,21 @@
         <span>Espace pour pause</span>
       </div>
 
+      <div class="snake-lb-row">
       <div class="snake-lb-card">
         <div class="snake-lb-title">🏆 Meilleurs scores</div>
         <div class="snake-lb-list" id="snakeLbList">
           <div class="history-empty">Aucun score enregistré.</div>
         </div>
+      </div>
+
+      <div class="snake-lb-card" id="snakeWeeklyLbCard">
+        <div class="snake-lb-title">📅 Classement de la semaine <span id="snakeWeeklyPrizeInfo" style="font-size:.72rem;color:var(--muted);font-weight:400;"></span></div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px;">🥇 2 000 🪙 · 🥈 1 500 🪙 · 🥉 1 000 🪙 · autres 500 🪙 — récompenses versées le lundi à 9h</div>
+        <div class="snake-lb-list" id="snakeWeeklyLbList">
+          <div class="history-empty">Chargement…</div>
+        </div>
+      </div>
       </div>
     </div>
   </div>
@@ -1273,7 +1329,7 @@
         </div>
         <div class="form-group">
           <label>Récompense (Pomels offerts)</label>
-          <input type="number" id="queteRewardInput" placeholder="ex: 300" min="1" max="500" />
+          <input type="number" id="queteRewardInput" placeholder="ex: 300" min="1" max="5000" />
         </div>
         <div id="queteCreateAlert" class="alert"></div>
         <button class="btn-primary" onclick="handleCreateQuete()">Lancer la quête ⚔️</button>
@@ -1362,9 +1418,6 @@
         <div class="section-sub">Ton profil et ceux de la communauté.</div>
       </div>
 
-      <!-- Mon profil -->
-      <div class="profil-me-card" id="profilMeCard"></div>
-
       <!-- Tous les joueurs -->
       <div>
         <div class="profils-section-title" style="margin-bottom:12px;">Tous les joueurs</div>
@@ -1383,6 +1436,7 @@
       <div class="proverbe-today-card" id="provTodayCard">
         <div class="proverbe-today-label">✨ Aujourd'hui</div>
         <div class="proverbe-waiting" id="provTodayContent">Chargement…</div>
+        <div id="provReactionsZone" style="display:none;"></div>
       </div>
       <div id="provInputZone" style="display:none;">
         <div class="bet-create-card">
@@ -1472,7 +1526,7 @@
         <h3>🎲 Les Paris</h3>
         <p>Crée ou rejoins un pari entre amis sur n'importe quel sujet. Mise des Pomels sur l'option de ton choix !</p>
         <ul>
-          <li>Les gagnants récupèrent leur mise + une part <strong>équitable</strong> des mises perdantes (arrondie au supérieur)</li>
+          <li>Les gagnants récupèrent <strong>2× leur mise</strong> + une part <strong>équitable</strong> des mises perdantes (arrondie au supérieur)</li>
           <li>Le créateur du pari peut le supprimer à tout moment (les mises sont remboursées)</li>
           <li>Les paris non clôturés sont supprimés automatiquement après <strong>3 jours</strong></li>
           <li>Les paris terminés disparaissent après <strong>24h</strong></li>
@@ -1490,6 +1544,7 @@
           <li>Contrôles : flèches ⬆⬇⬅➡, ZQSD ou swipe sur mobile</li>
           <li>Espace pour mettre en pause</li>
           <li>Un <strong>leaderboard</strong> conserve ton meilleur score</li>
+          <li><strong>Classement hebdomadaire</strong> — le lundi à 9h : 🥇 2 000 🪙 · 🥈 1 500 🪙 · 🥉 1 000 🪙 · autres 500 🪙</li>
         </ul>
       </div>
 
@@ -1500,7 +1555,7 @@
         <p>Dépense tes Pomels pour acheter des titres, des badges et des effets visuels. Active-les ensuite dans <strong>Paramètres</strong>.</p>
         <ul>
           <li><strong>Titres</strong> — s'affichent à côté de ton nom dans le classement</li>
-          <li><strong>Couleur du pseudo</strong> — effet Arc-en-ciel animé pour 50 000 🪙</li>
+          <li><strong>Couleur du pseudo</strong> — Effet Arc-en-ciel animé (50 000 🪙), Effet Particules Brillantes (50 000 🪙), ou couleur fixe : Vert, Bleu, Orange, Rouge, Marron (1 000 🪙 chacun)</li>
           <li><strong>Badges</strong> — émojis affichés à côté de ton nom : Expert 🎖️ (1 000), Pomélien 🌟 (5 000), Censure 🚫 (10 000)</li>
           <li>Titre spécial : <em>Criminel des WC</em> pour 10 000 🪙</li>
         </ul>
@@ -1527,7 +1582,7 @@
         <h3>⚔️ Les Quêtes</h3>
         <p>Assigne une mission à un autre joueur et offre-lui des Pomels en récompense — les Pomels sont offerts par le système, pas prélevés sur toi !</p>
         <ul>
-          <li>Choisis un joueur, décris sa mission et fixe la récompense (<strong>500 Pomels max</strong>)</li>
+          <li>Choisis un joueur, décris sa mission et fixe la récompense (<strong>5 000 Pomels max</strong>)</li>
           <li>Le joueur peut <strong>accepter ou refuser</strong> la quête</li>
           <li>Une fois la mission accomplie, le créateur <strong>valide</strong> la quête : le joueur reçoit la récompense complète, et le créateur reçoit <strong>la moitié (arrondie au supérieur)</strong> en bonus</li>
           <li>Les quêtes non terminées sont supprimées après <strong>3 jours</strong></li>
@@ -1573,6 +1628,7 @@
         <p>Chaque jour, un membre est tiré au sort pour partager un proverbe ou une phrase motivante.</p>
         <ul>
           <li>Si c'est ton tour, un champ s'affiche pour écrire ta phrase</li>
+          <li>Une fois publié, tout le monde peut réagir avec des <strong>émojis</strong> (❤️ 😂 🔥 etc.)</li>
           <li>Les <strong>10 derniers proverbes</strong> sont conservés en grisé</li>
           <li>Le proverbe du jour est affiché directement sur la <strong>page d'accueil</strong></li>
         </ul>
@@ -1615,7 +1671,7 @@
         <h3>🌱 Le Clicker</h3>
         <p>Un mini-jeu de clicker où tu génères des <strong>graines de Pomels</strong>, une monnaie propre à ce jeu, en cliquant sur un fruit.</p>
         <ul>
-          <li>Clique sur le fruit pour générer <strong>1 graine</strong> par clic</li>
+          <li>Clique sur le fruit pour générer <strong>1 graine</strong> par clic (2 graines avec le Second Fruit débloqué !)</li>
           <li>Les graines servent à acheter des améliorations et à planter des fleurs dans le Jardin</li>
           <li>Échange tes graines contre des Pomels : <strong>100 graines = 1 Pomel</strong></li>
         </ul>
@@ -1666,12 +1722,21 @@ const db = firebase.database();
 const GROUPS = ['Projet','Team Prod A','Team Prod B','Confo','SSI/Devs','Créa'];
 
 const SHOP_TITLES = [
-  { id: 'expert_pomdoc', name: 'Expert Pomdoc', price: 100000, type: 'title' },
-  { id: 'maitre_pokemon', name: 'Maître Pokemon', price: 10000, type: 'title' },
+  { id: 'survivant_bug_30mars', name: '🐛 Survivant du bug du 30 mars', price: 0, type: 'title'},
   { id: 'fck_israel', name: 'F*ck Isr**l', price: 1000, type: 'title' },
   { id: 'larry_malicieux', name: 'Larry le Malicieux', price: 1000, type: 'title' },
+  { id: 'fan_burger_lidl', name: 'Fan 2 burgers LIDL', price: 1000, type: 'title' },
+  { id: 'maitre_pokemon', name: 'Maître Pokemon', price: 10000, type: 'title' },
   { id: 'criminel_wc', name: 'Criminel des WC', price: 10000, type: 'title' },
+  { id: 'expert_pomdoc', name: 'Expert Pomdoc', price: 100000, type: 'title' },
   { id: 'rainbow', name: 'Effet Arc-en-ciel', price: 50000, type: 'color', desc: 'Pseudo arc-en-ciel animé !' },
+  { id: 'sparkle', name: '✨ Effet Particules Brillantes', price: 50000, type: 'color', desc: 'Pseudo entouré de particules colorées scintillantes !' },
+  { id: 'color_green', name: '🟢 Pseudo Vert', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en vert' },
+  { id: 'color_blue', name: '🔵 Pseudo Bleu', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en bleu' },
+  { id: 'color_orange', name: '🟠 Pseudo Orange', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en orange' },
+  { id: 'color_red', name: '🔴 Pseudo Rouge', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en rouge' },
+  { id: 'color_brown', name: '🟤 Pseudo Marron', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en marron' },
+  { id: 'badge_survivant_30mars', name: 'Badge Survivant 🪲', price: 0, type: 'badge', emoji: '🪲'},
   { id: 'badge_expert', name: 'Badge Expert 🎖️', price: 1000, type: 'badge', emoji: '🎖️' },
   { id: 'badge_pomelien', name: 'Badge Pomélien 🌟', price: 5000, type: 'badge', emoji: '🌟' },
   { id: 'badge_censure', name: 'Badge Censure 🚫', price: 10000, type: 'badge', emoji: '🚫' },
@@ -2169,6 +2234,19 @@ function launchSparkles() {
   requestAnimationFrame(draw);
 }
 
+// ── NAME COLOR HELPER ────────────────────────────
+function getNameColorClass(activeColor) {
+  if (!activeColor) return '';
+  if (activeColor === 'rainbow') return 'rainbow-text';
+  if (activeColor === 'sparkle') return 'sparkle-text';
+  if (activeColor === 'color_green')  return 'name-color-green';
+  if (activeColor === 'color_blue')   return 'name-color-blue';
+  if (activeColor === 'color_orange') return 'name-color-orange';
+  if (activeColor === 'color_red')    return 'name-color-red';
+  if (activeColor === 'color_brown')  return 'name-color-brown';
+  return '';
+}
+
 // ── LEADERBOARD ──────────────────────────────────
 let currentLbMode = 'balance';
 
@@ -2209,7 +2287,7 @@ async function renderLeaderboard(mode) {
       return t ? `<span class="title-badge">${t.name}</span>` : '';
     }).join('');
     // Rainbow effect
-    const nameClass = acc.activeColor === 'rainbow' ? 'lb-name rainbow-text' : 'lb-name';
+    const nameClass = 'lb-name ' + getNameColorClass(acc.activeColor);
     // Badge emoji
     const badgeEmoji = acc.activeBadge ? (resolveAnyTitleDef(acc.activeBadge, acc) || {}).emoji || '' : '';
     const safeCode = acc.code.replace(/'/g, "\\'");
@@ -2238,7 +2316,7 @@ async function openProfileModal(code) {
     const t = resolveAnyTitleDef(tid, migrated);
     return t ? `<span class="title-badge">${t.name}</span>` : '';
   }).join('') || '<span style="color:var(--muted);font-size:.85rem;">Aucun titre</span>';
-  const nameClass = migrated.activeColor === 'rainbow' ? 'rainbow-text' : '';
+  const nameClass = getNameColorClass(migrated.activeColor);
   const badgeEmoji = migrated.activeBadge ? (resolveAnyTitleDef(migrated.activeBadge, migrated) || {}).emoji || '' : '';
 
   const overlay = document.createElement('div');
@@ -2333,23 +2411,45 @@ function renderShop() {
   ];
 
   sections.forEach(sec => {
-    const items = SHOP_TITLES.filter(t => sec.types.includes(t.type));
+    const now = Date.now();
+    const items = SHOP_TITLES.filter(t => {
+      if (!sec.types.includes(t.type)) return false;
+      const owned = (state.ownedTitles || []).includes(t.id);
+      // Exclure si expiré ET non possédé
+      if (t.expiresAt && now > t.expiresAt && !owned) return false;
+      return true;
+    });
     if (!items.length) return;
+
     const secTitle = document.createElement('div');
     secTitle.style.cssText = 'font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;padding:12px 0 4px;';
     secTitle.textContent = sec.label;
     grid.appendChild(secTitle);
+
     items.forEach(title => {
       const owned = (state.ownedTitles || []).includes(title.id);
       const canAfford = state.balance >= title.price;
       const item = document.createElement('div');
       item.className = 'shop-item' + (owned ? ' owned' : '');
       const descHtml = title.desc ? `<div style="font-size:.78rem;color:var(--muted);margin-top:2px;">${title.desc}</div>` : '';
+      let countdownHtml = '';
+      if (title.expiresAt && now <= title.expiresAt && !owned) {
+        const rem = title.expiresAt - now;
+        const h = Math.floor(rem / 3600000);
+        const m = Math.floor((rem % 3600000) / 60000);
+        const s = Math.floor((rem % 60000) / 1000);
+        const pad = n => String(n).padStart(2, '0');
+        countdownHtml = `<div style="font-size:.72rem;color:var(--yellow,#f0c040);font-weight:700;margin-top:3px;">⏳ Expire dans ${pad(h)}h${pad(m)}m${pad(s)}s</div>`;
+      }
+      const priceHtml = title.price === 0
+        ? '<span style="color:var(--green);font-weight:700;">Gratuit !</span>'
+        : title.price.toLocaleString('fr-FR') + ' 🪙';
       item.innerHTML = `
         <div class="shop-item-info">
           <div class="shop-item-name">${title.name}</div>
           ${descHtml}
-          <div class="shop-item-price">${title.price.toLocaleString('fr-FR')} 🪙</div>
+          ${countdownHtml}
+          <div class="shop-item-price">${priceHtml}</div>
         </div>
         ${owned
           ? '<button class="btn-buy owned-btn" disabled>✅ Possédé</button>'
@@ -2359,6 +2459,22 @@ function renderShop() {
       grid.appendChild(item);
     });
   });
+  startShopCountdown();
+}
+
+// Refresh boutique chaque seconde tant qu'un item limité est visible
+let _shopCountdownTimer = null;
+function startShopCountdown() {
+  if (_shopCountdownTimer) return;
+  const hasActive = SHOP_TITLES.some(t => t.expiresAt && Date.now() <= t.expiresAt && !(state.ownedTitles || []).includes(t.id));
+  if (!hasActive) return;
+  _shopCountdownTimer = setInterval(() => {
+    const page = document.getElementById('page-boutique');
+    if (!page || !page.classList.contains('active')) {
+      clearInterval(_shopCountdownTimer); _shopCountdownTimer = null; return;
+    }
+    renderShop();
+  }, 1000);
 }
 
 async function buyTitle(titleId) {
@@ -2370,7 +2486,9 @@ async function buyTitle(titleId) {
   state.balance -= title.price;
   if (!state.ownedTitles) state.ownedTitles = [];
   state.ownedTitles.push(titleId);
-  state.history.unshift({ type: 'shop', desc: `Titre acheté : "${title.name}"`, amount: -title.price, date: new Date().toISOString() });
+  if (title.price > 0) {
+    state.history.unshift({ type: 'shop', desc: `Titre acheté : "${title.name}"`, amount: -title.price, date: new Date().toISOString() });
+  }
   await saveAccount(state);
   refreshUI();
   renderShop();
@@ -2572,10 +2690,10 @@ async function closeBet(betId, winnerOption) {
   await saveBet(bet);
 
   if (winners.length > 0) {
-    // Each winner gets their bet back + equal share of loser pool (arrondi au-dessus)
+    // Each winner gets 2× their bet + equal share of loser pool (arrondi au-dessus)
     const sharePerWinner = Math.ceil(loserPool / winners.length);
     for (const w of winners) {
-      const totalWin = w.amount + sharePerWinner;
+      const totalWin = w.amount * 2 + sharePerWinner;
       const acc = await getAccount(w.code);
       if (acc) {
         acc.balance += totalWin;
@@ -2722,7 +2840,7 @@ function buildBetCard(bet) {
     const losersPool = (bet.winnerOption === 1 ? total2 : total1);
     const winnersCount = (bet.winnerOption === 1 ? bettors1 : bettors2).length;
     const sharePerWinner = winnersCount > 0 ? Math.ceil(losersPool / winnersCount) : 0;
-    resultHTML = `<div class="bet-winner-result">🏆 "${winLabel}" a gagné ! Chaque gagnant reçoit sa mise + ${sharePerWinner.toLocaleString('fr-FR')} 🪙 bonus</div>`;
+    resultHTML = `<div class="bet-winner-result">🏆 "${winLabel}" a gagné ! Chaque gagnant reçoit 2× sa mise + ${sharePerWinner.toLocaleString('fr-FR')} 🪙 bonus (part du pool perdants)</div>`;
   }
 
   const win1 = bet.status === 'closed' && bet.winnerOption === 1 ? ' winner-block' : '';
@@ -3302,7 +3420,9 @@ function updateClickerUI() {
 
 function clickFruit(fruitNum) {
   if (!clickerActive) return;
-  clickerData.seeds += 1;
+  // 2 graines par clic si les 2 fruits sont débloqués, sinon 1
+  const gain = clickerData.upgrades.secondFruit ? 2 : 1;
+  clickerData.seeds += gain;
 
   const fruit = document.getElementById('fruit' + fruitNum);
   fruit.classList.remove('clicker-fruit-pop');
@@ -3313,7 +3433,7 @@ function clickFruit(fruitNum) {
   const rect = fruit.getBoundingClientRect();
   const span = document.createElement('span');
   span.className = 'clicker-seed-float';
-  span.textContent = '+1 🌱';
+  span.textContent = '+' + gain + ' 🌱';
   span.style.left = (rect.left + rect.width / 2 - 20) + 'px';
   span.style.top = (rect.top - 10) + 'px';
   document.body.appendChild(span);
@@ -3579,6 +3699,7 @@ async function gameOverSnake() {
 
   // Save leaderboard entry
   await saveSnakeScore(finalScore);
+  await saveSnakeWeeklyScore(finalScore);
 
   // Show overlay
   const overlay = snakeOverlay();
@@ -3592,6 +3713,7 @@ async function gameOverSnake() {
   snakeState = null;
   updateSnakeScoreUI();
   renderSnakeLb();
+  renderSnakeWeeklyLb();
 }
 
 // ── SNAKE LEADERBOARD (Firebase) ─────────────────
@@ -3627,6 +3749,98 @@ async function renderSnakeLb() {
     `;
     list.appendChild(div);
   });
+}
+
+// ── SNAKE WEEKLY LEADERBOARD ─────────────────────
+const SNAKE_WEEKLY_PRIZES = [2000, 1500, 1000];
+const SNAKE_WEEKLY_CONSOLATION = 500;
+
+// Clé de semaine : lundi de la semaine courante (YYYY-MM-DD)
+function getSnakeWeekKey() {
+  const now = new Date();
+  const day = now.getDay(); // 0=dim, 1=lun…
+  const diff = (day === 0 ? -6 : 1 - day); // décalage pour aller au lundi
+  const mon = new Date(now);
+  mon.setDate(now.getDate() + diff);
+  return `${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
+}
+
+async function saveSnakeWeeklyScore(score) {
+  if (score === 0) return;
+  const weekKey = getSnakeWeekKey();
+  const path = `snake_weekly/${weekKey}/${state.code}`;
+  const existing = await dbGet(path);
+  if (!existing || score > existing.score) {
+    await dbSet(path, { name: state.name, code: state.code, score, date: new Date().toISOString() });
+  }
+}
+
+async function renderSnakeWeeklyLb() {
+  const list = document.getElementById('snakeWeeklyLbList');
+  if (!list) return;
+  list.innerHTML = '<div class="history-empty">Chargement…</div>';
+  const weekKey = getSnakeWeekKey();
+  const snap = await dbGet('snake_weekly/' + weekKey);
+
+  if (!snap) { list.innerHTML = '<div class="history-empty">Aucun score cette semaine.</div>'; return; }
+  const entries = Object.values(snap).sort((a, b) => b.score - a.score);
+
+  list.innerHTML = '';
+  const medals = ['🥇','🥈','🥉'];
+  entries.forEach((e, i) => {
+    const rank = i + 1;
+    const isMe = e.code === state.code;
+    const prize = i < 3 ? SNAKE_WEEKLY_PRIZES[i] : SNAKE_WEEKLY_CONSOLATION;
+    const rankClass = rank <= 3 ? `top${rank}` : '';
+    const medal = rank <= 3 ? medals[i] : '';
+    const div = document.createElement('div');
+    div.className = 'snake-lb-item' + (isMe ? ' me' : '');
+    div.innerHTML = `
+      <span class="snake-lb-rank ${rankClass}">${medal || rank}</span>
+      <span class="snake-lb-name">${e.name}${isMe ? ' <span class="lb-you-badge">Moi</span>' : ''}</span>
+      <span class="snake-lb-score">${e.score} 🍎</span>
+      <span class="snake-lb-pomels">→ ${prize.toLocaleString('fr-FR')} 🪙</span>
+    `;
+    list.appendChild(div);
+  });
+}
+
+async function checkSnakeWeeklyReset() {
+  // Distribuer les récompenses le lundi à partir de 9h pour la semaine précédente
+  const now = new Date();
+  if (now.getDay() !== 1 || now.getHours() < 9) return;
+
+  // Semaine précédente = lundi d'il y a 7 jours
+  const prevMon = new Date(now);
+  prevMon.setDate(now.getDate() - 7);
+  const prevKey = `${prevMon.getFullYear()}-${String(prevMon.getMonth()+1).padStart(2,'0')}-${String(prevMon.getDate()).padStart(2,'0')}`;
+
+  // Vérifier si déjà distribué
+  const distributed = await dbGet('snake_weekly_distributed/' + prevKey);
+  if (distributed) return;
+
+  const snap = await dbGet('snake_weekly/' + prevKey);
+  if (!snap) {
+    await dbSet('snake_weekly_distributed/' + prevKey, true);
+    return;
+  }
+
+  // Anti-race condition : marquer immédiatement
+  await dbSet('snake_weekly_distributed/' + prevKey, true);
+
+  const entries = Object.values(snap).sort((a, b) => b.score - a.score);
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const prize = i < 3 ? SNAKE_WEEKLY_PRIZES[i] : SNAKE_WEEKLY_CONSOLATION;
+    const acc = await getAccount(e.code);
+    if (acc) {
+      acc.balance += prize;
+      acc.history = acc.history || [];
+      acc.history.unshift({ type: 'snake', desc: `🐍 Classement hebdo Serpent — #${i+1}`, amount: prize, date: new Date().toISOString() });
+      await saveAccount(acc);
+      if (e.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+    }
+  }
 }
 
 // ── SNAKE CONTROLS ───────────────────────────────
@@ -3698,6 +3912,8 @@ function renderSnakePage() {
   document.getElementById('snakeScore').textContent = '0';
   document.getElementById('snakeEarned').textContent = '+0 🪙';
   renderSnakeLb();
+  renderSnakeWeeklyLb();
+  checkSnakeWeeklyReset().catch(() => {});
 }
 
 // ── HOTEL DES VENTES ─────────────────────────────
@@ -4003,7 +4219,7 @@ async function handleCreateQuete() {
   if (!targetCode)        { setAlert('queteCreateAlert', 'Choisis un joueur !', 'error'); return; }
   if (!desc)              { setAlert('queteCreateAlert', 'Décris la mission !', 'error'); return; }
   if (!reward || reward < 1) { setAlert('queteCreateAlert', 'Entre une récompense valide !', 'error'); return; }
-  if (reward > 500) { setAlert('queteCreateAlert', 'La récompense maximum est de 500 Pomels !', 'error'); return; }
+  if (reward > 5000) { setAlert('queteCreateAlert', 'La récompense maximum est de 5 000 Pomels !', 'error'); return; }
 
   // Find target name
   const all = await getAllAccounts();
@@ -4540,15 +4756,18 @@ async function renderProverbe() {
       <div class="proverbe-today-author">— <strong>${data.today.authorName}</strong></div>
     `;
     inputZone.style.display = 'none';
+    renderProvReactions(data.today);
   } else if (isMyTurn) {
     // It's my turn to write
     todayCard.innerHTML = `<div class="proverbe-waiting">C'est ton tour aujourd'hui, <strong>${state.name}</strong> ! Partage une phrase inspirante ✨</div>`;
     inputZone.style.display = 'block';
+    document.getElementById('provReactionsZone').style.display = 'none';
   } else {
     // Waiting for the chosen person
     const waitName = chosenAcc ? chosenAcc.name : '?';
     todayCard.innerHTML = `<div class="proverbe-waiting">En attente du proverbe de <strong>${waitName}</strong> pour aujourd'hui…</div>`;
     inputZone.style.display = 'none';
+    document.getElementById('provReactionsZone').style.display = 'none';
   }
 
   // History (last 10, most recent first)
@@ -4578,13 +4797,63 @@ async function submitProverbe() {
   const data = await getProverbeData() || { history: [], today: null };
   if (data.today && data.today.date === today) { setAlert('provAlert', 'Proverbe déjà soumis aujourd\'hui !', 'error'); return; }
 
-  const entry = { date: today, text, authorCode: state.code, authorName: state.name };
+  const entry = { date: today, text, authorCode: state.code, authorName: state.name, reactions: {} };
   // Prepend to history
   const history = [entry, ...(data.history || [])].slice(0, 10);
   await saveProverbeData({ today: entry, history });
   document.getElementById('provInput').value = '';
   checkNotifUpdates();
   renderProverbe();
+}
+
+// ── PROVERBE RÉACTIONS ───────────────────────────
+const PROV_EMOJIS = ['❤️','😂','😮','👏','🔥','🤔','😢','💯','🙌','✨'];
+
+function renderProvReactions(todayEntry) {
+  const zone = document.getElementById('provReactionsZone');
+  if (!zone) return;
+  zone.style.display = 'block';
+  zone.innerHTML = '';
+
+  const reactions = todayEntry.reactions || {};
+  // reactions = { '❤️': ['code1','code2'], '😂': ['code3'], … }
+
+  const row = document.createElement('div');
+  row.className = 'prov-reactions';
+
+  PROV_EMOJIS.forEach(emoji => {
+    const users = reactions[emoji] || [];
+    const count = users.length;
+    const reacted = users.includes(state.code);
+    const btn = document.createElement('button');
+    btn.className = 'prov-react-btn' + (reacted ? ' reacted' : '');
+    btn.innerHTML = `${emoji} <span class="prov-react-count">${count > 0 ? count : ''}</span>`;
+    btn.title = count > 0 ? `${count} réaction${count > 1 ? 's' : ''}` : '';
+    btn.onclick = () => reactProverbe(emoji);
+    row.appendChild(btn);
+  });
+
+  zone.appendChild(row);
+}
+
+async function reactProverbe(emoji) {
+  const today = getTodayKey();
+  const data = await getProverbeData();
+  if (!data || !data.today || data.today.date !== today) return;
+
+  if (!data.today.reactions) data.today.reactions = {};
+  const users = data.today.reactions[emoji] || [];
+
+  if (users.includes(state.code)) {
+    // Toggle off
+    data.today.reactions[emoji] = users.filter(c => c !== state.code);
+    if (data.today.reactions[emoji].length === 0) delete data.today.reactions[emoji];
+  } else {
+    data.today.reactions[emoji] = [...users, state.code];
+  }
+
+  await saveProverbeData(data);
+  renderProvReactions(data.today);
 }
 
 // ── POMEL'LIVE ───────────────────────────────────
@@ -4792,7 +5061,7 @@ function renderProfile() {
     const t = resolveTitleDef(tid);
     return t ? `<span class="title-badge">${t.name}</span>` : '';
   }).join('') || '<span style="color:var(--muted)">Aucun</span>';
-  const nameClass = state.activeColor === 'rainbow' ? 'rainbow-text' : '';
+  const nameClass = getNameColorClass(state.activeColor);
   const badgeEmoji = state.activeBadge ? (resolveTitleDef(state.activeBadge) || {}).emoji || '' : '';
   const colorLabel = state.activeColor ? (resolveTitleDef(state.activeColor) || {}).name || 'Aucun' : 'Aucun';
   el.innerHTML = `
@@ -4816,7 +5085,7 @@ function renderMonProfil() {
   const earned  = (me.history || []).filter(h => h.amount > 0).reduce((s, h) => s + h.amount, 0);
   const spent   = (me.history || []).filter(h => h.amount < 0).reduce((s, h) => s + Math.abs(h.amount), 0);
   const joined  = new Date(me.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-  const nameClass = me.activeColor === 'rainbow' ? 'rainbow-text' : '';
+  const nameClass = getNameColorClass(me.activeColor);
   const badge = me.activeBadge ? (resolveTitleDef(me.activeBadge) || {}).emoji || '' : '';
   const titlesHTML = (me.activeTitles || []).map(tid => {
     const t = resolveTitleDef(tid);
@@ -4949,53 +5218,13 @@ function renderDotsMenu() {
 
 // ── PROFILS ──────────────────────────────────────
 async function renderProfils() {
-  // ── Mon profil ──
-  const me = state;
-  const meCard = document.getElementById('profilMeCard');
-  const meSpins   = (me.history || []).filter(h => h.type === 'roulette').length;
-  const meEarned  = (me.history || []).filter(h => h.amount > 0).reduce((s, h) => s + h.amount, 0);
-  const meFlowers = 0; // calculé dynamiquement si besoin
-  const meJoined  = new Date(me.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-  const meNameClass = me.activeColor === 'rainbow' ? 'rainbow-text' : '';
-  const meBadge = me.activeBadge ? (resolveTitleDef(me.activeBadge) || {}).emoji || '' : '';
-  const meTitlesHTML = (me.activeTitles || []).map(tid => {
-    const t = resolveTitleDef(tid);
-    return t ? `<span class="title-badge">${t.name}</span>` : '';
-  }).join('') || '<span style="color:var(--muted);font-size:.82rem;">Aucun titre actif</span>';
-  const meInitial = me.name.charAt(0).toUpperCase();
-
-  meCard.innerHTML = `
-    <div class="profil-me-header">
-      <div class="profil-me-avatar">${meInitial}</div>
-      <div>
-        <div class="profil-me-name"><span class="${meNameClass}">${me.name}${meBadge ? ' ' + meBadge : ''}</span></div>
-        <div class="profil-me-since">Membre depuis ${meJoined}${me.group ? ' · ' + me.group : ''}</div>
-      </div>
-    </div>
-    <div class="profil-me-stats">
-      <div class="profil-stat">
-        <span class="profil-stat-val">${me.balance.toLocaleString('fr-FR')}</span>
-        <span class="profil-stat-label">🪙 Pomels</span>
-      </div>
-      <div class="profil-stat">
-        <span class="profil-stat-val">${meEarned.toLocaleString('fr-FR')}</span>
-        <span class="profil-stat-label">📈 Total gagné</span>
-      </div>
-      <div class="profil-stat">
-        <span class="profil-stat-val">${meSpins}</span>
-        <span class="profil-stat-label">🎰 Tirages</span>
-      </div>
-    </div>
-    <div class="profil-me-titles">${meTitlesHTML}</div>
-  `;
-
   // ── Grille des joueurs ──
   const grid = document.getElementById('profilsGrid');
   grid.innerHTML = '<div style="color:var(--muted);font-size:.88rem;">Chargement…</div>';
   const all = await getAllAccounts();
   // Exclure soi-même, trier par solde
   const others = all
-    .filter(a => a.code !== me.code)
+    .filter(a => a.code !== state.code)
     .sort((a, b) => b.balance - a.balance);
 
   if (!others.length) {
@@ -5006,7 +5235,7 @@ async function renderProfils() {
   grid.innerHTML = '';
   others.forEach(acc => {
     const migrated = migrateAccount(acc);
-    const nameClass = migrated.activeColor === 'rainbow' ? 'rainbow-text' : '';
+    const nameClass = getNameColorClass(migrated.activeColor);
     const badge = migrated.activeBadge ? (resolveAnyTitleDef(migrated.activeBadge, migrated) || {}).emoji || '' : '';
     const spins = (migrated.history || []).filter(h => h.type === 'roulette').length;
     const earned = (migrated.history || []).filter(h => h.amount > 0).reduce((s, h) => s + h.amount, 0);
