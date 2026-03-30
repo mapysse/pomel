@@ -1649,19 +1649,6 @@
 // POMEL — MULTIPLAYER WITH FIREBASE REALTIME DATABASE
 // ══════════════════════════════════════════════════
 
-// ── VERSION / CACHE BUSTING ──────────────────────
-const APP_VERSION = '2026-03-30-v2';
-if (localStorage.getItem('pomel_version') !== APP_VERSION) {
-  // Nouvelle version détectée — vider les caches locaux (pas les données Firebase)
-  const keysToKeep = [];
-  Object.keys(localStorage).forEach(k => {
-    if (k.startsWith('notif_') || k === 'pomel_session') keysToKeep.push([k, localStorage.getItem(k)]);
-  });
-  localStorage.clear();
-  keysToKeep.forEach(([k, v]) => localStorage.setItem(k, v));
-  localStorage.setItem('pomel_version', APP_VERSION);
-}
-
 // ── FIREBASE CONFIG ─────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyBWc4QHeEcajmWUprfp0IacO_K6bYSgMYw",
@@ -1777,17 +1764,41 @@ function migrateAccount(acc) {
 // ── INIT ─────────────────────────────────────────
 async function init() {
   const session = getSession();
-  if (session && session.code) {
+  if (!session || !session.code) {
+    hideLoading();
+    document.getElementById('loginScreen').classList.remove('hidden');
+    return;
+  }
+
+  // Timeout de sécurité : 12 secondes max
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    hideLoading();
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }, 12000);
+
+  try {
     const acc = await getAccount(session.code);
+    if (timedOut) return; // trop tard, login déjà affiché
+    clearTimeout(timeoutId);
     if (acc) {
       state = migrateAccount(acc);
       launchApp();
       hideLoading();
-      return;
+    } else {
+      // Session invalide (compte supprimé ?)
+      clearSession();
+      hideLoading();
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+  } catch(e) {
+    if (!timedOut) {
+      clearTimeout(timeoutId);
+      hideLoading();
+      document.getElementById('loginScreen').classList.remove('hidden');
     }
   }
-  hideLoading();
-  document.getElementById('loginScreen').classList.remove('hidden');
 }
 
 function hideLoading() {
