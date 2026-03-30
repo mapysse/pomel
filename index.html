@@ -110,6 +110,7 @@
   .page { display: none; width: 100%; max-width: 700px; padding: 40px 24px 80px; }
   .page.active { display: block; }
   #page-home { max-width: 1100px; }
+  #page-classement { max-width: 1100px; }
   .home-wrap { display: flex; flex-direction: column; gap: 24px; }
   .home-grid {
     display: grid;
@@ -234,6 +235,14 @@
   .btn-group:disabled { opacity: .4; cursor: not-allowed; }
   .group-week-info { font-size: .75rem; color: var(--muted); background: var(--surface2); border-radius: 8px; padding: 8px 14px; }
   .group-week-info strong { color: var(--yellow); }
+  /* Layout 2 colonnes page classement */
+  .classement-layout { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+  .classement-col-main { display: flex; flex-direction: column; gap: 0; }
+  .classement-col-side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 80px; }
+  @media (max-width: 860px) {
+    .classement-layout { grid-template-columns: 1fr; }
+    .classement-col-side { position: static; }
+  }
 
   /* PARIS (BETS) */
   .bets-wrap { display: flex; flex-direction: column; gap: 24px; }
@@ -1244,39 +1253,50 @@
         </div>
       </div>
 
-      <!-- SECTION GROUPES -->
-      <div class="group-section">
-        <h3>Groupes</h3>
-        <div class="group-week-info">📅 Classement hebdo : Pomels + graines (÷5) gagnés cette semaine. Le groupe en tête vendredi soir remporte <strong>1 000 🪙</strong> par membre !</div>
-        <div class="group-current" id="groupCurrent">Tu n'as rejoint aucun groupe.</div>
-        <div class="group-actions" id="groupActions"></div>
-      </div>
+      <!-- LAYOUT 2 COLONNES : gauche = classements, droite = groupes -->
+      <div class="classement-layout">
 
-      <div class="lb-note">💡 Classement en ligne — tous les joueurs sont connectés en temps réel.</div>
-      <div class="lb-list" id="lbList"></div>
+        <!-- COLONNE GAUCHE -->
+        <div class="classement-col-main">
+          <div class="lb-note">💡 Classement en ligne — tous les joueurs sont connectés en temps réel.</div>
+          <div class="lb-list" id="lbList"></div>
 
-      <!-- CLASSEMENT HEBDO GROUPES -->
-      <div style="margin-top:8px;">
-        <div class="group-lb-title">🏅 Classement Hebdomadaire des Groupes</div>
-        <div class="lb-list" id="groupLbList" style="margin-top:14px;"></div>
-      </div>
+          <!-- CLASSEMENT HEBDO GROUPES -->
+          <div style="margin-top:16px;">
+            <div class="group-lb-title">🏅 Classement Hebdomadaire des Groupes</div>
+            <div class="lb-list" id="groupLbList" style="margin-top:14px;"></div>
+          </div>
 
-      <!-- LISTE TOUS LES GROUPES -->
-      <div style="margin-top:8px;">
-        <div class="group-lb-title" style="font-size:.85rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Tous les groupes</div>
-        <div style="margin-top:10px;" id="allGroupsList"></div>
-      </div>
-
-      <!-- CRÉER UN GROUPE -->
-      <div class="group-section" id="createGroupSection">
-        <h3>Créer un groupe</h3>
-        <div class="form-group">
-          <label>Nom du groupe</label>
-          <input type="text" id="newGroupNameInput" placeholder="ex: Les Champions" maxlength="30" />
+          <!-- LISTE TOUS LES GROUPES -->
+          <div style="margin-top:16px;">
+            <div class="group-lb-title" style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Tous les groupes</div>
+            <div style="margin-top:10px;" id="allGroupsList"></div>
+          </div>
         </div>
-        <div id="createGroupAlert" class="alert"></div>
-        <button class="btn-primary" onclick="handleCreateGroup()" style="width:auto;padding:10px 24px;">Créer — 15 000 🪙</button>
-      </div>
+
+        <!-- COLONNE DROITE : mon groupe + créer -->
+        <div class="classement-col-side">
+          <!-- MON GROUPE -->
+          <div class="group-section">
+            <h3>Mon groupe</h3>
+            <div class="group-week-info">📅 Score hebdo : Pomels + graines (÷5). Le groupe en tête le lundi gagne <strong>1 000 🪙</strong>/membre !</div>
+            <div class="group-current" id="groupCurrent">Tu n'as rejoint aucun groupe.</div>
+            <div class="group-actions" id="groupActions"></div>
+          </div>
+
+          <!-- CRÉER UN GROUPE -->
+          <div class="group-section" id="createGroupSection">
+            <h3>Créer un groupe</h3>
+            <div class="form-group">
+              <label>Nom du groupe</label>
+              <input type="text" id="newGroupNameInput" placeholder="ex: Les Champions" maxlength="30" />
+            </div>
+            <div id="createGroupAlert" class="alert"></div>
+            <button class="btn-primary" onclick="handleCreateGroup()" style="width:100%;padding:10px 24px;">Créer — 15 000 🪙</button>
+          </div>
+        </div>
+
+      </div><!-- fin classement-layout -->
     </div>
   </div>
 
@@ -1834,6 +1854,7 @@ async function dbGetAll(path) {
     const snap = await db.ref(path).once('value');
     if (!snap.exists()) return [];
     const data = snap.val();
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
     return Object.values(data);
   } catch(e) { console.error('dbGetAll error', e); return []; }
 }
@@ -4079,7 +4100,9 @@ function getSnakeWeekKey() {
 async function saveSnakeWeeklyScore(score) {
   if (score === 0) return;
   const weekKey = getSnakeWeekKey();
-  const path = `snake_weekly/${weekKey}/${state.code}`;
+  // Sanitise la clé : retire les caractères interdits par Firebase (. # $ [ ] /)
+  const safeCode = state.code.replace(/[.#$[\]/]/g, '_');
+  const path = `snake_weekly/${weekKey}/${safeCode}`;
   const existing = await dbGet(path);
   if (!existing || score > existing.score) {
     await dbSet(path, { name: state.name, code: state.code, score, date: new Date().toISOString() });
@@ -4091,10 +4114,13 @@ async function renderSnakeWeeklyLb() {
   if (!list) return;
   list.innerHTML = '<div class="history-empty">Chargement…</div>';
   const weekKey = getSnakeWeekKey();
-  const snap = await dbGet('snake_weekly/' + weekKey);
+  const entries = await dbGetAll('snake_weekly/' + weekKey);
 
-  if (!snap) { list.innerHTML = '<div class="history-empty">Aucun score cette semaine.</div>'; return; }
-  const entries = Object.values(snap).sort((a, b) => b.score - a.score);
+  if (!entries || !entries.length) {
+    list.innerHTML = '<div class="history-empty">Aucun score cette semaine.</div>';
+    return;
+  }
+  entries.sort((a, b) => b.score - a.score);
 
   list.innerHTML = '';
   const medals = ['🥇','🥈','🥉'];
@@ -4117,29 +4143,25 @@ async function renderSnakeWeeklyLb() {
 }
 
 async function checkSnakeWeeklyReset() {
-  // Distribuer les récompenses le lundi à partir de 9h pour la semaine précédente
   const now = new Date();
   if (now.getDay() !== 1 || now.getHours() < 9) return;
 
-  // Semaine précédente = lundi d'il y a 7 jours
   const prevMon = new Date(now);
   prevMon.setDate(now.getDate() - 7);
   const prevKey = `${prevMon.getFullYear()}-${String(prevMon.getMonth()+1).padStart(2,'0')}-${String(prevMon.getDate()).padStart(2,'0')}`;
 
-  // Vérifier si déjà distribué
   const distributed = await dbGet('snake_weekly_distributed/' + prevKey);
   if (distributed) return;
 
-  const snap = await dbGet('snake_weekly/' + prevKey);
-  if (!snap) {
+  const entries = await dbGetAll('snake_weekly/' + prevKey);
+  if (!entries || !entries.length) {
     await dbSet('snake_weekly_distributed/' + prevKey, true);
     return;
   }
 
-  // Anti-race condition : marquer immédiatement
   await dbSet('snake_weekly_distributed/' + prevKey, true);
 
-  const entries = Object.values(snap).sort((a, b) => b.score - a.score);
+  entries.sort((a, b) => b.score - a.score);
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const prize = i < 3 ? SNAKE_WEEKLY_PRIZES[i] : SNAKE_WEEKLY_CONSOLATION;
