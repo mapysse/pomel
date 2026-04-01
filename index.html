@@ -2782,9 +2782,9 @@ async function renderGroupsOnPage() {
 
   // Mon groupe actuel (source de vérité = groups membership)
   const myGroup = groups.find(g => (g.members || []).includes(state.code));
-  // Sync state.group with actual membership
-  if (myGroup && state.group !== myGroup.id) { state.group = myGroup.id; saveAccount(state); }
-  if (!myGroup && state.group) { state.group = null; saveAccount(state); }
+  // Sync state.group locally (don't save here — could overwrite during boot)
+  if (myGroup) { state.group = myGroup.id; }
+  else { state.group = null; }
   const currentEl = document.getElementById('groupCurrent');
   const actionsEl = document.getElementById('groupActions');
   const createSection = document.getElementById('createGroupSection');
@@ -3047,7 +3047,7 @@ async function checkGroupWeeklyReward() {
             acc.history = acc.history || [];
             acc.history.unshift({ type: 'group', desc: `🔄 Groupe "${g.name}" dissous (renouvellement mensuel)`, amount: 0, date: now.toISOString() });
             await saveAccount(acc);
-            if (code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); state.group = null; refreshUI(); }
+            if (code === state.code) { state = migrateAccount(acc); state.group = null; refreshUI(); }
           }
         }
         await deleteGroup(g.id);
@@ -3088,7 +3088,7 @@ async function checkGroupWeeklyReward() {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'group', desc: `🏅 Groupe "${g.name}" — Top ${i+1} hebdo !`, amount: 2000, date: now.toISOString() });
         await saveAccount(acc);
-        if (code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+        if (code === state.code) { state = migrateAccount(acc); refreshUI(); }
       }
     }
   }
@@ -3103,7 +3103,7 @@ async function checkGroupWeeklyReward() {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'group', desc: `💥 Groupe "${g.name}" dissous (classement hebdo)`, amount: 0, date: now.toISOString() });
         await saveAccount(acc);
-        if (code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); state.group = null; refreshUI(); }
+        if (code === state.code) { state = migrateAccount(acc); state.group = null; refreshUI(); }
       }
     }
     await deleteGroup(g.id);
@@ -3337,7 +3337,7 @@ async function closeBet(betId, winnerOption) {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'bet', desc: `Pari gagné : "${bet.desc}"`, amount: totalWin, date: new Date().toISOString() });
         await saveAccount(acc);
-        if (w.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+        if (w.code === state.code) { state = migrateAccount(acc); refreshUI(); }
       }
     }
   } else {
@@ -3349,7 +3349,7 @@ async function closeBet(betId, winnerOption) {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'bet', desc: `Pari remboursé : "${bet.desc}"`, amount: l.amount, date: new Date().toISOString() });
         await saveAccount(acc);
-        if (l.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+        if (l.code === state.code) { state = migrateAccount(acc); refreshUI(); }
       }
     }
   }
@@ -3369,7 +3369,7 @@ async function deleteBetByCreator(betId) {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'bet', desc: `Pari annulé remboursé : "${bet.desc}"`, amount: b.amount, date: new Date().toISOString() });
         await saveAccount(acc);
-        if (b.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+        if (b.code === state.code) { state = migrateAccount(acc); refreshUI(); }
       }
     }
     await deleteBet(betId);
@@ -3393,7 +3393,7 @@ async function cleanupBets() {
           acc.history = acc.history || [];
           acc.history.unshift({ type: 'bet', desc: `Pari expiré remboursé : "${bet.desc}"`, amount: b.amount, date: new Date().toISOString() });
           await saveAccount(acc);
-          if (b.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+          if (b.code === state.code) { state = migrateAccount(acc); refreshUI(); }
         }
       }
       await deleteBet(bet.id);
@@ -3557,15 +3557,14 @@ async function renderHomeGroup() {
   const groups = await getGroupsCache();
   const myGroup = (groups || []).find(g => (g.members || []).includes(state.code));
   if (myGroup) {
-    // Sync state.group if needed
-    if (state.group !== myGroup.id) { state.group = myGroup.id; saveAccount(state); }
+    // Sync state.group locally only (don't save — could overwrite during boot)
+    state.group = myGroup.id;
     nameEl.textContent = myGroup.name;
     nameEl.style.color = 'var(--primary)';
     widget.style.borderColor = 'var(--primary)';
     widget.style.boxShadow = '0 0 12px var(--primary-glow)';
   } else {
-    // Sync state.group if needed
-    if (state.group) { state.group = null; saveAccount(state); }
+    state.group = null;
     nameEl.textContent = 'Aucun groupe';
     nameEl.style.color = 'var(--muted)';
     widget.style.borderColor = '';
@@ -4493,7 +4492,7 @@ async function checkSnakeWeeklyReset() {
       acc.history = acc.history || [];
       acc.history.unshift({ type: 'snake', desc: `🐍 Classement hebdo Serpent — #${i+1}`, amount: prize, date: new Date().toISOString() });
       await saveAccount(acc);
-      if (e.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+      if (e.code === state.code) { state = migrateAccount(acc); refreshUI(); }
     }
   }
 
@@ -4939,7 +4938,7 @@ async function validateQuete(queteId) {
       date: new Date().toISOString(),
     });
     await saveAccount(target);
-    if (target.code === state.code) { state = migrateAccount(await getAccount(state.code) || target); refreshUI(); }
+    if (target.code === state.code) { state = migrateAccount(target); refreshUI(); }
   }
 
   // Award bonus to creator (half, rounded up)
@@ -4954,7 +4953,7 @@ async function validateQuete(queteId) {
       date: new Date().toISOString(),
     });
     await saveAccount(creator);
-    if (creator.code === state.code) { state = migrateAccount(await getAccount(state.code) || creator); refreshUI(); }
+    if (creator.code === state.code) { state = migrateAccount(creator); refreshUI(); }
   }
 
   q.status = 'done';
@@ -5327,7 +5326,7 @@ async function distributeJardinRewards(flowers) {
       acc.history = acc.history || [];
       acc.history.unshift({ type: 'jardin', desc: `🌸 Jardin de Pomel'Land — ${i < 3 ? `#${i+1}` : 'participant'}`, amount: prize, date: new Date().toISOString() });
       await saveAccount(acc);
-      if (p.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
+      if (p.code === state.code) { state = migrateAccount(acc); refreshUI(); }
     }
     winners.push({ rank: i + 1, name: p.name, code: p.code, count: p.count, prize });
   }
