@@ -562,6 +562,23 @@
   .proverbe-history-item .phi-author { font-size: .78rem; color: var(--muted); margin-top: 6px; }
   .proverbe-waiting { color: var(--muted); font-size: .9rem; font-style: italic; padding: 8px 0; }
 
+  /* DISCUSSION GÉNÉRALE */
+  .discussion-wrap { display: flex; flex-direction: column; gap: 16px; height: calc(100vh - 220px); min-height: 400px; }
+  .discussion-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .discussion-msg { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: 10px; transition: background .15s; }
+  .discussion-msg:hover { background: var(--surface2); }
+  .discussion-msg.me { background: rgba(235,88,70,0.06); }
+  .discussion-msg-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary-glow); border: 1.5px solid var(--primary); display: flex; align-items: center; justify-content: center; font-size: .85rem; font-weight: 700; flex-shrink: 0; color: var(--primary); }
+  .discussion-msg-body { flex: 1; min-width: 0; }
+  .discussion-msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .discussion-msg-name { font-weight: 700; font-size: .85rem; }
+  .discussion-msg-time { font-size: .7rem; color: var(--muted); font-family: 'Space Mono', monospace; }
+  .discussion-msg-text { font-size: .9rem; line-height: 1.5; word-break: break-word; }
+  .discussion-input-bar { display: flex; gap: 8px; }
+  .discussion-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-family: 'Syne', sans-serif; font-size: .9rem; outline: none; transition: border .2s; }
+  .discussion-input:focus { border-color: var(--primary); }
+  .discussion-send-btn { width: auto; padding: 12px 24px; flex-shrink: 0; }
+
   /* POMEL'LIVE */
   .live-wrap { display: flex; flex-direction: column; gap: 24px; }
   .live-header-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 14px; }
@@ -936,6 +953,7 @@
         <button class="nav-dropdown-item" onclick="goToFromDropdown('profils','social',this)">👥 Profils</button>
         <button class="nav-dropdown-item" onclick="goToFromDropdown('proverbe','social',this)">📜 Proverbe</button>
         <button class="nav-dropdown-item" onclick="goToFromDropdown('live','social',this)">📡 Live</button>
+        <button class="nav-dropdown-item" onclick="goToFromDropdown('discussion','social',this)">💬 Discussion</button>
         <button class="nav-dropdown-item" onclick="goToFromDropdown('quetes','social',this)">⚔️ Quêtes</button>
       </div>
     </div>
@@ -1655,6 +1673,23 @@
     </div>
   </div>
 
+  <!-- DISCUSSION GÉNÉRALE -->
+  <div class="page" id="page-discussion">
+    <div class="discussion-wrap">
+      <div>
+        <div class="section-title">💬 Discussion Générale</div>
+        <div class="section-sub">Discute avec tout le monde — l'historique est remis à zéro chaque jour à minuit.</div>
+      </div>
+      <div class="discussion-messages" id="discussionMessages">
+        <div class="live-empty">Aucun message aujourd'hui. Lance la conversation !</div>
+      </div>
+      <div class="discussion-input-bar">
+        <input type="text" class="discussion-input" id="discussionInput" placeholder="Ton message…" maxlength="200" onkeydown="if(event.key==='Enter')sendDiscussionMsg()" />
+        <button class="btn-primary discussion-send-btn" onclick="sendDiscussionMsg()">Envoyer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- INFORMATIONS -->
   <div class="page" id="page-infos">
     <div class="info-wrap">
@@ -1807,6 +1842,18 @@
           <li>Une fois publié, tout le monde peut réagir avec des <strong>émojis</strong> (❤️ 😂 🔥 etc.)</li>
           <li>Les <strong>10 derniers proverbes</strong> sont conservés en grisé</li>
           <li>Le proverbe du jour est affiché directement sur la <strong>page d'accueil</strong></li>
+        </ul>
+      </div>
+
+      <div class="info-divider"></div>
+
+      <div class="info-card">
+        <h3>💬 Discussion Générale</h3>
+        <p>Un espace de discussion ouvert à tous les joueurs, accessible depuis <strong>Social → Discussion</strong>.</p>
+        <ul>
+          <li>Envoie des messages en temps réel avec toute la communauté</li>
+          <li>L'historique des messages est <strong>remis à zéro chaque jour à minuit</strong></li>
+          <li><strong>200 caractères max</strong> par message</li>
         </ul>
       </div>
 
@@ -2007,7 +2054,8 @@ function migrateAccount(acc) {
   if (!acc.password) acc.password = acc.code;
   if (!acc.streak) acc.streak = { days: 0, lastClaim: null, cycleStart: null };
   // group = ID Firebase (string) ou null — anciens comptes avec nom de groupe textuel → reset
-  if (acc.group && typeof acc.group === 'string' && !acc.group.startsWith('g')) acc.group = null;
+  // Les vrais IDs font toujours >= 8 chars (préfixe 'g' + base36 timestamp + random)
+  if (acc.group && typeof acc.group === 'string' && acc.group.length < 8) acc.group = null;
   return acc;
 }
 
@@ -2133,6 +2181,8 @@ function refreshUI() {
 }
 
 function logout() {
+  stopDiscussionListener();
+  stopClickerPage();
   state = null;
   clearSession();
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -2189,7 +2239,7 @@ function executeConfirm() {
 const DROPDOWN_MAP = {
   roulette: 'gagne', paris: 'gagne',
   banque: 'profil', monprofil: 'profil',
-  proverbe: 'social', live: 'social', profils: 'social',
+  proverbe: 'social', live: 'social', profils: 'social', quetes: 'social', discussion: 'social',
   classement: 'classement',
 };
 // Standalone nav button ids
@@ -2335,6 +2385,9 @@ function _onPageLoad(id) {
   if (id === 'clicker') renderClickerPage();
   if (id === 'jardin') renderJardin();
   if (id === 'profils') renderProfils();
+  if (id === 'discussion') renderDiscussion();
+  // Stop discussion listener when leaving the page
+  if (id !== 'discussion') stopDiscussionListener();
 }
 
 // ── PRIZES ───────────────────────────────────────
@@ -2507,8 +2560,14 @@ function switchLbTab(mode, btn) {
   renderLeaderboard(mode);
 }
 
+let _lbGroupMap = {};
 async function renderLeaderboard(mode) {
-  const all = await getAllAccounts();
+  const [all, groups] = await Promise.all([getAllAccounts(), getAllGroups()]);
+  // Build code→groupId map from groups membership (source of truth)
+  _lbGroupMap = {};
+  (groups || []).forEach(g => {
+    (g.members || []).forEach(code => { _lbGroupMap[code] = g.id; });
+  });
   const list = document.getElementById('lbList');
   list.innerHTML = '';
   if (!all.length) { list.innerHTML = '<div class="history-empty">Aucun compte trouvé.</div>'; return; }
@@ -2530,19 +2589,25 @@ async function renderLeaderboard(mode) {
     else display = val.toLocaleString('fr-FR') + ' 🪙';
     const item = document.createElement('div');
     item.className = 'lb-item' + (isMe ? ' me' : '');
-    const groupBadge = acc.group ? `<span class="lb-group-badge" data-gid="${acc.group}">…</span>` : '';
-    // Active titles badges
-    const titlesHTML = (acc.activeTitles || []).map(tid => {
+    // Resolve group from groups data (source of truth) instead of acc.group
+    const accGroupId = acc.group || _lbGroupMap[acc.code] || null;
+    const groupBadge = accGroupId ? `<span class="lb-group-badge" data-gid="${accGroupId}">…</span>` : '';
+    // Active titles badges — show only last 7, with +N indicator
+    const allTitlesForLb = (acc.activeTitles || []).map(tid => {
       const t = resolveAnyTitleDef(tid, acc);
-      return t ? `<span class="title-badge">${t.name}</span>` : '';
-    }).join('');
+      return t ? t : null;
+    }).filter(Boolean);
+    const visibleTitles = allTitlesForLb.slice(0, 7);
+    const extraCount = allTitlesForLb.length - 7;
+    const titlesHTML = visibleTitles.map(t => `<span class="title-badge">${t.name}</span>`).join('')
+      + (extraCount > 0 ? `<span class="title-badge" style="background:var(--surface2);color:var(--muted);border-color:var(--border);">+${extraCount}</span>` : '');
     // Rainbow effect
     const nameClass = 'lb-name ' + getNameColorClass(acc.activeColor);
     // Badge emoji
     const badgeDef = acc.activeBadge ? (resolveAnyTitleDef(acc.activeBadge, acc) || {}) : {};
     const badgeEmoji = badgeDef.emoji || '';
     const badgeName  = badgeDef.name  || '';
-    const badgeHTML  = badgeEmoji ? ` <span title="${badgeName}" style="cursor:default;">${badgeEmoji}</span>` : '';
+    const badgeHTML  = badgeEmoji ? ` <span class="user-badge-emoji" title="${badgeName.replace(/"/g, '&quot;')}" style="cursor:help;">${badgeEmoji}</span>` : '';
     const streakHTML = getStreakBadgeHTML(acc);
     const safeCode = acc.code.replace(/'/g, "\\'");
     item.innerHTML = `
@@ -2558,8 +2623,13 @@ async function renderLeaderboard(mode) {
     `;
     list.appendChild(item);
   });
-  // Résoudre les noms de groupes en async
-  resolveGroupBadges();
+  // Résoudre les noms de groupes en async (utilise le cache déjà chargé)
+  const groupsForBadges = await getGroupsCache();
+  const gNameMap = {};
+  (groupsForBadges || []).forEach(g => { gNameMap[g.id] = g.name; });
+  document.querySelectorAll('[data-gid]').forEach(el => {
+    el.textContent = gNameMap[el.dataset.gid] || '?';
+  });
 }
 async function openProfileModal(code) {
   const acc = await getAccount(code);
@@ -2581,9 +2651,12 @@ async function openProfileModal(code) {
   const badgeDefM  = migrated.activeBadge ? (resolveAnyTitleDef(migrated.activeBadge, migrated) || {}) : {};
   const badgeEmoji = badgeDefM.emoji || '';
   const badgeNameM = badgeDefM.name  || '';
-  const badgeHTMLM = badgeEmoji ? ` <span title="${badgeNameM}" style="cursor:default;">${badgeEmoji}</span>` : '';
+  const badgeHTMLM = badgeEmoji ? ` <span class="user-badge-emoji" title="${badgeNameM.replace(/"/g, '&quot;')}" style="cursor:help;">${badgeEmoji}</span>` : '';
   const streakHTMLM = getStreakBadgeHTML(migrated);
-  const groupName  = migrated.group ? (await resolveGroupName(migrated.group) || '?') : null;
+  // Resolve group from groups membership (source of truth)
+  const allGroups = await getGroupsCache();
+  const playerGroup = (allGroups || []).find(g => (g.members || []).includes(code));
+  const groupName = playerGroup ? playerGroup.name : null;
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -2707,8 +2780,11 @@ async function renderGroupsOnPage() {
   ]);
   const allClicker = clickerSnap || {};
 
-  // Mon groupe actuel
+  // Mon groupe actuel (source de vérité = groups membership)
   const myGroup = groups.find(g => (g.members || []).includes(state.code));
+  // Sync state.group with actual membership
+  if (myGroup && state.group !== myGroup.id) { state.group = myGroup.id; saveAccount(state); }
+  if (!myGroup && state.group) { state.group = null; saveAccount(state); }
   const currentEl = document.getElementById('groupCurrent');
   const actionsEl = document.getElementById('groupActions');
   const createSection = document.getElementById('createGroupSection');
@@ -2859,12 +2935,13 @@ async function handleCreateGroup() {
 
   state.balance -= 5000;
   state.history.unshift({ type: 'group', desc: `Groupe créé : "${name}"`, amount: -5000, date: new Date().toISOString() });
-  await saveAccount(state);
 
   const id = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const now = new Date();
+  state.group = id; // Affecter AVANT saveAccount pour que le group ID soit bien persisté
+  await saveAccount(state);
+
   await saveGroup({ id, name, creatorCode: state.code, creatorName: state.name, members: [state.code], createdAt: now.toISOString(), monthKey: getGroupMonthKey() });
-  state.group = id;
 
   refreshUI();
   document.getElementById('newGroupNameInput').value = '';
@@ -2970,7 +3047,7 @@ async function checkGroupWeeklyReward() {
             acc.history = acc.history || [];
             acc.history.unshift({ type: 'group', desc: `🔄 Groupe "${g.name}" dissous (renouvellement mensuel)`, amount: 0, date: now.toISOString() });
             await saveAccount(acc);
-            if (code === state.code) { state = migrateAccount(acc); state.group = null; refreshUI(); }
+            if (code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); state.group = null; refreshUI(); }
           }
         }
         await deleteGroup(g.id);
@@ -3005,13 +3082,13 @@ async function checkGroupWeeklyReward() {
   for (let i = 0; i < Math.min(3, scored.length); i++) {
     const g = scored[i];
     for (const code of (g.members || [])) {
-      const acc = allAccounts.find(a => a.code === code);
+      const acc = await getAccount(code);
       if (acc) {
         acc.balance += 2000;
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'group', desc: `🏅 Groupe "${g.name}" — Top ${i+1} hebdo !`, amount: 2000, date: now.toISOString() });
         await saveAccount(acc);
-        if (code === state.code) { state = migrateAccount(acc); refreshUI(); }
+        if (code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
       }
     }
   }
@@ -3020,13 +3097,13 @@ async function checkGroupWeeklyReward() {
   const toDissolve = scored.slice(3);
   for (const g of toDissolve) {
     for (const code of (g.members || [])) {
-      const acc = allAccounts.find(a => a.code === code);
+      const acc = await getAccount(code);
       if (acc) {
         acc.group = null;
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'group', desc: `💥 Groupe "${g.name}" dissous (classement hebdo)`, amount: 0, date: now.toISOString() });
         await saveAccount(acc);
-        if (code === state.code) { state = migrateAccount(acc); state.group = null; refreshUI(); }
+        if (code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); state.group = null; refreshUI(); }
       }
     }
     await deleteGroup(g.id);
@@ -3253,13 +3330,14 @@ async function closeBet(betId, winnerOption) {
     const sharePerWinner = Math.ceil(loserPool / winners.length);
     for (const w of winners) {
       const totalWin = w.amount * 2 + sharePerWinner;
+      // Re-read fresh from Firebase to avoid stale data
       const acc = await getAccount(w.code);
       if (acc) {
         acc.balance += totalWin;
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'bet', desc: `Pari gagné : "${bet.desc}"`, amount: totalWin, date: new Date().toISOString() });
         await saveAccount(acc);
-        if (w.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+        if (w.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
       }
     }
   } else {
@@ -3271,7 +3349,7 @@ async function closeBet(betId, winnerOption) {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'bet', desc: `Pari remboursé : "${bet.desc}"`, amount: l.amount, date: new Date().toISOString() });
         await saveAccount(acc);
-        if (l.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+        if (l.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
       }
     }
   }
@@ -3291,7 +3369,7 @@ async function deleteBetByCreator(betId) {
         acc.history = acc.history || [];
         acc.history.unshift({ type: 'bet', desc: `Pari annulé remboursé : "${bet.desc}"`, amount: b.amount, date: new Date().toISOString() });
         await saveAccount(acc);
-        if (b.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+        if (b.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
       }
     }
     await deleteBet(betId);
@@ -3315,7 +3393,7 @@ async function cleanupBets() {
           acc.history = acc.history || [];
           acc.history.unshift({ type: 'bet', desc: `Pari expiré remboursé : "${bet.desc}"`, amount: b.amount, date: new Date().toISOString() });
           await saveAccount(acc);
-          if (b.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+          if (b.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
         }
       }
       await deleteBet(bet.id);
@@ -3448,6 +3526,7 @@ function goToHome() {
   // Stop snake if running
   if (snakeLoop) { clearTimeout(snakeLoop); snakeLoop = null; snakeState = null; }
   stopClickerPage();
+  stopDiscussionListener();
   renderHome();
 }
 
@@ -3474,20 +3553,19 @@ async function renderHomeGroup() {
   const widget = document.getElementById('homeGroupWidget');
   const nameEl = document.getElementById('homeGroupName');
   if (!widget || !nameEl) return;
-  if (state.group) {
-    const groupName = await resolveGroupName(state.group);
-    if (groupName) {
-      nameEl.textContent = groupName;
-      nameEl.style.color = 'var(--primary)';
-      widget.style.borderColor = 'var(--primary)';
-      widget.style.boxShadow = '0 0 12px var(--primary-glow)';
-    } else {
-      nameEl.textContent = 'Groupe introuvable';
-      nameEl.style.color = 'var(--muted)';
-      widget.style.borderColor = '';
-      widget.style.boxShadow = '';
-    }
+  // Use groups membership as source of truth
+  const groups = await getGroupsCache();
+  const myGroup = (groups || []).find(g => (g.members || []).includes(state.code));
+  if (myGroup) {
+    // Sync state.group if needed
+    if (state.group !== myGroup.id) { state.group = myGroup.id; saveAccount(state); }
+    nameEl.textContent = myGroup.name;
+    nameEl.style.color = 'var(--primary)';
+    widget.style.borderColor = 'var(--primary)';
+    widget.style.boxShadow = '0 0 12px var(--primary-glow)';
   } else {
+    // Sync state.group if needed
+    if (state.group) { state.group = null; saveAccount(state); }
     nameEl.textContent = 'Aucun groupe';
     nameEl.style.color = 'var(--muted)';
     widget.style.borderColor = '';
@@ -4415,7 +4493,7 @@ async function checkSnakeWeeklyReset() {
       acc.history = acc.history || [];
       acc.history.unshift({ type: 'snake', desc: `🐍 Classement hebdo Serpent — #${i+1}`, amount: prize, date: new Date().toISOString() });
       await saveAccount(acc);
-      if (e.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+      if (e.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
     }
   }
 
@@ -4861,7 +4939,7 @@ async function validateQuete(queteId) {
       date: new Date().toISOString(),
     });
     await saveAccount(target);
-    if (target.code === state.code) { state = migrateAccount(target); refreshUI(); }
+    if (target.code === state.code) { state = migrateAccount(await getAccount(state.code) || target); refreshUI(); }
   }
 
   // Award bonus to creator (half, rounded up)
@@ -4876,7 +4954,7 @@ async function validateQuete(queteId) {
       date: new Date().toISOString(),
     });
     await saveAccount(creator);
-    if (creator.code === state.code) { state = migrateAccount(creator); refreshUI(); }
+    if (creator.code === state.code) { state = migrateAccount(await getAccount(state.code) || creator); refreshUI(); }
   }
 
   q.status = 'done';
@@ -5249,7 +5327,7 @@ async function distributeJardinRewards(flowers) {
       acc.history = acc.history || [];
       acc.history.unshift({ type: 'jardin', desc: `🌸 Jardin de Pomel'Land — ${i < 3 ? `#${i+1}` : 'participant'}`, amount: prize, date: new Date().toISOString() });
       await saveAccount(acc);
-      if (p.code === state.code) { state = migrateAccount(acc); refreshUI(); }
+      if (p.code === state.code) { state = migrateAccount(await getAccount(state.code) || acc); refreshUI(); }
     }
     winners.push({ rank: i + 1, name: p.name, code: p.code, count: p.count, prize });
   }
@@ -5637,6 +5715,121 @@ async function submitReplyLive(postId) {
   renderLive();
 }
 
+// ── DISCUSSION GÉNÉRALE ─────────────────────────
+let _discussionListener = null;
+let _discussionAutoScroll = true;
+
+async function renderDiscussion() {
+  const today = getTodayKey();
+  const msgContainer = document.getElementById('discussionMessages');
+  if (!msgContainer) return;
+
+  // Clean old messages (keep only today)
+  const rawData = await dbGet('discussion');
+  if (rawData) {
+    const keys = Object.keys(rawData);
+    let needClean = false;
+    const cleaned = {};
+    keys.forEach(k => {
+      if (rawData[k] && rawData[k].date === today) {
+        cleaned[k] = rawData[k];
+      } else {
+        needClean = true;
+      }
+    });
+    if (needClean) {
+      await dbSet('discussion', Object.keys(cleaned).length ? cleaned : null);
+    }
+  }
+
+  // Set up realtime listener
+  if (_discussionListener) {
+    db.ref('discussion').off('value', _discussionListener);
+  }
+  _discussionListener = db.ref('discussion').on('value', (snap) => {
+    const currentDay = getTodayKey(); // Fresh today key on each update
+    const data = snap.val() || {};
+    const messages = Object.values(data)
+      .filter(m => m.date === currentDay)
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    msgContainer.innerHTML = '';
+    if (!messages.length) {
+      msgContainer.innerHTML = '<div class="live-empty">Aucun message aujourd\'hui. Lance la conversation !</div>';
+      return;
+    }
+
+    messages.forEach(msg => {
+      const isMe = msg.authorCode === state.code;
+      const time = new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const nameClass = getNameColorClass(msg.authorColor || null);
+      const rawName = msg.authorName || '?';
+      const safeName = escapeHTML(rawName);
+      const div = document.createElement('div');
+      div.className = 'discussion-msg' + (isMe ? ' me' : '');
+      div.innerHTML = `
+        <div class="discussion-msg-avatar">${escapeHTML(rawName.charAt(0).toUpperCase())}</div>
+        <div class="discussion-msg-body">
+          <div class="discussion-msg-header">
+            <span class="discussion-msg-name ${nameClass}">${safeName}</span>
+            <span class="discussion-msg-time">${time}</span>
+          </div>
+          <div class="discussion-msg-text">${escapeHTML(msg.text)}</div>
+        </div>
+      `;
+      msgContainer.appendChild(div);
+    });
+
+    // Auto-scroll to bottom
+    if (_discussionAutoScroll) {
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+  });
+
+  // Track scroll: don't auto-scroll if user scrolled up
+  msgContainer.onscroll = () => {
+    const atBottom = msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight < 60;
+    _discussionAutoScroll = atBottom;
+  };
+}
+
+function stopDiscussionListener() {
+  if (_discussionListener) {
+    db.ref('discussion').off('value', _discussionListener);
+    _discussionListener = null;
+  }
+}
+
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function sendDiscussionMsg() {
+  const input = document.getElementById('discussionInput');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  if (text.length > 200) return;
+
+  const today = getTodayKey();
+  const id = 'dm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const msg = {
+    id,
+    date: today,
+    text,
+    authorCode: state.code,
+    authorName: state.name,
+    authorColor: state.activeColor || null,
+    createdAt: new Date().toISOString(),
+  };
+
+  await dbSet('discussion/' + id, msg);
+  input.value = '';
+  _discussionAutoScroll = true;
+}
+
 // ── TRANSFER ─────────────────────────────────────
 async function handleTransfer() {
   const recipientName = document.getElementById('recipientInput').value.trim();
@@ -5704,13 +5897,18 @@ async function renderMonProfil() {
   const spent   = (me.history || []).filter(h => h.amount < 0).reduce((s, h) => s + Math.abs(h.amount), 0);
   const joined  = new Date(me.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const nameClass = getNameColorClass(me.activeColor);
-  const badge = me.activeBadge ? (resolveTitleDef(me.activeBadge) || {}).emoji || '' : '';
+  const badgeDefMP = me.activeBadge ? (resolveTitleDef(me.activeBadge) || {}) : {};
+  const badgeEmojiMP = badgeDefMP.emoji || '';
+  const badgeNameMP = badgeDefMP.name || '';
+  const badgeHTMLMP = badgeEmojiMP ? ` <span class="user-badge-emoji" title="${badgeNameMP.replace(/"/g, '&quot;')}" style="cursor:help;">${badgeEmojiMP}</span>` : '';
   const titlesHTML = (me.activeTitles || []).map(tid => {
     const t = resolveTitleDef(tid);
     return t ? `<span class="title-badge">${t.name}</span>` : '';
   }).join('') || '<span style="color:var(--muted);font-size:.82rem;">Aucun titre actif</span>';
-  // Résolution immédiate du nom de groupe
-  const myGroupName = me.group ? (await resolveGroupName(me.group) || null) : null;
+  // Résolution immédiate du nom de groupe via groups membership
+  const allGroupsMP = await getGroupsCache();
+  const myGroupMP = (allGroupsMP || []).find(g => (g.members || []).includes(state.code));
+  const myGroupName = myGroupMP ? myGroupMP.name : null;
   const groupDisplay = myGroupName
     ? ` · <span style="color:var(--primary);font-weight:700;">🏅 ${myGroupName}</span>`
     : ` · <span style="color:var(--muted);">Aucun groupe</span>`;
@@ -5719,7 +5917,7 @@ async function renderMonProfil() {
     <div class="profil-me-header">
       <div class="profil-me-avatar">${me.name.charAt(0).toUpperCase()}</div>
       <div>
-        <div class="profil-me-name"><span class="${nameClass}">${me.name}${badge ? ' ' + badge : ''}</span></div>
+        <div class="profil-me-name"><span class="${nameClass}">${me.name}${badgeHTMLMP}</span></div>
         <div class="profil-me-since">Membre depuis ${joined}${groupDisplay}</div>
       </div>
     </div>
@@ -5849,9 +6047,13 @@ async function renderProfils() {
   const grid = document.getElementById('profilsGrid');
   grid.innerHTML = '<div style="color:var(--muted);font-size:.88rem;">Chargement…</div>';
   const [all, groups] = await Promise.all([getAllAccounts(), getAllGroups()]);
-  // Map groupId → groupName pour résolution instantanée
+  // Map groupId → groupName AND code → groupName for resolution
   const groupMap = {};
-  (groups || []).forEach(g => { groupMap[g.id] = g.name; });
+  const codeToGroupName = {};
+  (groups || []).forEach(g => {
+    groupMap[g.id] = g.name;
+    (g.members || []).forEach(code => { codeToGroupName[code] = g.name; });
+  });
 
   // Exclure soi-même, trier par solde
   const others = all
@@ -5870,7 +6072,7 @@ async function renderProfils() {
     const badgeDef2 = migrated.activeBadge ? (resolveAnyTitleDef(migrated.activeBadge, migrated) || {}) : {};
     const badge = badgeDef2.emoji || '';
     const badgeTitle2 = badgeDef2.name || '';
-    const badgeHTMLCard = badge ? ` <span title="${badgeTitle2}" style="cursor:default;">${badge}</span>` : '';
+    const badgeHTMLCard = badge ? ` <span class="user-badge-emoji" title="${badgeTitle2.replace(/"/g, '&quot;')}" style="cursor:help;">${badge}</span>` : '';
     const streakHTMLCard = getStreakBadgeHTML(migrated);
     const spins = (migrated.history || []).filter(h => h.type === 'roulette').length;
     const earned = (migrated.history || []).filter(h => h.amount > 0).reduce((s, h) => s + h.amount, 0);
@@ -5879,7 +6081,7 @@ async function renderProfils() {
       return t ? `<span class="title-badge" style="font-size:.6rem;">${t.name}</span>` : '';
     }).join('');
     // Résolution immédiate du groupe grâce au map pré-chargé
-    const groupName = migrated.group ? (groupMap[migrated.group] || null) : null;
+    const groupName = codeToGroupName[acc.code] || null;
 
     const card = document.createElement('div');
     card.className = 'profil-card';
