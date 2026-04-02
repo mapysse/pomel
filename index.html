@@ -4892,7 +4892,7 @@ async function g2048RenderLb() {
       <span class="snake-lb-rank ${rankClass}">${medals[i] || rank}</span>
       <span class="snake-lb-name">${e.name}${isMe ? ' <span class="lb-you-badge">Moi</span>' : ''}</span>
       <span class="snake-lb-score">${e.score.toLocaleString('fr-FR')} pts</span>
-      <span class="snake-lb-pomels">+${Math.floor(e.score / G2048_POMEL_RATE).toLocaleString('fr-FR')} 🪙</span>
+      <span class="snake-lb-pomels"></span>
     `;
     list.appendChild(div);
   });
