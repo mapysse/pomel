@@ -4928,10 +4928,9 @@ async function g2048RenderWeeklyLb() {
     const div = document.createElement('div');
     div.className = 'snake-lb-item' + (isMe ? ' me' : '');
     div.innerHTML = `
-      <span class="snake-lb-rank ${rankClass}">${['🥇','🥈','🥉'][i] || rank}</span>
-      <span class="snake-lb-name">${e.name}${isMe ? ' <span class="lb-you-badge">Moi</span>' : ''}</span>
-      <span class="snake-lb-score">${e.score.toLocaleString('fr-FR')} pts</span>
-      <span class="snake-lb-pomels" style="color:var(--yellow)">+${prize.toLocaleString('fr-FR')} 🪙 lundi</span>
+    <span class="snake-lb-rank ${rankClass}">${['🥇','🥈','🥉'][i] || rank}</span>
+    <span class="snake-lb-name">${e.name}${isMe ? ' <span class="lb-you-badge">Moi</span>' : ''}</span>
+    <span class="snake-lb-score">${e.score.toLocaleString('fr-FR')} pts</span>
     `;
     list.appendChild(div);
   });
