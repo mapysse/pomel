@@ -82,9 +82,9 @@ const PM_LEVEL_BONUS = 0.05;    // +5% par niveau
 const PM_STAGE_MULT = [0.35, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75];
 
 // Limites quotidiennes
-const PM_DAILY_WILD = 3;
-const PM_DAILY_GYM_WINS = 1;
-const PM_DAILY_LEAGUE = 5;
+const PM_DAILY_WILD = 999;
+const PM_DAILY_GYM_WINS = 999;
+const PM_DAILY_LEAGUE = 999;
 
 // Brûlure
 const PM_BURN_DAMAGE_PCT = 0.12;
