@@ -1481,8 +1481,9 @@ function pmGenerateLeagueOpponent(roundNum) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ── État UI PomMon ──
-let _pmView = 'home'; // home, collection, wild, gym, league, battle, starter
+let _pmView = 'home'; // home, collection, team, wild, gym, gymPick, league, battle, starter
 let _pmBattleState = null; // État du combat en cours
+let _pmPendingGym = null; // Arène sélectionnée en attente du choix du combattant
 
 // Injection des styles CSS
 function pmInjectStyles() {
@@ -1580,6 +1581,11 @@ function pmInjectStyles() {
     .pm-move-pp { color:var(--blue); }
     .pm-move-pp.low { color:var(--yellow); }
     .pm-move-pp.empty { color:var(--red); }
+
+    .pm-switch-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; }
+    .pm-switch-btn { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius-sm); padding:10px; display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; transition:all .15s; font-family:'Syne',sans-serif; color:var(--text); min-width:0; }
+    .pm-switch-btn:not(:disabled):hover { border-color:var(--primary); transform:translateY(-1px); }
+    .pm-switch-btn:disabled { opacity:.4; cursor:not-allowed; }
 
     .pm-gym-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; }
     .pm-gym-card { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:16px; display:flex; flex-direction:column; gap:8px; cursor:pointer; transition:all .15s; min-width:0; }
@@ -1708,6 +1714,7 @@ function pmRenderPage() {
     case 'team': pmRenderTeamManager(page, player); break;
     case 'wild': pmRenderWildBattle(page, player); break;
     case 'gym': pmRenderGyms(page, player); break;
+    case 'gymPick': pmRenderGymPick(page, player); break;
     case 'league': pmRenderLeague(page, player); break;
     case 'battle': pmRenderBattle(page, player); break;
     default: pmRenderHome(page, player);
@@ -2010,18 +2017,33 @@ function pmRenderWildBattle(page, player) {
   });
 }
 
-function pmStartWildBattle(playerInstance) {
+function pmStartWildBattle(firstInstance) {
+  const player = pmGetPlayer();
+  const team = pmGetTeam(player);
+  if (team.length === 0) return;
+
+  // Créer fighters pour toute l'équipe
+  const teamFighters = team.map(inst => pmCreateFighter(inst, 1.0));
+  // Placer le PomMon choisi en premier
+  let firstIdx = team.findIndex(t => t.uid === firstInstance.uid);
+  if (firstIdx < 0) firstIdx = 0;
+
   const wild = pmGenerateWildEncounter();
-  const playerFighter = pmCreateFighter(playerInstance, 1.0);
   const wildFighter = pmCreateFighter(wild, PM_WILD_NERF);
 
   _pmBattleState = {
     mode: 'wild',
     wildInstance: wild,
-    playerInstance: playerInstance,
-    playerFighter: playerFighter,
+    team: team,                      // instances joueur
+    teamFighters: teamFighters,      // fighters correspondants
+    currentTeamIdx: firstIdx,
+    playerInstance: team[firstIdx],
+    playerFighter: teamFighters[firstIdx],
     opponentFighter: wildFighter,
-    log: [`Un ${wild.nickname || PM_DEX[wild.pommonId].name} sauvage apparaît ! (Niv ${wild.level})`, `Tu envoies ${playerFighter.name} au combat !`],
+    log: [
+      `Un ${PM_DEX[wild.pommonId].name} sauvage apparaît ! (Niv ${wild.level})`,
+      `Tu envoies ${teamFighters[firstIdx].name} au combat !`
+    ],
     turn: 0,
     finished: false,
     ended: false
@@ -2079,23 +2101,77 @@ function pmStartGymBattle(gym) {
   const team = pmGetTeam(player);
   if (team.length === 0) return;
 
-  // Choisir premier PomMon actif (on pourrait ajouter un écran de sélection, mais on simplifie)
-  const playerInstance = team[0];
+  // Ouvrir l'écran de sélection du premier combattant
+  _pmPendingGym = gym;
+  _pmView = 'gymPick';
+  pmRenderPage();
+}
+
+// Écran : choisir quel PomMon envoyer en premier pour l'arène
+function pmRenderGymPick(page, player) {
+  const gym = _pmPendingGym;
+  if (!gym) { _pmView = 'gym'; pmRenderPage(); return; }
+  const team = pmGetTeam(player);
+  page.innerHTML = `
+    <div class="pm-wrap">
+      <div class="pm-header">
+        <div>
+          <div class="pm-title">🏆 ${gym.name}</div>
+          <div class="pm-sub">Choisis ton premier combattant. Tu pourras switcher pendant le combat.</div>
+        </div>
+        <button class="btn-outline" onclick="pmGoTo('gym')">← Retour</button>
+      </div>
+      <div class="pm-card" style="text-align:center;">
+        <div class="pm-team-slots" id="pm-gym-pick"></div>
+      </div>
+    </div>
+  `;
+  const slots = document.getElementById('pm-gym-pick');
+  team.forEach((inst, i) => {
+    const base = PM_DEX[inst.pommonId];
+    const slot = document.createElement('div');
+    slot.className = 'pm-team-slot';
+    slot.style.cursor = 'pointer';
+    slot.onclick = () => pmLaunchGymBattle(gym, inst);
+    slot.innerHTML = `
+      <canvas width="64" height="64" class="pm-sprite pm-sprite-lg" id="pm-gympick-${i}"></canvas>
+      <div style="font-weight:700;">${base.name}</div>
+      <div style="font-size:.75rem; color:var(--muted); font-family:'Space Mono',monospace;">Niv ${inst.level}</div>
+      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]}</span>
+    `;
+    slots.appendChild(slot);
+    setTimeout(() => drawPomMon(document.getElementById('pm-gympick-' + i), inst.pommonId), 10);
+  });
+}
+
+function pmLaunchGymBattle(gym, firstInstance) {
+  const player = pmGetPlayer();
+  const team = pmGetTeam(player);
+  const teamFighters = team.map(inst => pmCreateFighter(inst, 1.0));
+  let firstIdx = team.findIndex(t => t.uid === firstInstance.uid);
+  if (firstIdx < 0) firstIdx = 0;
+
   const championInstance = pmGenerateGymChampion(gym);
-  const playerFighter = pmCreateFighter(playerInstance, 1.0);
   const championFighter = pmCreateFighter(championInstance, PM_GYM_BOOST);
 
   _pmBattleState = {
     mode: 'gym',
     gym: gym,
-    playerInstance: playerInstance,
-    playerFighter: playerFighter,
+    team: team,
+    teamFighters: teamFighters,
+    currentTeamIdx: firstIdx,
+    playerInstance: team[firstIdx],
+    playerFighter: teamFighters[firstIdx],
     opponentFighter: championFighter,
-    log: [`${gym.championName} te défie avec ${championFighter.name} (Niv ${championInstance.level}, boosté) !`, `Tu envoies ${playerFighter.name} !`],
+    log: [
+      `${gym.championName} te défie avec ${championFighter.name} (Niv ${championInstance.level}, boosté) !`,
+      `Tu envoies ${teamFighters[firstIdx].name} !`
+    ],
     turn: 0,
     finished: false,
     ended: false
   };
+  _pmPendingGym = null;
   _pmView = 'battle';
   pmRenderPage();
 }
@@ -2313,6 +2389,16 @@ function pmRenderStatusBadges(fighter) {
 }
 
 function pmRenderMoveChoices(fighter) {
+  const bs = _pmBattleState;
+  // Mode "choix forcé après KO" : afficher uniquement la liste des PomMons dispo
+  if (bs && bs.forcedSwitch) {
+    return pmRenderSwitchChoices(true);
+  }
+  // Mode "switch manuel" : afficher liste + bouton annuler
+  if (bs && bs.switching) {
+    return pmRenderSwitchChoices(false);
+  }
+
   const hasAnyPP = !pmHasNoPP(fighter);
   let html = '<div class="pm-moves-grid">';
   fighter.moves.forEach((m, i) => {
@@ -2336,7 +2422,123 @@ function pmRenderMoveChoices(fighter) {
     html += '<div style="margin-top:10px; text-align:center; color:var(--yellow); font-weight:700;">Plus aucun PP ! Tu vas utiliser Lutte.</div>';
     html += '<button class="btn-primary" style="margin-top:10px;" onclick="pmDoBattleTurn(0)">Utiliser Lutte</button>';
   }
+
+  // Bouton "Changer de PomMon" s'il y a au moins un autre PomMon dispo (non-KO)
+  if (bs && bs.teamFighters) {
+    const availableCount = bs.teamFighters.filter((f, i) => !f.ko && i !== bs.currentTeamIdx).length;
+    if (availableCount > 0) {
+      html += `
+        <button class="btn-outline" style="margin-top:10px; width:100%;" onclick="pmOpenSwitch()">
+          🔄 Changer de PomMon <span style="color:var(--muted); font-size:.8rem;">(coûte un tour)</span>
+        </button>
+      `;
+    }
+  }
+
   return html;
+}
+
+// Affiche les PomMons de l'équipe (pour switch manuel ou forcé après KO)
+function pmRenderSwitchChoices(isForced) {
+  const bs = _pmBattleState;
+  if (!bs || !bs.teamFighters) return '';
+  let html = isForced
+    ? '<div style="margin-bottom:10px; text-align:center; color:var(--yellow); font-weight:700;">Ton PomMon est K.O. ! Choisis un remplaçant :</div>'
+    : '<div style="margin-bottom:10px; text-align:center; color:var(--muted); font-size:.85rem;">Choisis le PomMon à envoyer au combat :</div>';
+  html += '<div class="pm-switch-grid">';
+  bs.teamFighters.forEach((f, i) => {
+    const isActive = i === bs.currentTeamIdx;
+    const isKo = f.ko;
+    const disabled = isActive || isKo ? 'disabled' : '';
+    const hpPct = Math.max(0, Math.min(100, (f.hp / f.hpMax) * 100));
+    const hpColor = hpPct > 50 ? 'var(--green)' : hpPct > 20 ? 'var(--yellow)' : 'var(--red)';
+    const stateLabel = isKo ? ' <span style="color:var(--red); font-weight:700;">K.O.</span>' : isActive ? ' <span style="color:var(--blue); font-weight:700;">(actif)</span>' : '';
+    html += `
+      <button class="pm-switch-btn" ${disabled} onclick="pmDoSwitch(${i}, ${isForced ? 'false' : 'true'})">
+        <canvas width="48" height="48" class="pm-sprite" id="pm-sw-${i}" style="image-rendering:pixelated;"></canvas>
+        <div style="font-weight:700; font-size:.88rem;">${f.name}${stateLabel}</div>
+        <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[f.type]}; font-size:.7rem;">${PM_TYPE_EMOJI[f.type]} ${PM_TYPE_LABEL[f.type]}</span>
+        <div style="font-size:.72rem; color:var(--muted); font-family:'Space Mono',monospace;">Niv ${f.level} · PV ${f.hp}/${f.hpMax}</div>
+        <div style="width:100%; height:5px; background:var(--surface2); border-radius:3px; overflow:hidden;">
+          <div style="height:100%; width:${hpPct}%; background:${hpColor}; transition:width .3s;"></div>
+        </div>
+      </button>
+    `;
+  });
+  html += '</div>';
+  if (!isForced) {
+    html += '<button class="btn-outline" style="margin-top:10px; width:100%;" onclick="pmCancelSwitch()">← Annuler</button>';
+  }
+  // Dessiner les sprites après insertion DOM
+  setTimeout(() => {
+    bs.teamFighters.forEach((f, i) => {
+      const c = document.getElementById('pm-sw-' + i);
+      if (c) drawPomMon(c, f.pommonId);
+    });
+  }, 10);
+  return html;
+}
+
+function pmOpenSwitch() {
+  const bs = _pmBattleState;
+  if (!bs || bs.ended) return;
+  bs.switching = true;
+  pmRenderPage();
+}
+
+function pmCancelSwitch() {
+  const bs = _pmBattleState;
+  if (!bs) return;
+  bs.switching = false;
+  pmRenderPage();
+}
+
+// Effectue le switch de PomMon
+// costsTurn = true : switch manuel, l'adversaire attaque ce tour
+// costsTurn = false : switch forcé après KO, pas d'attaque adverse
+function pmDoSwitch(newIdx, costsTurn) {
+  const bs = _pmBattleState;
+  if (!bs || bs.ended) return;
+  const newFighter = bs.teamFighters[newIdx];
+  if (!newFighter || newFighter.ko || newIdx === bs.currentTeamIdx) return;
+
+  const oldName = bs.playerFighter.name;
+  const newName = newFighter.name;
+
+  bs.currentTeamIdx = newIdx;
+  bs.playerFighter = newFighter;
+  bs.playerInstance = bs.team[newIdx];
+  bs.switching = false;
+  bs.forcedSwitch = false;
+
+  if (costsTurn) {
+    bs.log.push(`Tu rappelles ${oldName} et envoies ${newName} !`);
+    // L'adversaire attaque pendant le switch
+    const o = bs.opponentFighter;
+    if (!o.ko) {
+      const oppMoveIdx = pmAIChooseMove(o, newFighter);
+      const events = pmExecuteMove(o, newFighter, o.moves[oppMoveIdx]);
+      events.forEach(ev => bs.log.push(pmEventToText(ev)));
+      // Fin de tour (brûlure)
+      const endEvents1 = pmApplyEndOfTurnEffects(newFighter);
+      endEvents1.forEach(ev => bs.log.push(pmEventToText(ev)));
+      const endEvents2 = pmApplyEndOfTurnEffects(o);
+      endEvents2.forEach(ev => bs.log.push(pmEventToText(ev)));
+      bs.turn++;
+      // Si le nouveau PomMon est KO direct → switch forcé
+      if (newFighter.ko) {
+        const hasOther = bs.teamFighters.some((f, i) => !f.ko && i !== newIdx);
+        if (hasOther) {
+          bs.forcedSwitch = true;
+        } else {
+          pmHandleBattleEnd();
+        }
+      }
+    }
+  } else {
+    bs.log.push(`Tu envoies ${newName} au combat !`);
+  }
+  pmRenderPage();
 }
 
 function pmDoBattleTurn(moveIdx) {
@@ -2487,22 +2689,43 @@ function pmHandleBattleEnd() {
       }
       pmUpdateInstance(player, bs.playerInstance);
 
-      // Tentative de capture
-      const captured = pmAttemptCapture();
-      if (captured) {
-        const captureInst = bs.wildInstance;
-        pmAddToCollection(player, captureInst);
-        bs.log.push(`<strong>🎉 ${PM_DEX[captureInst.pommonId].name} a été capturé ! Il rejoint ta collection.</strong>`);
+      // Anti-doublon : si déjà possédé, pas de capture
+      const alreadyOwned = (player.collection || []).some(c => c.pommonId === bs.wildInstance.pommonId);
+      if (alreadyOwned) {
+        bs.log.push(`💨 Le ${o.name} s'enfuit. Tu possèdes déjà ce PomMon — seulement l'XP pour toi.`);
       } else {
-        bs.log.push(`💨 Le ${o.name} s'est enfui...`);
+        // Tentative de capture (seulement si pas déjà possédé)
+        const captured = pmAttemptCapture();
+        if (captured) {
+          const captureInst = bs.wildInstance;
+          pmAddToCollection(player, captureInst);
+          bs.log.push(`<strong>🎉 ${PM_DEX[captureInst.pommonId].name} a été capturé ! Il rejoint ta collection.</strong>`);
+        } else {
+          bs.log.push(`💨 Le ${o.name} s'est enfui...`);
+        }
+      }
+
+      // Sauvegarder le fighter actif dans l'instance puis toute l'équipe
+      if (bs.teamFighters) {
+        bs.teamFighters.forEach((f, i) => {
+          if (bs.team && bs.team[i]) pmUpdateInstance(player, bs.team[i]);
+        });
       }
 
       bs.ended = true;
       pmSaveNow();
     } else if (p.ko) {
-      // Défaite sauvage (compte quand même la tentative)
+      // Le PomMon actif est KO — chercher un remplaçant dans l'équipe
+      const hasOther = bs.teamFighters && bs.teamFighters.some((f, i) => !f.ko && i !== bs.currentTeamIdx);
+      if (hasOther) {
+        // Switch forcé — le joueur choisit parmi les non-KO
+        bs.forcedSwitch = true;
+        return;
+      }
+      // Toute l'équipe est KO → défaite
       player.dailyWildCount++;
       pmSavePlayer(player);
+      bs.log.push(`<strong>Toute ton équipe est K.O. ! Tu as perdu ce combat.</strong>`);
       bs.ended = true;
       pmSaveNow();
     }
@@ -2518,6 +2741,13 @@ function pmHandleBattleEnd() {
         bs.log.push(`⬆️ ${p.name} monte au niveau ${bs.playerInstance.level} !`);
       }
       pmUpdateInstance(player, bs.playerInstance);
+
+      // Sauvegarder toute l'équipe (XP peut toucher d'autres PomMons plus tard)
+      if (bs.teamFighters) {
+        bs.teamFighters.forEach((f, i) => {
+          if (bs.team && bs.team[i]) pmUpdateInstance(player, bs.team[i]);
+        });
+      }
 
       // Reward Pomels (gain atomique via addBalanceTransaction)
       if (typeof addBalanceTransaction === 'function') {
@@ -2542,7 +2772,14 @@ function pmHandleBattleEnd() {
       bs.ended = true;
       pmSaveNow();
     } else if (p.ko) {
-      // Défaite arène (pas de pénalité, tentative illimitée)
+      // Le PomMon actif est KO — chercher un remplaçant
+      const hasOther = bs.teamFighters && bs.teamFighters.some((f, i) => !f.ko && i !== bs.currentTeamIdx);
+      if (hasOther) {
+        bs.forcedSwitch = true;
+        return;
+      }
+      // Toute l'équipe KO → défaite
+      bs.log.push(`<strong>Toute ton équipe est K.O. ! Tu as perdu l'arène.</strong>`);
       bs.ended = true;
     }
   }
