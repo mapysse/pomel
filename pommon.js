@@ -82,9 +82,9 @@ const PM_LEVEL_BONUS = 0.05;    // +5% par niveau
 const PM_STAGE_MULT = [0.35, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75];
 
 // Limites quotidiennes
-const PM_DAILY_WILD = 999;
-const PM_DAILY_GYM_WINS = 999;
-const PM_DAILY_LEAGUE = 999;
+const PM_DAILY_WILD = 3;
+const PM_DAILY_GYM_WINS = 1;
+const PM_DAILY_LEAGUE = 5;
 
 // Brûlure
 const PM_BURN_DAMAGE_PCT = 0.12;
@@ -879,6 +879,34 @@ let _pmSaveTimer = null;
 function pmPath() { return 'pommon/' + state.code; }
 
 // Charge depuis Firebase (appelé une fois au démarrage / navigation)
+// Garantit que toutes les propriétés attendues existent
+// (Firebase ne stocke pas les [] vides → au rechargement certaines clés manquent)
+function pmNormalizePlayer(data) {
+  if (!data) return null;
+  // Arrays que Firebase peut transformer en objets indexés ou supprimer s'ils sont vides
+  if (data.collection && !Array.isArray(data.collection)) {
+    data.collection = Object.values(data.collection);
+  }
+  if (!Array.isArray(data.collection)) data.collection = [];
+  if (data.team && !Array.isArray(data.team)) {
+    data.team = Object.values(data.team);
+  }
+  if (!Array.isArray(data.team)) data.team = [];
+  if (data.badges && !Array.isArray(data.badges)) {
+    data.badges = Object.values(data.badges);
+  }
+  if (!Array.isArray(data.badges)) data.badges = [];
+  // Valeurs numériques par défaut
+  data.dailyWildCount   = data.dailyWildCount   || 0;
+  data.dailyGymWins     = data.dailyGymWins     || 0;
+  data.dailyLeagueCount = data.dailyLeagueCount || 0;
+  data.leagueBestScore  = data.leagueBestScore  || 0;
+  data.totalCaptures    = data.totalCaptures    || 0;
+  data.totalBattlesWon  = data.totalBattlesWon  || 0;
+  data.lastActiveDate   = data.lastActiveDate   || new Date().toISOString().slice(0,10);
+  return data;
+}
+
 async function pmLoadFromFirebase() {
   if (typeof dbGet !== 'function' || !state || !state.code) {
     _pmCache = null;
@@ -887,21 +915,7 @@ async function pmLoadFromFirebase() {
   }
   try {
     const data = await dbGet(pmPath());
-    if (data) {
-      // Firebase convertit arrays -> objets indexés, on normalise
-      if (data.collection && !Array.isArray(data.collection)) {
-        data.collection = Object.values(data.collection);
-      }
-      if (data.team && !Array.isArray(data.team)) {
-        data.team = Object.values(data.team);
-      }
-      if (data.badges && !Array.isArray(data.badges)) {
-        data.badges = Object.values(data.badges);
-      }
-      _pmCache = data;
-    } else {
-      _pmCache = null;
-    }
+    _pmCache = data ? pmNormalizePlayer(data) : null;
   } catch(e) {
     console.error('[pommon] load error', e);
     _pmCache = null;
@@ -1644,6 +1658,9 @@ function pmRenderPage() {
     pmRenderStarterChoice(page);
     return;
   }
+
+  // Garantir l'intégrité des données (arrays manquants, etc.)
+  player = pmNormalizePlayer(player);
 
   // Check daily reset
   player = pmCheckDailyReset(player);
