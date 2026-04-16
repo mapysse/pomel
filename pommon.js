@@ -103,43 +103,68 @@ const PM_REWARD_LEAGUE_PER_WIN = 50;
 
 const PM_DEX = {
   // 🌿 PLANTE
-  pomalis:    { id:'pomalis',    name:'Pomalis',    type:'plante',     hp:70, atk:50, def:55, vit:40, starter:true },
-  thornet:    { id:'thornet',    name:'Thornet',    type:'plante',     hp:75, atk:55, def:60, vit:35 },
-  sylvagor:   { id:'sylvagor',   name:'Sylvagor',   type:'plante',     hp:90, atk:50, def:65, vit:30 },
-  sakuraze:   { id:'sakuraze',   name:'Sakuraze',   type:'plante',     hp:85, atk:55, def:60, vit:40 },
+  pomalis:    { id:'pomalis',    name:'Pomalis',    type:'plante',     hp:70, atk:50, def:55, vit:40, starter:true,
+                lore:'Petit quadrupède à la carapace végétale. Son bulbe dorsal absorbe la lumière du jour et libère un parfum apaisant.' },
+  thornet:    { id:'thornet',    name:'Thornet',    type:'plante',     hp:75, atk:55, def:60, vit:35,
+                lore:'Scarabée aux élytres couverts d\'épines. Il s\'enfouit dans la mousse et tend des embuscades aux imprudents.' },
+  sylvagor:   { id:'sylvagor',   name:'Sylvagor',   type:'plante',     hp:90, atk:50, def:65, vit:30,
+                lore:'Golem sylvestre qui s\'éveille à chaque printemps. Ses racines plongent si loin qu\'on dit qu\'il connaît les secrets du sol.' },
+  sakuraze:   { id:'sakuraze',   name:'Sakuraze',   type:'plante',     hp:85, atk:55, def:60, vit:40,
+                lore:'Esprit des cerisiers en fleurs. Sa danse fait tomber les pétales roses qui endorment ses adversaires.' },
 
   // 🔥 FEU
-  flameche:   { id:'flameche',   name:'Flamèche',   type:'feu',        hp:40, atk:55, def:50, vit:70, starter:true },
-  viperod:    { id:'viperod',    name:'Vipérod',    type:'feu',        hp:35, atk:60, def:55, vit:80 },
-  magmaturne: { id:'magmaturne', name:'Magmaturne', type:'feu',        hp:45, atk:65, def:55, vit:75 },
-  tauralys:   { id:'tauralys',   name:'Tauralys',   type:'feu',        hp:40, atk:70, def:60, vit:75 },
+  flameche:   { id:'flameche',   name:'Flamèche',   type:'feu',        hp:40, atk:55, def:50, vit:70, starter:true,
+                lore:'Petit lézard à la queue enflammée. Sa flamme ne s\'éteint jamais, même sous la pluie — un mystère pour les érudits.' },
+  viperod:    { id:'viperod',    name:'Vipérod',    type:'feu',        hp:35, atk:60, def:55, vit:80,
+                lore:'Serpent de braise qui chasse la nuit. Son venin brûle la chair avant même que la morsure ne soit visible.' },
+  magmaturne: { id:'magmaturne', name:'Magmaturne', type:'feu',        hp:45, atk:65, def:55, vit:75,
+                lore:'Tortue volcanique dont la carapace abrite un cœur de lave. Elle hiberne dans les cratères actifs.' },
+  tauralys:   { id:'tauralys',   name:'Tauralys',   type:'feu',        hp:40, atk:70, def:60, vit:75,
+                lore:'Taureau des plaines brûlées. Ses cornes rougeoyantes peuvent fendre la pierre quand il charge.' },
 
   // 💧 EAU
-  goutapom:   { id:'goutapom',   name:'Goutapom',   type:'eau',        hp:55, atk:50, def:55, vit:55, starter:true },
-  carapulse:  { id:'carapulse',  name:'Carapulse',  type:'eau',        hp:60, atk:55, def:55, vit:65 },
-  abyssale:   { id:'abyssale',   name:'Abyssale',   type:'eau',        hp:65, atk:60, def:60, vit:65 },
-  onduline:   { id:'onduline',   name:'Onduline',   type:'eau',        hp:60, atk:60, def:60, vit:60 },
+  goutapom:   { id:'goutapom',   name:'Goutapom',   type:'eau',        hp:55, atk:50, def:55, vit:55, starter:true,
+                lore:'Têtard joyeux des torrents limpides. Il saute hors de l\'eau pour communiquer par bulles chantantes.' },
+  carapulse:  { id:'carapulse',  name:'Carapulse',  type:'eau',        hp:60, atk:55, def:55, vit:65,
+                lore:'Crabe aux pinces capables de projeter des jets d\'eau à haute pression. Il arpente les récifs à la recherche de coquillages.' },
+  abyssale:   { id:'abyssale',   name:'Abyssale',   type:'eau',        hp:65, atk:60, def:60, vit:65,
+                lore:'Méduse des grandes profondeurs. Ses filaments bioluminescents hypnotisent ses proies avant la décharge paralysante.' },
+  onduline:   { id:'onduline',   name:'Onduline',   type:'eau',        hp:60, atk:60, def:60, vit:60,
+                lore:'Hippocampe des courants chauds. Il se déplace toujours à contre-courant, porté par des remous invisibles.' },
 
   // ⚡ ÉLECTRIQUE
-  volture:    { id:'volture',    name:'Volture',    type:'electrique', hp:50, atk:65, def:30, vit:70 },
-  fulguron:   { id:'fulguron',   name:'Fulguron',   type:'electrique', hp:45, atk:75, def:25, vit:90 },
-  rhinovolt:  { id:'rhinovolt',  name:'Rhinovolt',  type:'electrique', hp:55, atk:70, def:35, vit:80 },
-  raispore:   { id:'raispore',   name:'Raispore',   type:'electrique', hp:50, atk:80, def:30, vit:85 },
+  volture:    { id:'volture',    name:'Volture',    type:'electrique', hp:50, atk:65, def:30, vit:70,
+                lore:'Écureuil électrique qui saute de branche en branche. Ses joues stockent assez d\'énergie pour allumer une maison.' },
+  fulguron:   { id:'fulguron',   name:'Fulguron',   type:'electrique', hp:45, atk:75, def:25, vit:90,
+                lore:'Sphère d\'énergie pure flottant dans l\'atmosphère. On la confond souvent avec la foudre en boule.' },
+  rhinovolt:  { id:'rhinovolt',  name:'Rhinovolt',  type:'electrique', hp:55, atk:70, def:35, vit:80,
+                lore:'Rhinocéros à la corne conductrice. Sa charge génère des arcs électriques qui paralysent sur plusieurs mètres.' },
+  raispore:   { id:'raispore',   name:'Raispore',   type:'electrique', hp:50, atk:80, def:30, vit:85,
+                lore:'Hybride champignon-arachnide. Ses spores électrisées s\'accrochent à l\'air humide pour former des décharges aléatoires.' },
 
   // 🌀 AIR
-  zephibri:   { id:'zephibri',   name:'Zéphibri',   type:'air',        hp:30, atk:60, def:55, vit:80 },
-  cyclonin:   { id:'cyclonin',   name:'Cyclonin',   type:'air',        hp:35, atk:70, def:60, vit:80 },
-  stratocepe: { id:'stratocepe', name:'Stratocèpe', type:'air',        hp:25, atk:65, def:55, vit:90 },
+  zephibri:   { id:'zephibri',   name:'Zéphibri',   type:'air',        hp:30, atk:60, def:55, vit:80,
+                lore:'Minuscule colibri aux ailes si rapides qu\'elles deviennent invisibles. Il défie les lois de la gravité.' },
+  cyclonin:   { id:'cyclonin',   name:'Cyclonin',   type:'air',        hp:35, atk:70, def:60, vit:80,
+                lore:'Ninja des nuages, maître du vent tranchant. On raconte qu\'il peut traverser une tempête sans se mouiller.' },
+  stratocepe: { id:'stratocepe', name:'Stratocèpe', type:'air',        hp:25, atk:65, def:55, vit:90,
+                lore:'Champignon nuageux qui flotte en haute altitude. Son chapeau se condense et libère de brèves averses.' },
 
   // 🌑 OMBRE
-  spectrelis: { id:'spectrelis', name:'Spectrelis', type:'ombre',      hp:70, atk:45, def:80, vit:60 },
-  putrefel:   { id:'putrefel',   name:'Putréfel',   type:'ombre',      hp:80, atk:40, def:90, vit:55 },
-  nihilium:   { id:'nihilium',   name:'Nihilium',   type:'ombre',      hp:85, atk:50, def:95, vit:60, legendary:true },
+  spectrelis: { id:'spectrelis', name:'Spectrelis', type:'ombre',      hp:70, atk:45, def:80, vit:60,
+                lore:'Graine fantôme hantée par l\'âme d\'un vieux jardin oublié. Elle murmure des berceuses aux plantes mourantes.' },
+  putrefel:   { id:'putrefel',   name:'Putréfel',   type:'ombre',      hp:80, atk:40, def:90, vit:55,
+                lore:'Pomme zombie maudite. Plus on la coupe, plus elle repousse — et plus elle sent mauvais.' },
+  nihilium:   { id:'nihilium',   name:'Nihilium',   type:'ombre',      hp:85, atk:50, def:95, vit:60, legendary:true,
+                lore:'Sphère de vide absolu, apparition rarissime. Sa simple présence absorbe la lumière des étoiles.' },
 
   // ✨ LUMIÈRE
-  papiluxe:   { id:'papiluxe',   name:'Papiluxe',   type:'lumiere',    hp:65, atk:80, def:45, vit:65 },
-  solarion:   { id:'solarion',   name:'Solarion',   type:'lumiere',    hp:70, atk:85, def:40, vit:70 },
-  astraflore: { id:'astraflore', name:'Astraflore', type:'lumiere',    hp:75, atk:95, def:50, vit:75, legendary:true }
+  papiluxe:   { id:'papiluxe',   name:'Papiluxe',   type:'lumiere',    hp:65, atk:80, def:45, vit:65,
+                lore:'Papillon dont les ailes réfléchissent la lumière du soleil en mille reflets dorés. Il guide les voyageurs égarés.' },
+  solarion:   { id:'solarion',   name:'Solarion',   type:'lumiere',    hp:70, atk:85, def:40, vit:70,
+                lore:'Lion-soleil, gardien des aubes. Sa crinière flamboyante brûle sans consumer et illumine les vallées au lever du jour.' },
+  astraflore: { id:'astraflore', name:'Astraflore', type:'lumiere',    hp:75, atk:95, def:50, vit:75, legendary:true,
+                lore:'Déesse florale des cieux étoilés. Sa fleur frontale contient, dit-on, un fragment de constellation vivante.' }
 };
 
 // Liste ordonnée pour itération
@@ -152,49 +177,49 @@ const PM_DEX_IDS = Object.keys(PM_DEX);
 
 const PM_MOVES = {
   // Plante
-  fouet_roncier:   { id:'fouet_roncier',   name:'Fouet Roncier',    type:'plante',     power:80, accuracy:85,  pp:3, category:'attack' },
-  photosynthese:   { id:'photosynthese',   name:'Photosynthèse',    type:'plante',     power:0,  accuracy:100, pp:3, category:'heal', healPct:0.35 },
-  lancer_seve:     { id:'lancer_seve',     name:'Lancer de Sève',   type:'eau',        power:50, accuracy:95,  pp:5, category:'attack' },
-  pollen_lourd:    { id:'pollen_lourd',    name:'Pollen Lourd',     type:'plante',     power:0,  accuracy:90,  pp:3, category:'debuff', stat:'vit', stages:-1 },
+  fouet_roncier:   { id:'fouet_roncier',   name:'Fouet Roncier',    type:'plante',     power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Plante puissante.' },
+  photosynthese:   { id:'photosynthese',   name:'Photosynthèse',    type:'plante',     power:0,  accuracy:100, pp:3, category:'heal', healPct:0.35, desc:'Récupère 35% des PV max.' },
+  lancer_seve:     { id:'lancer_seve',     name:'Jet d\'Écume',      type:'eau',        power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Eau (couvre les Feu).' },
+  pollen_lourd:    { id:'pollen_lourd',    name:'Pollen Lourd',     type:'plante',     power:0,  accuracy:90,  pp:3, category:'debuff', stat:'vit', stages:-1, desc:'Baisse la Vitesse adverse d\'un cran.' },
 
   // Feu
-  brasier:         { id:'brasier',         name:'Brasier',          type:'feu',        power:80, accuracy:85,  pp:3, category:'attack' },
-  flamme_vive:     { id:'flamme_vive',     name:'Flamme Vive',      type:'feu',        power:50, accuracy:95,  pp:5, category:'attack', burnChance:0.30 },
-  tranchant:       { id:'tranchant',       name:'Tranchant',        type:'air',        power:50, accuracy:95,  pp:5, category:'attack' },
-  surchauffe:      { id:'surchauffe',      name:'Surchauffe',       type:'feu',        power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1 },
+  brasier:         { id:'brasier',         name:'Brasier',          type:'feu',        power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Feu puissante.' },
+  flamme_vive:     { id:'flamme_vive',     name:'Flamme Vive',      type:'feu',        power:50, accuracy:95,  pp:5, category:'attack', burnChance:0.30, desc:'Attaque Feu, 30% de brûler l\'adversaire.' },
+  tranchant:       { id:'tranchant',       name:'Coup d\'Aile',      type:'air',        power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Air (couvre les Eau).' },
+  surchauffe:      { id:'surchauffe',      name:'Surchauffe',       type:'feu',        power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1, desc:'Augmente ta propre Attaque d\'un cran.' },
 
   // Eau
-  torrent:         { id:'torrent',         name:'Torrent',          type:'eau',        power:80, accuracy:85,  pp:3, category:'attack' },
-  aqua_jet:        { id:'aqua_jet',        name:'Aqua Jet',         type:'eau',        power:40, accuracy:100, pp:5, category:'attack', priority:true },
-  eclair_marin:    { id:'eclair_marin',    name:'Éclair Marin',     type:'electrique', power:50, accuracy:95,  pp:5, category:'attack' },
-  corrosion:       { id:'corrosion',       name:'Corrosion',        type:'eau',        power:0,  accuracy:90,  pp:3, category:'debuff', stat:'def', stages:-1 },
+  torrent:         { id:'torrent',         name:'Torrent',          type:'eau',        power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Eau puissante.' },
+  aqua_jet:        { id:'aqua_jet',        name:'Aqua Jet',         type:'eau',        power:40, accuracy:100, pp:5, category:'attack', priority:true, desc:'Attaque Eau rapide : frappe toujours en premier.' },
+  eclair_marin:    { id:'eclair_marin',    name:'Éclair Marin',     type:'electrique', power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Électrique (couvre les Plante).' },
+  corrosion:       { id:'corrosion',       name:'Corrosion',        type:'eau',        power:0,  accuracy:90,  pp:3, category:'debuff', stat:'def', stages:-1, desc:'Baisse la Défense adverse d\'un cran.' },
 
   // Électrique
-  arc_voltaique:   { id:'arc_voltaique',   name:'Arc Voltaïque',    type:'electrique', power:55, accuracy:90,  pp:5, category:'attack', sideEffect:'debuff_def', chance:0.25 },
-  surcharge:       { id:'surcharge',       name:'Surcharge',        type:'electrique', power:55, accuracy:90,  pp:5, category:'attack', sideEffect:'buff_atk', chance:0.25 },
-  galvanisation:   { id:'galvanisation',   name:'Galvanisation',    type:'electrique', power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1 },
-  racine_choc:     { id:'racine_choc',     name:'Racine Choc',      type:'plante',     power:50, accuracy:95,  pp:5, category:'attack' },
+  arc_voltaique:   { id:'arc_voltaique',   name:'Arc Voltaïque',    type:'electrique', power:55, accuracy:90,  pp:5, category:'attack', sideEffect:'debuff_def', chance:0.25, desc:'Attaque Électrique, 25% de baisser la Défense adverse.' },
+  surcharge:       { id:'surcharge',       name:'Surcharge',        type:'electrique', power:55, accuracy:90,  pp:5, category:'attack', sideEffect:'buff_atk', chance:0.25, desc:'Attaque Électrique, 25% d\'augmenter ta propre Attaque.' },
+  galvanisation:   { id:'galvanisation',   name:'Galvanisation',    type:'electrique', power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1, desc:'Augmente ta propre Attaque d\'un cran.' },
+  racine_choc:     { id:'racine_choc',     name:'Fouet Végétal',    type:'plante',     power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Plante (couvre les Eau).' },
 
   // Air
-  cyclone:         { id:'cyclone',         name:'Cyclone',          type:'air',        power:80, accuracy:85,  pp:3, category:'attack' },
-  brise_vitale:    { id:'brise_vitale',    name:'Brise Vitale',     type:'air',        power:45, accuracy:95,  pp:5, category:'attack', selfHealPct:0.15 },
-  eclat_celeste:   { id:'eclat_celeste',   name:'Éclat Céleste',    type:'lumiere',    power:50, accuracy:95,  pp:5, category:'attack' },
-  vent_curatif:    { id:'vent_curatif',    name:'Vent Curatif',     type:'air',        power:0,  accuracy:100, pp:3, category:'heal', healPct:0.35 },
+  cyclone:         { id:'cyclone',         name:'Cyclone',          type:'air',        power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Air puissante.' },
+  brise_vitale:    { id:'brise_vitale',    name:'Brise Vitale',     type:'air',        power:45, accuracy:95,  pp:5, category:'attack', selfHealPct:0.15, desc:'Attaque Air qui soigne 15% des PV infligés.' },
+  eclat_celeste:   { id:'eclat_celeste',   name:'Éclat Céleste',    type:'lumiere',    power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Lumière (couvre les Ombre).' },
+  vent_curatif:    { id:'vent_curatif',    name:'Vent Curatif',     type:'air',        power:0,  accuracy:100, pp:3, category:'heal', healPct:0.35, desc:'Récupère 35% des PV max.' },
 
   // Ombre
-  nuit_noire:      { id:'nuit_noire',      name:'Nuit Noire',       type:'ombre',      power:80, accuracy:85,  pp:3, category:'attack' },
-  griffure_spec:   { id:'griffure_spec',   name:'Griffure Spectrale', type:'ombre',    power:55, accuracy:95,  pp:5, category:'attack' },
-  voile_obscur:    { id:'voile_obscur',    name:'Voile Obscur',     type:'ombre',      power:0,  accuracy:100, pp:3, category:'buff', stat:'def', stages:1 },
-  flamme_maudite:  { id:'flamme_maudite',  name:'Flamme Maudite',   type:'feu',        power:50, accuracy:95,  pp:5, category:'attack' },
+  nuit_noire:      { id:'nuit_noire',      name:'Nuit Noire',       type:'ombre',      power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Ombre puissante.' },
+  griffure_spec:   { id:'griffure_spec',   name:'Griffure Spectrale', type:'ombre',    power:55, accuracy:95,  pp:5, category:'attack', desc:'Attaque Ombre standard.' },
+  voile_obscur:    { id:'voile_obscur',    name:'Voile Obscur',     type:'ombre',      power:0,  accuracy:100, pp:3, category:'buff', stat:'def', stages:1, desc:'Augmente ta propre Défense d\'un cran.' },
+  flamme_maudite:  { id:'flamme_maudite',  name:'Flamme Maudite',   type:'feu',        power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Feu (couvre les Plante).' },
 
   // Lumière
-  rayon_sacre:     { id:'rayon_sacre',     name:'Rayon Sacré',      type:'lumiere',    power:80, accuracy:85,  pp:3, category:'attack' },
-  eclat_dore:      { id:'eclat_dore',      name:'Éclat Doré',       type:'lumiere',    power:55, accuracy:95,  pp:5, category:'attack' },
-  aura_radieuse:   { id:'aura_radieuse',   name:'Aura Radieuse',    type:'lumiere',    power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1 },
-  ombre_inversee:  { id:'ombre_inversee',  name:'Ombre Inversée',   type:'ombre',      power:50, accuracy:95,  pp:5, category:'attack' },
+  rayon_sacre:     { id:'rayon_sacre',     name:'Rayon Sacré',      type:'lumiere',    power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Lumière puissante.' },
+  eclat_dore:      { id:'eclat_dore',      name:'Éclat Doré',       type:'lumiere',    power:55, accuracy:95,  pp:5, category:'attack', desc:'Attaque Lumière standard.' },
+  aura_radieuse:   { id:'aura_radieuse',   name:'Aura Radieuse',    type:'lumiere',    power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1, desc:'Augmente ta propre Attaque d\'un cran.' },
+  ombre_inversee:  { id:'ombre_inversee',  name:'Ombre Inversée',   type:'ombre',      power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Ombre (couvre les Lumière).' },
 
   // Universel (backup quand plus de PP)
-  lutte:           { id:'lutte',           name:'Lutte',            type:'neutre',     power:30, accuracy:100, pp:99, category:'attack', recoilPct:0.15 }
+  lutte:           { id:'lutte',           name:'Lutte',            type:'neutre',     power:30, accuracy:100, pp:99, category:'attack', recoilPct:0.15, desc:'Attaque désespérée, inflige 15% de recul à l\'utilisateur.' }
 };
 
 // Moves assignés par type : tous les PomMons d'un type apprennent les 4 moves de leur type
@@ -1139,7 +1164,7 @@ function pmEffectivenessLabel(moveType, defenderType) {
 // Exécute un move et retourne les événements du tour
 function pmExecuteMove(attacker, defender, move) {
   const events = [];
-  events.push({ type:'use_move', attacker: attacker.name, move: move.name });
+  events.push({ type:'use_move', attacker: attacker.name, move: move.name, moveType: move.type });
 
   // Jet de précision
   const roll = Math.random() * 100;
@@ -1511,12 +1536,21 @@ function pmInjectStyles() {
     .pm-team-slot:hover { border-color:var(--primary); }
     .pm-team-slot.empty { background:var(--surface2); opacity:.5; }
 
-    .pm-collection-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
-    .pm-collection-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px; display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; transition:all .15s; min-width:0; }
+    .pm-collection-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; }
+    .pm-collection-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; transition:all .15s; min-width:0; }
     .pm-collection-card:hover { border-color:var(--primary); transform:translateY(-1px); }
     .pm-collection-card.in-team { border-color:var(--green); }
-    .pm-collection-name { font-size:.8rem; font-weight:700; text-align:center; }
-    .pm-collection-level { font-size:.7rem; color:var(--muted); font-family:'Space Mono',monospace; }
+    .pm-collection-name { font-size:.88rem; font-weight:700; text-align:center; }
+    .pm-collection-level { font-size:.72rem; color:var(--muted); font-family:'Space Mono',monospace; }
+    .pm-coll-lore { font-size:.72rem; color:var(--text); opacity:.8; font-style:italic; text-align:center; line-height:1.35; padding:4px 6px; }
+    .pm-coll-stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; width:100%; margin-top:6px; }
+    .pm-coll-stat { background:var(--surface2); border-radius:6px; padding:4px 2px; display:flex; flex-direction:column; align-items:center; gap:1px; }
+    .pm-coll-stat-k { font-size:.6rem; font-weight:700; color:var(--muted); letter-spacing:.05em; }
+    .pm-coll-stat-v { font-size:.82rem; font-weight:700; font-family:'Space Mono',monospace; color:var(--text); }
+    .pm-coll-moves { display:flex; flex-direction:column; gap:4px; width:100%; margin-top:6px; }
+    .pm-coll-move { background:var(--surface2); border-radius:6px; padding:5px 8px; }
+    .pm-coll-move-name { font-size:.74rem; font-weight:700; }
+    .pm-coll-move-meta { font-size:.64rem; color:var(--muted); font-family:'Space Mono',monospace; margin-top:1px; }
 
     .pm-battle-arena { display:flex; flex-direction:column; gap:16px; }
     .pm-battle-field { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -1542,6 +1576,7 @@ function pmInjectStyles() {
     .pm-move-btn:disabled { opacity:.4; cursor:not-allowed; }
     .pm-move-name { font-size:.88rem; font-weight:700; }
     .pm-move-info { font-size:.7rem; color:var(--muted); margin-top:2px; font-family:'Space Mono',monospace; }
+    .pm-move-desc { font-size:.72rem; color:var(--text); opacity:.75; margin-top:6px; line-height:1.3; font-style:italic; }
     .pm-move-pp { color:var(--blue); }
     .pm-move-pp.low { color:var(--yellow); }
     .pm-move-pp.empty { color:var(--red); }
@@ -1670,6 +1705,7 @@ function pmRenderPage() {
   switch (_pmView) {
     case 'home': pmRenderHome(page, player); break;
     case 'collection': pmRenderCollection(page, player); break;
+    case 'team': pmRenderTeamManager(page, player); break;
     case 'wild': pmRenderWildBattle(page, player); break;
     case 'gym': pmRenderGyms(page, player); break;
     case 'league': pmRenderLeague(page, player); break;
@@ -1741,7 +1777,7 @@ function pmRenderHome(page, player) {
       <div class="pm-card">
         <h3 style="font-size:.75rem; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:12px;">Ton équipe</h3>
         <div class="pm-team-slots" id="pm-team-slots"></div>
-        <button class="btn-outline" style="margin-top:14px;" onclick="pmGoTo('collection')">🔄 Gérer l'équipe</button>
+        <button class="btn-outline" style="margin-top:14px;" onclick="pmGoTo('team')">🔄 Gérer l'équipe</button>
       </div>
 
       <div class="pm-card">
@@ -1779,7 +1815,7 @@ function pmRenderHome(page, player) {
   for (let i = 0; i < 3; i++) {
     const slot = document.createElement('div');
     slot.className = 'pm-team-slot' + (team[i] ? '' : ' empty');
-    slot.onclick = () => pmGoTo('collection');
+    slot.onclick = () => pmGoTo('team');
     if (team[i]) {
       const p = PM_DEX[team[i].pommonId];
       slot.innerHTML = `
@@ -1796,14 +1832,71 @@ function pmRenderHome(page, player) {
   }
 }
 
-// ── Écran collection ──
+// ── Écran « Gérer l'équipe » : stats + moves, focus fonctionnel ──
+function pmRenderTeamManager(page, player) {
+  page.innerHTML = `
+    <div class="pm-wrap">
+      <div class="pm-header">
+        <div>
+          <div class="pm-title">🔄 Gérer l'équipe</div>
+          <div class="pm-sub">Clique sur un PomMon pour l'ajouter/retirer de ton équipe (${player.team.length}/3)</div>
+        </div>
+        <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
+      </div>
+      <div class="pm-card">
+        <div class="pm-collection-grid" id="pm-team-grid"></div>
+      </div>
+    </div>
+  `;
+
+  const grid = document.getElementById('pm-team-grid');
+  player.collection.forEach(inst => {
+    const base = PM_DEX[inst.pommonId];
+    const inTeam = player.team.includes(inst.uid);
+    const card = document.createElement('div');
+    card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '');
+    card.onclick = () => pmToggleTeam(inst.uid);
+    const xpMax = inst.level < 10 ? PM_XP_TABLE[inst.level] : 0;
+    const xpPct = inst.level < 10 ? (inst.xp / xpMax) * 100 : 100;
+    const stats = pmGetStats(inst);
+    const moveIds = PM_MOVES_BY_TYPE[base.type] || [];
+    const movesHtml = moveIds.map(mId => {
+      const m = PM_MOVES[mId];
+      if (!m) return '';
+      return `<div class="pm-coll-move" style="border-left:3px solid ${PM_TYPE_COLOR[m.type]};">
+        <div class="pm-coll-move-name">${PM_TYPE_EMOJI[m.type]} ${m.name}</div>
+        <div class="pm-coll-move-meta">${m.power > 0 ? 'P.' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP</div>
+      </div>`;
+    }).join('');
+    card.innerHTML = `
+      <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-team-${inst.uid}"></canvas>
+      <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}${base.legendary ? ' ✦' : ''}</div>
+      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]} ${PM_TYPE_LABEL[base.type]}</span>
+      <div class="pm-collection-level">Niv ${inst.level}${inst.level < 10 ? ` · ${inst.xp}/${xpMax} XP` : ' ★ MAX'}</div>
+      ${inst.level < 10 ? `<div class="pm-xp-bar" style="width:100%;"><div class="pm-xp-fill" style="width:${xpPct}%"></div></div>` : ''}
+      <div class="pm-coll-stats">
+        <div class="pm-coll-stat"><span class="pm-coll-stat-k">HP</span><span class="pm-coll-stat-v">${stats.hp}</span></div>
+        <div class="pm-coll-stat"><span class="pm-coll-stat-k">ATK</span><span class="pm-coll-stat-v">${stats.atk}</span></div>
+        <div class="pm-coll-stat"><span class="pm-coll-stat-k">DEF</span><span class="pm-coll-stat-v">${stats.def}</span></div>
+        <div class="pm-coll-stat"><span class="pm-coll-stat-k">VIT</span><span class="pm-coll-stat-v">${stats.vit}</span></div>
+      </div>
+      <div class="pm-coll-moves">
+        ${movesHtml}
+      </div>
+    `;
+    grid.appendChild(card);
+    setTimeout(() => drawPomMon(document.getElementById('pm-team-' + inst.uid), inst.pommonId), 10);
+  });
+}
+
+// ── Écran « Collection » : sprite + type + lore, focus encyclopédique ──
 function pmRenderCollection(page, player) {
   page.innerHTML = `
     <div class="pm-wrap">
       <div class="pm-header">
         <div>
           <div class="pm-title">📚 Collection</div>
-          <div class="pm-sub">${player.collection.length} PomMons capturés · Clique sur un PomMon pour l'ajouter/retirer de l'équipe (${player.team.length}/3)</div>
+          <div class="pm-sub">${player.collection.length}/25 PomMons capturés</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
@@ -1819,15 +1912,14 @@ function pmRenderCollection(page, player) {
     const inTeam = player.team.includes(inst.uid);
     const card = document.createElement('div');
     card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '');
+    // Dans la collection, clic = toggle équipe aussi (pour rester pratique)
     card.onclick = () => pmToggleTeam(inst.uid);
-    const xpMax = inst.level < 10 ? PM_XP_TABLE[inst.level] : 0;
-    const xpPct = inst.level < 10 ? (inst.xp / xpMax) * 100 : 100;
     card.innerHTML = `
       <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-${inst.uid}"></canvas>
-      <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}</div>
-      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]}</span>
-      <div class="pm-collection-level">Niv ${inst.level}${inst.level < 10 ? ` · ${inst.xp}/${xpMax}` : ' ★'}</div>
-      ${inst.level < 10 ? `<div class="pm-xp-bar" style="width:100%;"><div class="pm-xp-fill" style="width:${xpPct}%"></div></div>` : ''}
+      <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}${base.legendary ? ' ✦' : ''}</div>
+      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]} ${PM_TYPE_LABEL[base.type]}</span>
+      <div class="pm-collection-level">Niv ${inst.level}${base.legendary ? ' · Légendaire' : ''}</div>
+      ${base.lore ? `<div class="pm-coll-lore">${base.lore}</div>` : ''}
     `;
     grid.appendChild(card);
     setTimeout(() => drawPomMon(document.getElementById('pm-coll-' + inst.uid), inst.pommonId), 10);
@@ -2227,6 +2319,7 @@ function pmRenderMoveChoices(fighter) {
     const ppLeft = m.currentPp;
     const ppClass = ppLeft === 0 ? 'empty' : ppLeft <= 1 ? 'low' : '';
     const disabled = ppLeft === 0 ? 'disabled' : '';
+    const desc = m.desc || '';
     html += `
       <button class="pm-move-btn" ${disabled} onclick="pmDoBattleTurn(${i})">
         <div class="pm-move-name" style="color:${PM_TYPE_COLOR[m.type] || 'inherit'};">${PM_TYPE_EMOJI[m.type] || '◌'} ${m.name}</div>
@@ -2234,6 +2327,7 @@ function pmRenderMoveChoices(fighter) {
           ${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}%
           <span class="pm-move-pp ${ppClass}">· ${ppLeft}/${m.pp} PP</span>
         </div>
+        ${desc ? `<div class="pm-move-desc">${desc}</div>` : ''}
       </button>
     `;
   });
@@ -2275,7 +2369,15 @@ function pmDoBattleTurn(moveIdx) {
 
 function pmEventToText(ev) {
   switch (ev.type) {
-    case 'use_move': return `<span style="color:var(--primary);">${ev.attacker}</span> utilise <strong>${ev.move}</strong> !`;
+    case 'use_move': {
+      const typeColor = PM_TYPE_COLOR[ev.moveType] || 'var(--muted)';
+      const typeEmoji = PM_TYPE_EMOJI[ev.moveType] || '';
+      const typeLabel = PM_TYPE_LABEL[ev.moveType] || '';
+      const badge = ev.moveType && ev.moveType !== 'neutre'
+        ? ` <span style="background:${typeColor}30; color:${typeColor}; border:1px solid ${typeColor}60; border-radius:6px; padding:1px 7px; font-size:.72rem; font-weight:700; margin-left:4px; vertical-align:middle;">${typeEmoji} ${typeLabel}</span>`
+        : '';
+      return `<span style="color:var(--primary);">${ev.attacker}</span> utilise <strong>${ev.move}</strong>${badge} !`;
+    }
     case 'miss': return `<span class="pm-log-line miss">${ev.attacker} rate son attaque !</span>`;
     case 'damage': return `${ev.target} perd ${ev.amount} PV.`;
     case 'effectiveness': return `<span class="pm-log-line eff">${ev.label}</span>`;
