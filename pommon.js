@@ -860,25 +860,122 @@ function drawPomMon(canvas, pommonId) {
    5. STOCKAGE (localStorage temporaire)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function pmGet(key) {
+// ────────────────────────────────────────────────────────────────────────
+// Stockage Firebase avec cache mémoire (pattern identique au clicker)
+// ────────────────────────────────────────────────────────────────────────
+// _pmCache      : copie en mémoire du player state (synchrone)
+// _pmLoaded     : true quand Firebase a répondu (évite d'écraser avec null)
+// _pmSaveTimer  : debounce des écritures Firebase (évite le spam)
+// ────────────────────────────────────────────────────────────────────────
+
+let _pmCache = null;
+let _pmLoaded = false;
+let _pmLoadedForCode = null;  // code de l'utilisateur pour lequel les données sont chargées
+let _pmSaveTimer = null;
+
+function pmPath() { return 'pommon/' + state.code; }
+
+// Charge depuis Firebase (appelé une fois au démarrage / navigation)
+async function pmLoadFromFirebase() {
+  if (typeof dbGet !== 'function' || !state || !state.code) {
+    _pmCache = null;
+    _pmLoaded = true;
+    return null;
+  }
   try {
-    const raw = localStorage.getItem('pommon_' + (state?.code || 'anon') + '_' + key);
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
+    const data = await dbGet(pmPath());
+    if (data) {
+      // Firebase convertit arrays -> objets indexés, on normalise
+      if (data.collection && !Array.isArray(data.collection)) {
+        data.collection = Object.values(data.collection);
+      }
+      if (data.team && !Array.isArray(data.team)) {
+        data.team = Object.values(data.team);
+      }
+      if (data.badges && !Array.isArray(data.badges)) {
+        data.badges = Object.values(data.badges);
+      }
+      _pmCache = data;
+    } else {
+      _pmCache = null;
+    }
+  } catch(e) {
+    console.error('[pommon] load error', e);
+    _pmCache = null;
+  }
+  _pmLoaded = true;
+  return _pmCache;
+}
+
+// Sauvegarde avec debounce (toutes les 400ms max — évite le spam sur actions rapides)
+function pmScheduleSave() {
+  if (!_pmLoaded || !_pmCache) return;
+  if (_pmSaveTimer) clearTimeout(_pmSaveTimer);
+  _pmSaveTimer = setTimeout(async () => {
+    _pmSaveTimer = null;
+    if (typeof dbSet !== 'function' || !state || !state.code) return;
+    try {
+      await dbSet(pmPath(), _pmCache);
+    } catch(e) {
+      console.error('[pommon] save error', e);
+    }
+  }, 400);
+}
+
+// Sauvegarde immédiate (utilisée aux fins de combat pour garantir la persistance)
+async function pmSaveNow() {
+  if (!_pmLoaded || !_pmCache) return;
+  if (_pmSaveTimer) { clearTimeout(_pmSaveTimer); _pmSaveTimer = null; }
+  if (typeof dbSet !== 'function' || !state || !state.code) return;
+  try {
+    await dbSet(pmPath(), _pmCache);
+  } catch(e) {
+    console.error('[pommon] saveNow error', e);
+  }
+}
+
+// API synchrone (le reste du code PomMon n'a pas à changer)
+function pmGet(key) {
+  if (!_pmCache) return null;
+  if (key === 'player') return _pmCache;
+  return _pmCache[key] !== undefined ? _pmCache[key] : null;
 }
 
 function pmSet(key, value) {
-  try {
-    localStorage.setItem('pommon_' + (state?.code || 'anon') + '_' + key, JSON.stringify(value));
-  } catch(e) { console.error('pmSet error', e); }
+  if (!_pmCache) _pmCache = {};
+  if (key === 'player') {
+    _pmCache = value;
+  } else {
+    _pmCache[key] = value;
+  }
+  pmScheduleSave();
 }
 
 function pmGetPlayer() {
-  return pmGet('player') || null;
+  return _pmCache || null;
 }
 
 function pmSavePlayer(data) {
-  pmSet('player', data);
+  _pmCache = data;
+  pmScheduleSave();
+}
+
+// Leaderboard Ligue (même pattern que snake_lb / g2048_lb)
+async function pmSaveLeagueLb(score) {
+  if (score <= 0 || typeof dbGet !== 'function' || typeof dbSet !== 'function') return;
+  if (!state || !state.code) return;
+  const path = 'pommon_league_lb/' + state.code;
+  try {
+    const existing = await dbGet(path);
+    if (!existing || score > existing.score) {
+      await dbSet(path, {
+        name: state.name,
+        code: state.code,
+        score: score,
+        date: new Date().toISOString()
+      });
+    }
+  } catch(e) { console.error('[pommon] saveLeagueLb error', e); }
 }
 
 function pmInitPlayer(starterId) {
@@ -1492,8 +1589,8 @@ function pmInjectUI() {
   }
 }
 
-// Navigation vers PomMon
-function pmGoTo(view) {
+// Navigation vers PomMon (async pour pouvoir charger depuis Firebase)
+async function pmGoTo(view) {
   // Cacher toutes les pages
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   // Activer page pommon
@@ -1511,8 +1608,24 @@ function pmGoTo(view) {
   if (typeof _mobileSidenavOpen !== 'undefined' && _mobileSidenavOpen && typeof closeMobileSidenav === 'function') closeMobileSidenav();
 
   _pmView = view;
-  pmRenderPage();
   window.scrollTo(0, 0);
+
+  // Détection de changement de compte (logout/login d'un autre user)
+  if (_pmLoadedForCode && state && state.code && _pmLoadedForCode !== state.code) {
+    _pmCache = null;
+    _pmLoaded = false;
+    _pmLoadedForCode = null;
+  }
+
+  // Charger depuis Firebase au premier accès
+  if (!_pmLoaded) {
+    // Afficher un loader le temps de la requête
+    if (page) page.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Chargement de tes PomMons…</div>';
+    await pmLoadFromFirebase();
+    if (state && state.code) _pmLoadedForCode = state.code;
+  }
+
+  pmRenderPage();
 }
 
 // Rendu principal selon l'état
@@ -1614,7 +1727,7 @@ function pmRenderHome(page, player) {
             🌿 Combat sauvage (${PM_DAILY_WILD - player.dailyWildCount}/${PM_DAILY_WILD} restants)
           </button>
           <button class="btn-primary" onclick="pmGoTo('gym')" style="background:var(--yellow); color:#000;">
-            🏆 Arènes (${badgeCount}/7 badges) · ${player.dailyGymWins >= PM_DAILY_GYM_WINS ? 'Victoire déjà obtenue aujourd\\'hui' : 'Disponible aujourd\\'hui'}
+            🏆 Arènes (${badgeCount}/7 badges) · ${player.dailyGymWins >= PM_DAILY_GYM_WINS ? "Victoire déjà obtenue aujourd'hui" : "Disponible aujourd'hui"}
           </button>
           <button class="btn-primary" onclick="pmGoTo('league')" ${!canLeague || player.dailyLeagueCount >= PM_DAILY_LEAGUE ? 'disabled' : ''} style="background:${canLeague ? 'var(--primary)' : 'var(--muted)'};">
             ⭐ Ligue PomMon ${canLeague ? `(${PM_DAILY_LEAGUE - player.dailyLeagueCount}/${PM_DAILY_LEAGUE} runs)` : '(verrouillé — 7 badges requis)'}
@@ -1927,8 +2040,47 @@ function pmRenderLeague(page, player) {
         <p style="margin-bottom:14px; color:var(--muted);">Meilleur score : <strong style="color:var(--primary);">${player.leagueBestScore} victoires</strong></p>
         <button class="btn-primary" onclick="pmStartLeagueRun()">Commencer une run</button>
       </div>
+      <div class="pm-card">
+        <h3 style="font-size:.75rem; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:12px;">🏆 Classement général</h3>
+        <div id="pm-league-lb-list"><div style="color:var(--muted); font-size:.85rem;">Chargement…</div></div>
+      </div>
     </div>
   `;
+  // Charger et afficher le classement en async
+  pmRenderLeagueLb();
+}
+
+// Rendu du leaderboard Ligue (async, chargé après affichage principal)
+async function pmRenderLeagueLb() {
+  const list = document.getElementById('pm-league-lb-list');
+  if (!list) return;
+  if (typeof dbGet !== 'function') { list.innerHTML = '<div style="color:var(--muted); font-size:.85rem;">Classement non disponible.</div>'; return; }
+  try {
+    const snap = await dbGet('pommon_league_lb');
+    if (!snap) { list.innerHTML = '<div style="color:var(--muted); font-size:.85rem;">Aucun score enregistré — sois le premier !</div>'; return; }
+    const entries = Object.values(snap).sort((a, b) => b.score - a.score).slice(0, 10);
+    if (entries.length === 0) { list.innerHTML = '<div style="color:var(--muted); font-size:.85rem;">Aucun score enregistré.</div>'; return; }
+    const medals = ['🥇', '🥈', '🥉'];
+    list.innerHTML = '';
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const rank = i + 1;
+      const isMe = state && e.code === state.code;
+      const medal = rank <= 3 ? medals[i] : rank;
+      const safeName = typeof escapeHTML === 'function' ? escapeHTML(e.name) : (e.name || '').replace(/</g,'&lt;');
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px; background:var(--surface2); border:1px solid ' + (isMe ? 'var(--primary)' : 'var(--border)') + '; border-radius:8px; margin-bottom:6px;';
+      row.innerHTML = `
+        <span style="font-weight:700; font-size:.95rem; min-width:30px;">${medal}</span>
+        <span style="flex:1; font-weight:600; font-size:.88rem; overflow:hidden; text-overflow:ellipsis;">${safeName}${isMe ? ' <span style="background:var(--primary); color:#fff; padding:1px 8px; border-radius:100px; font-size:.65rem; margin-left:4px;">Moi</span>' : ''}</span>
+        <span style="font-family:'Space Mono',monospace; font-weight:700; color:var(--primary); font-size:.9rem;">${e.score}</span>
+      `;
+      list.appendChild(row);
+    }
+  } catch (e) {
+    console.error('[pommon] renderLeagueLb error', e);
+    list.innerHTML = '<div style="color:var(--muted); font-size:.85rem;">Erreur de chargement.</div>';
+  }
 }
 
 function pmStartLeagueRun() {
@@ -2140,9 +2292,19 @@ function pmHandleBattleEnd() {
         bs.log.push(`⬆️ ${p.name} monte au niveau ${(bs.playerInstance || p.instance).level} !`);
       }
 
-      // Reward Pomels
+      // Reward Pomels (gain atomique via addBalanceTransaction)
       if (typeof addBalanceTransaction === 'function') {
-        addBalanceTransaction(state.code, PM_REWARD_LEAGUE_PER_WIN, { type:'pommon_league', desc:`Victoire Ligue PomMon (round ${bs.roundNum})` });
+        addBalanceTransaction(state.code, PM_REWARD_LEAGUE_PER_WIN, {
+          type: 'pommon_league',
+          desc: `Victoire Ligue PomMon (round ${bs.roundNum})`,
+          amount: PM_REWARD_LEAGUE_PER_WIN,
+          date: new Date().toISOString()
+        }).then(updated => {
+          if (updated && typeof migrateAccount === 'function') {
+            state = migrateAccount(updated);
+            if (typeof refreshUI === 'function') refreshUI();
+          }
+        });
       } else if (typeof state !== 'undefined' && state) {
         state.balance = (state.balance || 0) + PM_REWARD_LEAGUE_PER_WIN;
         if (typeof saveAccount === 'function') saveAccount(state);
@@ -2184,6 +2346,9 @@ function pmHandleBattleEnd() {
         player.leagueBestScore = bs.winsInRun;
       }
       pmSavePlayer(player);
+      // Leaderboard Ligue + flush Firebase
+      pmSaveLeagueLb(bs.winsInRun);
+      pmSaveNow();
     }
   } else if (bs.mode === 'wild') {
     if (o.ko) {
@@ -2207,11 +2372,13 @@ function pmHandleBattleEnd() {
       }
 
       bs.ended = true;
+      pmSaveNow();
     } else if (p.ko) {
       // Défaite sauvage (compte quand même la tentative)
       player.dailyWildCount++;
       pmSavePlayer(player);
       bs.ended = true;
+      pmSaveNow();
     }
   } else if (bs.mode === 'gym') {
     if (o.ko) {
@@ -2226,9 +2393,19 @@ function pmHandleBattleEnd() {
       }
       pmUpdateInstance(player, bs.playerInstance);
 
-      // Reward Pomels
+      // Reward Pomels (gain atomique via addBalanceTransaction)
       if (typeof addBalanceTransaction === 'function') {
-        addBalanceTransaction(state.code, PM_REWARD_GYM, { type:'pommon_gym', desc:`Arène ${PM_TYPE_LABEL[bs.gym.id]} battue` });
+        addBalanceTransaction(state.code, PM_REWARD_GYM, {
+          type: 'pommon_gym',
+          desc: `Arène ${PM_TYPE_LABEL[bs.gym.id]} battue`,
+          amount: PM_REWARD_GYM,
+          date: new Date().toISOString()
+        }).then(updated => {
+          if (updated && typeof migrateAccount === 'function') {
+            state = migrateAccount(updated);
+            if (typeof refreshUI === 'function') refreshUI();
+          }
+        });
       } else if (typeof state !== 'undefined' && state) {
         state.balance = (state.balance || 0) + PM_REWARD_GYM;
         if (typeof saveAccount === 'function') saveAccount(state);
@@ -2237,6 +2414,7 @@ function pmHandleBattleEnd() {
       bs.log.push(`<strong>🏆 Arène ${PM_TYPE_LABEL[bs.gym.id]} vaincue ! Badge obtenu + ${PM_REWARD_GYM} 🪙 Pomels !</strong>`);
       pmSavePlayer(player);
       bs.ended = true;
+      pmSaveNow();
     } else if (p.ko) {
       // Défaite arène (pas de pénalité, tentative illimitée)
       bs.ended = true;
