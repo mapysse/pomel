@@ -39,7 +39,10 @@ const PM_TYPE_LABEL = {
   air: 'Air', ombre: 'Ombre', lumiere: 'Lumière'
 };
 
-// Table faiblesses/résistances : PM_WEAK[attackerType] = { type: multiplicateur }
+// Table faiblesses/résistances : PM_WEAK[defenderType] = { moveType: multiplicateur }
+// Lecture : « Le défenseur (clé extérieure) subit X multiplicateur quand il est attaqué par moveType (clé intérieure) »
+// Ex : PM_WEAK['feu']['eau'] = 1.5  → un Feu attaqué par une attaque Eau prend 1.5× les dégâts
+// Ex : PM_WEAK['plante']['eau'] = 0.5 → une Plante attaquée par une attaque Eau prend 0.5× les dégâts
 const PM_WEAK = {
   plante:     { eau: 0.5, electrique: 0.5, feu: 1.5, air: 1.5 },
   feu:        { plante: 0.5, lumiere: 0.5, eau: 1.5, ombre: 1.5 },
@@ -1101,7 +1104,8 @@ function pmApplyStages(fighter) {
 function pmCalcDamage(attacker, defender, move) {
   if (move.power === 0) return 0;
   const stab = (move.type === attacker.type) ? PM_STAB : 1.0;
-  const typeMod = (PM_WEAK[move.type] && PM_WEAK[move.type][defender.type]) || 1.0;
+  // Lecture : PM_WEAK[défenseur][typeAttaque] = multiplicateur subi par le défenseur
+  const typeMod = (PM_WEAK[defender.type] && PM_WEAK[defender.type][move.type]) || 1.0;
   const baseDmg = (attacker.atk * move.power / defender.def);
   const dmg = Math.floor(baseDmg * stab * typeMod);
   return Math.max(1, dmg);
@@ -1109,7 +1113,8 @@ function pmCalcDamage(attacker, defender, move) {
 
 // Effectiveness label
 function pmEffectivenessLabel(moveType, defenderType) {
-  const mod = (PM_WEAK[moveType] && PM_WEAK[moveType][defenderType]) || 1.0;
+  // Lecture : PM_WEAK[défenseur][typeAttaque]
+  const mod = (PM_WEAK[defenderType] && PM_WEAK[defenderType][moveType]) || 1.0;
   if (mod >= 1.5) return 'C\'est super efficace !';
   if (mod <= 0.5) return 'C\'est peu efficace…';
   return '';
