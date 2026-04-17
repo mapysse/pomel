@@ -44,13 +44,13 @@ const PM_TYPE_LABEL = {
 // Ex : PM_WEAK['feu']['eau'] = 1.5  → un Feu attaqué par une attaque Eau prend 1.5× les dégâts
 // Ex : PM_WEAK['plante']['eau'] = 0.5 → une Plante attaquée par une attaque Eau prend 0.5× les dégâts
 const PM_WEAK = {
-  plante:     { eau: 0.5, electrique: 0.5, feu: 1.5, air: 1.5 },
-  feu:        { plante: 0.5, lumiere: 0.5, eau: 1.5, ombre: 1.5 },
-  eau:        { feu: 0.5, air: 0.5, electrique: 1.5, plante: 1.5 },
-  electrique: { eau: 0.5, lumiere: 0.5, ombre: 1.5, plante: 1.5 },
-  air:        { plante: 0.5, ombre: 0.5, electrique: 1.5, lumiere: 1.5 },
-  ombre:      { feu: 0.5, electrique: 0.5, lumiere: 1.5, air: 1.5 },
-  lumiere:    { air: 0.5, feu: 0.5, ombre: 1.5, eau: 1.5 }
+  plante:     { eau: 0.6, electrique: 0.6, feu: 1.4, air: 1.4 },
+  feu:        { plante: 0.6, lumiere: 0.6, eau: 1.4, ombre: 1.4 },
+  eau:        { feu: 0.6, air: 0.6, electrique: 1.4, plante: 1.4 },
+  electrique: { eau: 0.6, lumiere: 0.6, ombre: 1.4, plante: 1.4 },
+  air:        { plante: 0.6, ombre: 0.6, electrique: 1.4, lumiere: 1.4 },
+  ombre:      { feu: 0.6, electrique: 0.6, lumiere: 1.4, air: 1.4 },
+  lumiere:    { air: 0.6, feu: 0.6, ombre: 1.4, eau: 1.4 }
 };
 
 // Rareté d'apparition en combat sauvage (pourcentage)
@@ -72,7 +72,7 @@ const PM_XP_GAIN = {
 };
 
 // Modificateurs
-const PM_STAB = 1.3;
+const PM_STAB = 1.25;
 const PM_WILD_NERF = 0.65;      // sauvages à 65% de leurs stats
 const PM_GYM_BOOST = 1.20;      // champions d'arène à 120%
 const PM_CAPTURE_RATE = 0.15;   // 15% de chance de capture
@@ -102,68 +102,68 @@ const PM_REWARD_LEAGUE_PER_WIN = 50;
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const PM_DEX = {
-  // 🌿 PLANTE
-  pomalis:    { id:'pomalis',    name:'Pomalis',    type:'plante',     hp:70, atk:50, def:55, vit:40, starter:true,
+  // 🌿 PLANTE — tanky, lent (identité : +HP +DEF, -VIT)
+  pomalis:    { id:'pomalis',    name:'Pomalis',    type:'plante',     hp:75, atk:50, def:55, vit:40, starter:true,
                 lore:'Petit quadrupède à la carapace végétale. Son bulbe dorsal absorbe la lumière du jour et libère un parfum apaisant.' },
-  thornet:    { id:'thornet',    name:'Thornet',    type:'plante',     hp:75, atk:55, def:60, vit:35,
+  thornet:    { id:'thornet',    name:'Thornet',    type:'plante',     hp:80, atk:55, def:60, vit:45,
                 lore:'Scarabée aux élytres couverts d\'épines. Il s\'enfouit dans la mousse et tend des embuscades aux imprudents.' },
-  sylvagor:   { id:'sylvagor',   name:'Sylvagor',   type:'plante',     hp:90, atk:50, def:65, vit:30,
+  sylvagor:   { id:'sylvagor',   name:'Sylvagor',   type:'plante',     hp:95, atk:50, def:70, vit:45,
                 lore:'Golem sylvestre qui s\'éveille à chaque printemps. Ses racines plongent si loin qu\'on dit qu\'il connaît les secrets du sol.' },
-  sakuraze:   { id:'sakuraze',   name:'Sakuraze',   type:'plante',     hp:85, atk:55, def:60, vit:40,
+  sakuraze:   { id:'sakuraze',   name:'Sakuraze',   type:'plante',     hp:85, atk:55, def:55, vit:45,
                 lore:'Esprit des cerisiers en fleurs. Sa danse fait tomber les pétales roses qui endorment ses adversaires.' },
 
-  // 🔥 FEU
-  flameche:   { id:'flameche',   name:'Flamèche',   type:'feu',        hp:40, atk:55, def:50, vit:70, starter:true,
+  // 🔥 FEU — rapide, offensif (identité : +VIT +ATK, -HP)
+  flameche:   { id:'flameche',   name:'Flamèche',   type:'feu',        hp:55, atk:55, def:45, vit:65, starter:true,
                 lore:'Petit lézard à la queue enflammée. Sa flamme ne s\'éteint jamais, même sous la pluie — un mystère pour les érudits.' },
-  viperod:    { id:'viperod',    name:'Vipérod',    type:'feu',        hp:35, atk:60, def:55, vit:80,
+  viperod:    { id:'viperod',    name:'Vipérod',    type:'feu',        hp:50, atk:60, def:45, vit:85,
                 lore:'Serpent de braise qui chasse la nuit. Son venin brûle la chair avant même que la morsure ne soit visible.' },
-  magmaturne: { id:'magmaturne', name:'Magmaturne', type:'feu',        hp:45, atk:65, def:55, vit:75,
+  magmaturne: { id:'magmaturne', name:'Magmaturne', type:'feu',        hp:65, atk:65, def:55, vit:75,
                 lore:'Tortue volcanique dont la carapace abrite un cœur de lave. Elle hiberne dans les cratères actifs.' },
-  tauralys:   { id:'tauralys',   name:'Tauralys',   type:'feu',        hp:40, atk:70, def:60, vit:75,
+  tauralys:   { id:'tauralys',   name:'Tauralys',   type:'feu',        hp:55, atk:70, def:50, vit:65,
                 lore:'Taureau des plaines brûlées. Ses cornes rougeoyantes peuvent fendre la pierre quand il charge.' },
 
-  // 💧 EAU
-  goutapom:   { id:'goutapom',   name:'Goutapom',   type:'eau',        hp:55, atk:50, def:55, vit:55, starter:true,
+  // 💧 EAU — équilibré (identité : aucune stat extrême)
+  goutapom:   { id:'goutapom',   name:'Goutapom',   type:'eau',        hp:60, atk:50, def:55, vit:55, starter:true,
                 lore:'Têtard joyeux des torrents limpides. Il saute hors de l\'eau pour communiquer par bulles chantantes.' },
-  carapulse:  { id:'carapulse',  name:'Carapulse',  type:'eau',        hp:60, atk:55, def:55, vit:65,
+  carapulse:  { id:'carapulse',  name:'Carapulse',  type:'eau',        hp:65, atk:55, def:60, vit:60,
                 lore:'Crabe aux pinces capables de projeter des jets d\'eau à haute pression. Il arpente les récifs à la recherche de coquillages.' },
-  abyssale:   { id:'abyssale',   name:'Abyssale',   type:'eau',        hp:65, atk:60, def:60, vit:65,
+  abyssale:   { id:'abyssale',   name:'Abyssale',   type:'eau',        hp:70, atk:65, def:65, vit:60,
                 lore:'Méduse des grandes profondeurs. Ses filaments bioluminescents hypnotisent ses proies avant la décharge paralysante.' },
   onduline:   { id:'onduline',   name:'Onduline',   type:'eau',        hp:60, atk:60, def:60, vit:60,
                 lore:'Hippocampe des courants chauds. Il se déplace toujours à contre-courant, porté par des remous invisibles.' },
 
-  // ⚡ ÉLECTRIQUE
-  volture:    { id:'volture',    name:'Volture',    type:'electrique', hp:50, atk:65, def:30, vit:70,
+  // ⚡ ÉLECTRIQUE — glass cannon (identité : +ATK +VIT, -DEF)
+  volture:    { id:'volture',    name:'Volture',    type:'electrique', hp:55, atk:60, def:45, vit:80,
                 lore:'Écureuil électrique qui saute de branche en branche. Ses joues stockent assez d\'énergie pour allumer une maison.' },
-  fulguron:   { id:'fulguron',   name:'Fulguron',   type:'electrique', hp:45, atk:75, def:25, vit:90,
+  fulguron:   { id:'fulguron',   name:'Fulguron',   type:'electrique', hp:50, atk:70, def:40, vit:80,
                 lore:'Sphère d\'énergie pure flottant dans l\'atmosphère. On la confond souvent avec la foudre en boule.' },
-  rhinovolt:  { id:'rhinovolt',  name:'Rhinovolt',  type:'electrique', hp:55, atk:70, def:35, vit:80,
+  rhinovolt:  { id:'rhinovolt',  name:'Rhinovolt',  type:'electrique', hp:60, atk:65, def:45, vit:70,
                 lore:'Rhinocéros à la corne conductrice. Sa charge génère des arcs électriques qui paralysent sur plusieurs mètres.' },
-  raispore:   { id:'raispore',   name:'Raispore',   type:'electrique', hp:50, atk:80, def:30, vit:85,
+  raispore:   { id:'raispore',   name:'Raispore',   type:'electrique', hp:55, atk:75, def:45, vit:85,
                 lore:'Hybride champignon-arachnide. Ses spores électrisées s\'accrochent à l\'air humide pour former des décharges aléatoires.' },
 
-  // 🌀 AIR
-  zephibri:   { id:'zephibri',   name:'Zéphibri',   type:'air',        hp:30, atk:60, def:55, vit:80,
+  // 🌀 AIR — agile (identité : +VIT, -HP)
+  zephibri:   { id:'zephibri',   name:'Zéphibri',   type:'air',        hp:50, atk:55, def:50, vit:85,
                 lore:'Minuscule colibri aux ailes si rapides qu\'elles deviennent invisibles. Il défie les lois de la gravité.' },
-  cyclonin:   { id:'cyclonin',   name:'Cyclonin',   type:'air',        hp:35, atk:70, def:60, vit:80,
+  cyclonin:   { id:'cyclonin',   name:'Cyclonin',   type:'air',        hp:55, atk:65, def:55, vit:85,
                 lore:'Ninja des nuages, maître du vent tranchant. On raconte qu\'il peut traverser une tempête sans se mouiller.' },
-  stratocepe: { id:'stratocepe', name:'Stratocèpe', type:'air',        hp:25, atk:65, def:55, vit:90,
+  stratocepe: { id:'stratocepe', name:'Stratocèpe', type:'air',        hp:45, atk:60, def:50, vit:85,
                 lore:'Champignon nuageux qui flotte en haute altitude. Son chapeau se condense et libère de brèves averses.' },
 
-  // 🌑 OMBRE
-  spectrelis: { id:'spectrelis', name:'Spectrelis', type:'ombre',      hp:70, atk:45, def:80, vit:60,
+  // 🌑 OMBRE — défensif (identité : +HP +DEF, -ATK)
+  spectrelis: { id:'spectrelis', name:'Spectrelis', type:'ombre',      hp:75, atk:45, def:70, vit:50,
                 lore:'Graine fantôme hantée par l\'âme d\'un vieux jardin oublié. Elle murmure des berceuses aux plantes mourantes.' },
-  putrefel:   { id:'putrefel',   name:'Putréfel',   type:'ombre',      hp:80, atk:40, def:90, vit:55,
+  putrefel:   { id:'putrefel',   name:'Putréfel',   type:'ombre',      hp:85, atk:45, def:75, vit:55,
                 lore:'Pomme zombie maudite. Plus on la coupe, plus elle repousse — et plus elle sent mauvais.' },
-  nihilium:   { id:'nihilium',   name:'Nihilium',   type:'ombre',      hp:85, atk:50, def:95, vit:60, legendary:true,
+  nihilium:   { id:'nihilium',   name:'Nihilium',   type:'ombre',      hp:90, atk:55, def:85, vit:60, legendary:true,
                 lore:'Sphère de vide absolu, apparition rarissime. Sa simple présence absorbe la lumière des étoiles.' },
 
-  // ✨ LUMIÈRE
-  papiluxe:   { id:'papiluxe',   name:'Papiluxe',   type:'lumiere',    hp:65, atk:80, def:45, vit:65,
+  // ✨ LUMIÈRE — offensif (identité : +ATK, -DEF)
+  papiluxe:   { id:'papiluxe',   name:'Papiluxe',   type:'lumiere',    hp:60, atk:70, def:45, vit:65,
                 lore:'Papillon dont les ailes réfléchissent la lumière du soleil en mille reflets dorés. Il guide les voyageurs égarés.' },
-  solarion:   { id:'solarion',   name:'Solarion',   type:'lumiere',    hp:70, atk:85, def:40, vit:70,
+  solarion:   { id:'solarion',   name:'Solarion',   type:'lumiere',    hp:65, atk:75, def:50, vit:70,
                 lore:'Lion-soleil, gardien des aubes. Sa crinière flamboyante brûle sans consumer et illumine les vallées au lever du jour.' },
-  astraflore: { id:'astraflore', name:'Astraflore', type:'lumiere',    hp:75, atk:95, def:50, vit:75, legendary:true,
+  astraflore: { id:'astraflore', name:'Astraflore', type:'lumiere',    hp:70, atk:85, def:55, vit:80, legendary:true,
                 lore:'Déesse florale des cieux étoilés. Sa fleur frontale contient, dit-on, un fragment de constellation vivante.' }
 };
 
@@ -1147,7 +1147,7 @@ function pmCalcDamage(attacker, defender, move) {
   const stab = (move.type === attacker.type) ? PM_STAB : 1.0;
   // Lecture : PM_WEAK[défenseur][typeAttaque] = multiplicateur subi par le défenseur
   const typeMod = (PM_WEAK[defender.type] && PM_WEAK[defender.type][move.type]) || 1.0;
-  const baseDmg = (attacker.atk * move.power / defender.def);
+  const baseDmg = (attacker.atk * move.power / defender.def) / 3;
   const dmg = Math.floor(baseDmg * stab * typeMod);
   return Math.max(1, dmg);
 }
@@ -1156,8 +1156,8 @@ function pmCalcDamage(attacker, defender, move) {
 function pmEffectivenessLabel(moveType, defenderType) {
   // Lecture : PM_WEAK[défenseur][typeAttaque]
   const mod = (PM_WEAK[defenderType] && PM_WEAK[defenderType][moveType]) || 1.0;
-  if (mod >= 1.5) return 'C\'est super efficace !';
-  if (mod <= 0.5) return 'C\'est peu efficace…';
+  if (mod >= 1.3) return 'C\'est super efficace !';
+  if (mod <= 0.7) return 'C\'est peu efficace…';
   return '';
 }
 
