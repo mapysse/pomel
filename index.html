@@ -3511,8 +3511,31 @@ async function dbGetAll(path) {
 
 // ── ACCOUNT HELPERS ──────────────────────────────
 async function getAccount(code) { return dbGet('accounts/' + code); }
-async function getAllAccounts() { return dbGetAll('accounts'); }
-async function deleteAccountFromDB(code) { await dbDelete('accounts/' + code); }
+
+// Cache getAllAccounts — évite de re-télécharger 170+ Ko à chaque appel
+// TTL de 60 secondes : après ce délai, le prochain appel refait une vraie lecture
+let _allAccountsCache = null;
+let _allAccountsCacheTime = 0;
+const _ALL_ACCOUNTS_TTL = 60000; // 60 secondes
+
+async function getAllAccounts() {
+  const now = Date.now();
+  if (_allAccountsCache && (now - _allAccountsCacheTime) < _ALL_ACCOUNTS_TTL) {
+    return _allAccountsCache;
+  }
+  const result = await dbGetAll('accounts');
+  _allAccountsCache = result;
+  _allAccountsCacheTime = now;
+  return result;
+}
+
+// Invalider le cache manuellement (après une écriture qui modifie les comptes)
+function invalidateAccountsCache() {
+  _allAccountsCache = null;
+  _allAccountsCacheTime = 0;
+}
+
+async function deleteAccountFromDB(code) { await dbDelete('accounts/' + code); invalidateAccountsCache(); }
 
 // Transaction atomique pour ajouter du solde + historique sans écraser d'autres écritures en cours
 // Retourne le compte mis à jour, ou null en cas d'échec définitif
@@ -3550,6 +3573,7 @@ async function addBalanceTransaction(code, amount, historyEntry) {
 
       // Transaction committed = résultat fiable
       if (result && result.committed) {
+        invalidateAccountsCache();
         // Lire la valeur confirmée par Firebase
         const snap = result.snapshot;
         if (snap && snap.exists()) return snap.val();
@@ -9124,6 +9148,7 @@ const MAX_SINGLE_GAIN = 500_000;
 // Utilise une transaction pour éviter d'écraser un solde modifié concurrentiellement
 async function saveAccount(acc) {
   if (!acc || typeof acc !== 'object' || !acc.code) return;
+  invalidateAccountsCache(); // Le cache getAllAccounts est périmé après un save
 
   // Validation locale avant écriture
   if (typeof acc.balance === 'number') {
