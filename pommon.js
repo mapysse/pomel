@@ -1806,88 +1806,96 @@ function pmChooseStarter(id) {
 
 // ── Écran d'accueil PokePom ──
 // ═══════════════════════════════════════════════════════════════════════════
-// MAP WORLD — Exploration avec zones, bâtiments, rencontres
+// MAP WORLD — Style Pokémon Rubis/Saphir GBA
 // ═══════════════════════════════════════════════════════════════════════════
 
 const PM_MAP_W = 800;
 const PM_MAP_H = 600;
-const PM_TILE = 32;
-const PM_MAP_COLS = Math.floor(PM_MAP_W / PM_TILE);
-const PM_MAP_ROWS = Math.floor(PM_MAP_H / PM_TILE);
-const PM_ENCOUNTER_CHANCE = 0.12; // 12% par pas dans les herbes
-const PM_STEP_COOLDOWN = 160; // ms entre chaque pas
+const PM_TILE = 16;
+const PM_ENCOUNTER_CHANCE = 0.12;
+const PM_STEP_COOLDOWN = 130;
 
-// Zones de la map
+// Personnages disponibles
+const PM_AVATARS = [
+  { id: 'red',    label: 'Rouge',  body: '#c03c2c', hair: '#6a1a1a', skin: '#f5d0a0' },
+  { id: 'blue',   label: 'Bleu',   body: '#2a5aaa', hair: '#1a2a5a', skin: '#f5d0a0' },
+  { id: 'green',  label: 'Vert',   body: '#2a8a3a', hair: '#1a4a1a', skin: '#e8c890' },
+  { id: 'purple', label: 'Violet', body: '#7a3aaa', hair: '#3a1a5a', skin: '#f0d0b0' },
+  { id: 'gold',   label: 'Doré',   body: '#c0962c', hair: '#5a4010', skin: '#f5d8a8' },
+];
+
 const PM_ZONES = {
-  elementaire: { label: 'Prairie Élémentaire', color: '#2d5a1e', grassColor: '#3a7a28', types: ['plante','feu','eau','electrique'], legendRate: 0 },
-  montagne:    { label: 'Mont des Vents',      color: '#5a5a6e', grassColor: '#6a7a5a', types: ['air'],                             legendRate: 0.05 },
-  lumiere:     { label: 'Plaine Lumineuse',     color: '#8a7a30', grassColor: '#a89a40', types: ['lumiere'],                         legendRate: 0.05 },
-  grotte:      { label: 'Grotte du Crépuscule', color: '#2a1a2e', grassColor: '#3a2a40', types: ['ombre'],                          legendRate: 0.05 },
+  elementaire: { label: 'Prairie Élémentaire', grass1: '#48a848', grass2: '#58c058', ground: '#78c850', types: ['plante','feu','eau','electrique'], legendRate: 0 },
+  montagne:    { label: 'Mont des Vents',      grass1: '#688868', grass2: '#78a878', ground: '#90a880', types: ['air'], legendRate: 0.05 },
+  lumiere:     { label: 'Plaine Lumineuse',     grass1: '#a8a848', grass2: '#c0c058', ground: '#c8c078', types: ['lumiere'], legendRate: 0.05 },
+  grotte:      { label: 'Grotte du Crépuscule', grass1: '#585868', grass2: '#686880', ground: '#606068', types: ['ombre'], legendRate: 0.05 },
 };
 
-// Layout de la map (chaque cellule : 0=sol, 1=herbe, 2=mur, 3=arene, 4=ligue, 5=centre, 6=eau_deco)
-// On génère une map procédurale
+// Couleurs GBA
+const GBA = {
+  grass:     '#48a848', grassDark: '#389838', grassLight: '#58c058',
+  path:      '#c8b07a', pathDark: '#b89858', pathLight: '#d8c898',
+  water:     '#3890f8', waterDark: '#2870d0', waterLight: '#58a8f8',
+  tree:      '#206020', treeTrunk: '#885830', treeLight: '#30a030',
+  wall:      '#b0a090', wallDark: '#908070', wallLight: '#c8b8a8',
+  roof:      '#c83030', roofGym: '#c83030', roofLigue: '#6838a8', roofCentre: '#3878c8',
+  flower1:   '#f06060', flower2: '#f0a0a0', flower3: '#f0e060',
+};
+
 let _pmMapGrid = null;
 let _pmMapPlayer = null;
 let _pmMapLoop = null;
 let _pmMapKeys = {};
 let _pmMapLastStep = 0;
-let _pmMapZoneGrid = null; // zone par cellule
+let _pmMapZoneGrid = null;
 let _pmMapCanvas = null;
 let _pmMapViewX = 0;
 let _pmMapViewY = 0;
+let _pmMapAvatar = 'red';
+let _pmPendingZoneEncounter = null;
 
-const PM_MAP_FULL_W = 50; // taille réelle en tiles
+const PM_MAP_FULL_W = 50;
 const PM_MAP_FULL_H = 38;
 
+// Cell types: 0=grass, 1=tallgrass, 2=wall, 3=arene, 4=ligue, 5=centre, 6=water, 7=path, 8=tree, 9=flower
+
 function pmBuildMap() {
-  const W = PM_MAP_FULL_W;
-  const H = PM_MAP_FULL_H;
-  const grid = [];
-  const zones = [];
-  for (let r = 0; r < H; r++) {
-    grid[r] = [];
-    zones[r] = [];
-    for (let c = 0; c < W; c++) {
-      grid[r][c] = 0; // sol par défaut
-      zones[r][c] = null;
-    }
+  const W = PM_MAP_FULL_W, H = PM_MAP_FULL_H;
+  const grid = [], zones = [];
+  for (let r = 0; r < H; r++) { grid[r] = []; zones[r] = []; for (let c = 0; c < W; c++) { grid[r][c] = 0; zones[r][c] = null; } }
+
+  // Murs extérieurs = arbres
+  for (let c = 0; c < W; c++) { grid[0][c] = 8; grid[H-1][c] = 8; }
+  for (let r = 0; r < H; r++) { grid[r][0] = 8; grid[r][W-1] = 8; }
+
+  const cx = Math.floor(W / 2), cy = Math.floor(H / 2);
+
+  // Chemins principaux (croix au centre)
+  for (let c = 3; c < W - 3; c++) { grid[cy][c] = 7; grid[cy+1][c] = 7; }
+  for (let r = 3; r < H - 3; r++) { grid[r][cx] = 7; grid[r][cx-1] = 7; }
+
+  // Arène (3×4) au centre
+  for (let dr = -2; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+    grid[cy-3+dr][cx+dc] = 2;
   }
+  grid[cy-1][cx] = 3; // porte
 
-  // Murs extérieurs
-  for (let c = 0; c < W; c++) { grid[0][c] = 2; grid[H-1][c] = 2; }
-  for (let r = 0; r < H; r++) { grid[r][0] = 2; grid[r][W-1] = 2; }
-
-  // ── Bâtiments au centre ──
-  const cx = Math.floor(W / 2);
-  const cy = Math.floor(H / 2);
-
-  // Arène (3×3) — centre
-  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-    grid[cy + dr][cx + dc] = 2;
+  // Centre PokePom (3×3) à gauche
+  for (let dr = 0; dr <= 2; dr++) for (let dc = 0; dc <= 2; dc++) {
+    grid[cy-3+dr][cx-6+dc] = 2;
   }
-  grid[cy][cx] = 3; // porte arène
-  grid[cy + 1][cx] = 0; // devant la porte
+  grid[cy-1][cx-5] = 5; // porte
 
-  // Centre PokePom (2×2) — en haut à gauche du centre
-  const cenX = cx - 5, cenY = cy - 1;
-  for (let dr = 0; dr <= 1; dr++) for (let dc = 0; dc <= 1; dc++) {
-    grid[cenY + dr][cenX + dc] = 2;
+  // Ligue (3×3) à droite
+  for (let dr = 0; dr <= 2; dr++) for (let dc = 0; dc <= 2; dc++) {
+    grid[cy-3+dr][cx+4+dc] = 2;
   }
-  grid[cenY + 1][cenX] = 5; // porte centre
+  grid[cy-1][cx+5] = 4; // porte
 
-  // Ligue (2×2) — en haut à droite du centre
-  const ligX = cx + 4, ligY = cy - 1;
-  for (let dr = 0; dr <= 1; dr++) for (let dc = 0; dc <= 1; dc++) {
-    grid[ligY + dr][ligX + dc] = 2;
-  }
-  grid[ligY + 1][ligX] = 4; // porte ligue
+  // Dégager autour des bâtiments (chemin)
+  for (let dc = -8; dc <= 8; dc++) { grid[cy-1][cx+dc] = grid[cy-1][cx+dc] || 7; if (grid[cy-1][cx+dc] === 0) grid[cy-1][cx+dc] = 7; }
 
-  // ── Chemin central (sol dégagé) ──
-  for (let c = cx - 7; c <= cx + 7; c++) { grid[cy][c] = grid[cy][c] || 0; grid[cy+1][c] = 0; grid[cy+2][c] = 0; }
-  for (let r = cy - 5; r <= cy + 5; r++) { grid[r][cx] = grid[r][cx] || 0; grid[r][cx-1] = grid[r][cx-1] || 0; }
-
-  // ── 4 Zones d'herbes hautes ──
+  // Zones d'herbes hautes
   const zoneDefs = [
     { id: 'elementaire', startR: 2,    startC: 2,    rows: 14, cols: 20 },
     { id: 'montagne',    startR: 2,    startC: W-18, rows: 14, cols: 16 },
@@ -1898,25 +1906,25 @@ function pmBuildMap() {
   for (const z of zoneDefs) {
     for (let r = z.startR; r < z.startR + z.rows && r < H - 1; r++) {
       for (let c = z.startC; c < z.startC + z.cols && c < W - 1; c++) {
-        if (grid[r][c] === 0) {
-          // Herbe ~60%, sol ~30%, eau déco ~10%
-          const rnd = Math.random();
-          if (rnd < 0.6) grid[r][c] = 1;
-          else if (rnd < 0.9) grid[r][c] = 0;
-          else grid[r][c] = 6;
-          zones[r][c] = z.id;
-        }
+        if (grid[r][c] !== 0) continue;
+        const rnd = Math.random();
+        if (rnd < 0.55) grid[r][c] = 1;       // herbe haute
+        else if (rnd < 0.80) grid[r][c] = 0;  // herbe courte
+        else if (rnd < 0.88) grid[r][c] = 6;  // eau
+        else if (rnd < 0.93) grid[r][c] = 9;  // fleur
+        else grid[r][c] = 8;                   // arbre
+        zones[r][c] = z.id;
       }
     }
   }
 
-  // Quelques rochers déco dans les zones
-  for (const z of zoneDefs) {
-    for (let i = 0; i < 5; i++) {
-      const r = z.startR + Math.floor(Math.random() * z.rows);
-      const c = z.startC + Math.floor(Math.random() * z.cols);
-      if (r > 0 && r < H-1 && c > 0 && c < W-1 && grid[r][c] <= 1) {
-        grid[r][c] = 2;
+  // Arbres bordure entre zones et chemin
+  for (let r = 1; r < H - 1; r++) {
+    for (let c = 1; c < W - 1; c++) {
+      if (grid[r][c] === 0 && !zones[r][c]) {
+        // Herbe normale hors zone
+        if (Math.random() < 0.04) grid[r][c] = 8;
+        else if (Math.random() < 0.06) grid[r][c] = 9;
       }
     }
   }
@@ -1934,12 +1942,7 @@ function pmGetZoneAt(r, c) {
 function pmGenerateZoneEncounter(zoneId) {
   const zone = PM_ZONES[zoneId];
   if (!zone) return pmGenerateWildEncounter();
-
-  // Choisir un type de la zone
-  const typeIdx = Math.floor(Math.random() * zone.types.length);
-  const type = zone.types[typeIdx];
-
-  // Liste des PokePoms de ce type
+  const type = zone.types[Math.floor(Math.random() * zone.types.length)];
   const candidates = PM_DEX_IDS.filter(id => PM_DEX[id].type === type);
   const legends = candidates.filter(id => PM_DEX[id].legendary);
   let chosen;
@@ -1949,7 +1952,6 @@ function pmGenerateZoneEncounter(zoneId) {
     const nonLegends = candidates.filter(id => !PM_DEX[id].legendary);
     chosen = nonLegends[Math.floor(Math.random() * nonLegends.length)] || candidates[0];
   }
-
   const player = pmGetPlayer();
   const team = pmGetTeam(player);
   const avgLvl = team.length > 0 ? Math.floor(team.reduce((s,p) => s+p.level, 0) / team.length) : 1;
@@ -1957,128 +1959,189 @@ function pmGenerateZoneEncounter(zoneId) {
   return pmCreatePokePomInstance(chosen, wildLvl);
 }
 
-// ── Rendu de la map ──
+// ── Rendu GBA ──
 function pmRenderMap() {
   const canvas = _pmMapCanvas;
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const T = PM_TILE;
-  const viewCols = Math.floor(canvas.width / T);
-  const viewRows = Math.floor(canvas.height / T);
+  const viewCols = Math.ceil(canvas.width / T) + 1;
+  const viewRows = Math.ceil(canvas.height / T) + 1;
 
-  // Centrer la vue sur le joueur
-  _pmMapViewX = Math.max(0, Math.min(PM_MAP_FULL_W - viewCols, _pmMapPlayer.c - Math.floor(viewCols / 2)));
-  _pmMapViewY = Math.max(0, Math.min(PM_MAP_FULL_H - viewRows, _pmMapPlayer.r - Math.floor(viewRows / 2)));
+  _pmMapViewX = Math.max(0, Math.min(PM_MAP_FULL_W - viewCols + 1, _pmMapPlayer.c - Math.floor(viewCols / 2)));
+  _pmMapViewY = Math.max(0, Math.min(PM_MAP_FULL_H - viewRows + 1, _pmMapPlayer.r - Math.floor(viewRows / 2)));
 
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
 
-  for (let vr = 0; vr < viewRows + 1; vr++) {
-    for (let vc = 0; vc < viewCols + 1; vc++) {
-      const mr = vr + _pmMapViewY;
-      const mc = vc + _pmMapViewX;
+  for (let vr = 0; vr < viewRows; vr++) {
+    for (let vc = 0; vc < viewCols; vc++) {
+      const mr = vr + _pmMapViewY, mc = vc + _pmMapViewX;
       if (mr < 0 || mr >= PM_MAP_FULL_H || mc < 0 || mc >= PM_MAP_FULL_W) continue;
       const cell = _pmMapGrid[mr][mc];
       const zone = _pmMapZoneGrid[mr][mc];
-      const px = vc * T;
-      const py = vr * T;
-
-      // Sol de base
+      const px = vc * T, py = vr * T;
+      const seed = (mr * 97 + mc * 31) % 17;
       const zDef = zone ? PM_ZONES[zone] : null;
-      if (cell === 0) {
-        ctx.fillStyle = zDef ? _pmDarken(zDef.color, 0.5) : '#2a2a1e';
+
+      // Base grass
+      ctx.fillStyle = zDef ? zDef.ground : GBA.grass;
+      ctx.fillRect(px, py, T, T);
+      // Grass texture
+      if (cell === 0 || cell === 1 || cell === 9) {
+        ctx.fillStyle = (seed % 3 === 0) ? (zDef ? zDef.grass2 : GBA.grassLight) : (zDef ? zDef.grass1 : GBA.grassDark);
+        ctx.fillRect(px + (seed % 5), py + (seed % 4), T - 2, T - 2);
+      }
+
+      if (cell === 1) {
+        // Tall grass — motif en V GBA style
+        ctx.fillStyle = zDef ? zDef.grass2 : GBA.grassLight;
         ctx.fillRect(px, py, T, T);
-        // Petits détails sol
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
-        if ((mr + mc) % 3 === 0) ctx.fillRect(px + 8, py + 12, 4, 2);
-      } else if (cell === 1) {
-        // Herbe haute
-        ctx.fillStyle = zDef ? zDef.grassColor : '#3a7a28';
-        ctx.fillRect(px, py, T, T);
-        // Brins d'herbe
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.strokeStyle = zDef ? zDef.grass1 : GBA.grassDark;
         ctx.lineWidth = 1;
-        const seed = (mr * 97 + mc * 31) % 7;
         for (let i = 0; i < 3; i++) {
-          const bx = px + 6 + i * 9 + (seed % 3);
-          ctx.beginPath(); ctx.moveTo(bx, py + T); ctx.lineTo(bx - 2, py + T - 10 - (seed % 5)); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(bx, py + T); ctx.lineTo(bx + 3, py + T - 12 - (seed % 4)); ctx.stroke();
+          const bx = px + 2 + i * 5 + (seed % 3);
+          ctx.beginPath(); ctx.moveTo(bx, py + T - 1); ctx.lineTo(bx + 2, py + 4 + (seed % 4)); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(bx + 4, py + T - 1); ctx.lineTo(bx + 2, py + 4 + (seed % 4)); ctx.stroke();
         }
+      } else if (cell === 7) {
+        // Path — sandy GBA style
+        ctx.fillStyle = GBA.path;
+        ctx.fillRect(px, py, T, T);
+        ctx.fillStyle = GBA.pathLight;
+        ctx.fillRect(px + 1, py + 1, T - 2, 1);
+        ctx.fillStyle = GBA.pathDark;
+        ctx.fillRect(px + 1, py + T - 2, T - 2, 1);
+      } else if (cell === 6) {
+        // Water — animated
+        ctx.fillStyle = GBA.water;
+        ctx.fillRect(px, py, T, T);
+        ctx.fillStyle = GBA.waterLight;
+        const waveOff = Math.floor(Date.now() / 400 + mc) % 4;
+        ctx.fillRect(px + waveOff * 3, py + 4, 6, 2);
+        ctx.fillRect(px + ((waveOff + 2) % 4) * 3, py + 10, 5, 2);
+      } else if (cell === 8) {
+        // Tree — GBA style round canopy + trunk
+        ctx.fillStyle = zDef ? zDef.ground : GBA.grass;
+        ctx.fillRect(px, py, T, T);
+        ctx.fillStyle = GBA.treeTrunk;
+        ctx.fillRect(px + 6, py + 10, 4, 6);
+        ctx.fillStyle = GBA.tree;
+        ctx.beginPath();
+        ctx.arc(px + T / 2, py + 6, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = GBA.treeLight;
+        ctx.beginPath();
+        ctx.arc(px + T / 2 - 2, py + 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (cell === 9) {
+        // Flower
+        const fc = [GBA.flower1, GBA.flower2, GBA.flower3][seed % 3];
+        ctx.fillStyle = '#40a040';
+        ctx.fillRect(px + 7, py + 8, 2, 6);
+        ctx.fillStyle = fc;
+        ctx.beginPath(); ctx.arc(px + 8, py + 7, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f8f870';
+        ctx.fillRect(px + 7, py + 6, 2, 2);
       } else if (cell === 2) {
-        // Mur / rocher
-        ctx.fillStyle = '#4a4a5a';
+        // Wall / building body
+        ctx.fillStyle = GBA.wall;
         ctx.fillRect(px, py, T, T);
-        ctx.fillStyle = '#3a3a4a';
-        ctx.fillRect(px + 2, py + 2, T - 4, T - 4);
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(px + 3, py + 3, T - 8, 2);
+        ctx.fillStyle = GBA.wallLight;
+        ctx.fillRect(px + 1, py + 1, T - 2, 1);
+        ctx.fillStyle = GBA.wallDark;
+        ctx.fillRect(px, py + T - 1, T, 1);
       } else if (cell === 3) {
-        // Arène
-        ctx.fillStyle = '#c03c2c';
+        // Arène door
+        ctx.fillStyle = GBA.path;
         ctx.fillRect(px, py, T, T);
-        ctx.fillStyle = '#EB5846';
-        ctx.fillRect(px + 4, py + 4, T - 8, T - 8);
+        ctx.fillStyle = GBA.roofGym;
+        ctx.fillRect(px + 2, py, T - 4, T - 2);
+        ctx.fillStyle = '#f8d878';
+        ctx.fillRect(px + 5, py + 4, 6, 8);
+        // Pokeball symbol
         ctx.fillStyle = '#fff';
-        ctx.font = "bold 14px sans-serif";
-        ctx.textAlign = 'center';
-        ctx.fillText('🏆', px + T/2, py + T/2 + 5);
-        ctx.textAlign = 'left';
+        ctx.beginPath(); ctx.arc(px + 8, py + 7, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = GBA.roofGym;
+        ctx.beginPath(); ctx.arc(px + 8, py + 7, 3, 0, Math.PI); ctx.fill();
       } else if (cell === 4) {
-        // Ligue
-        ctx.fillStyle = '#6a3aaa';
+        // Ligue door
+        ctx.fillStyle = GBA.path;
         ctx.fillRect(px, py, T, T);
-        ctx.fillStyle = '#8a5acc';
-        ctx.fillRect(px + 4, py + 4, T - 8, T - 8);
-        ctx.fillStyle = '#fff';
-        ctx.font = "bold 14px sans-serif";
+        ctx.fillStyle = GBA.roofLigue;
+        ctx.fillRect(px + 2, py, T - 4, T - 2);
+        ctx.fillStyle = '#d0a0f0';
+        ctx.fillRect(px + 5, py + 4, 6, 8);
+        ctx.fillStyle = '#f8f870';
+        ctx.font = 'bold 9px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('⭐', px + T/2, py + T/2 + 5);
+        ctx.fillText('★', px + 8, py + 11);
         ctx.textAlign = 'left';
       } else if (cell === 5) {
-        // Centre PokePom
-        ctx.fillStyle = '#2a6aaa';
+        // Centre door
+        ctx.fillStyle = GBA.path;
         ctx.fillRect(px, py, T, T);
-        ctx.fillStyle = '#3a8acc';
-        ctx.fillRect(px + 4, py + 4, T - 8, T - 8);
+        ctx.fillStyle = GBA.roofCentre;
+        ctx.fillRect(px + 2, py, T - 4, T - 2);
+        ctx.fillStyle = '#90d0f8';
+        ctx.fillRect(px + 5, py + 4, 6, 8);
         ctx.fillStyle = '#fff';
-        ctx.font = "bold 14px sans-serif";
+        ctx.font = 'bold 8px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('🏥', px + T/2, py + T/2 + 5);
+        ctx.fillText('+', px + 8, py + 11);
         ctx.textAlign = 'left';
-      } else if (cell === 6) {
-        // Eau déco
-        ctx.fillStyle = '#1a3a6a';
-        ctx.fillRect(px, py, T, T);
-        ctx.fillStyle = 'rgba(100,180,255,0.15)';
-        const wave = Math.sin(Date.now() / 800 + mc) * 2;
-        ctx.fillRect(px + 2, py + 14 + wave, T - 4, 4);
+      }
+
+      // Building roofs (row above doors)
+      if (mr > 0) {
+        const above = _pmMapGrid[mr - 1] ? _pmMapGrid[mr - 1][mc] : -1;
+        if (cell === 2 && mr >= 2) {
+          // Check if this is the top row of a building
+          const below = mr + 1 < PM_MAP_FULL_H ? _pmMapGrid[mr + 1][mc] : -1;
+          if (below === 3 || below === 4 || below === 5) {
+            // Roof row
+            const roofColor = below === 3 ? GBA.roofGym : below === 4 ? GBA.roofLigue : GBA.roofCentre;
+            ctx.fillStyle = roofColor;
+            ctx.fillRect(px - 2, py, T + 4, T);
+            ctx.fillStyle = roofColor;
+            ctx.fillRect(px - 1, py + 2, T + 2, T - 2);
+          }
+        }
       }
     }
   }
 
-  // Joueur
+  // Player sprite — GBA style
   const ppx = (_pmMapPlayer.c - _pmMapViewX) * T;
   const ppy = (_pmMapPlayer.r - _pmMapViewY) * T;
-  // Ombre
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(ppx + T/2, ppy + T - 2, 10, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Corps
-  ctx.fillStyle = '#EB5846';
-  ctx.save();
-  ctx.shadowColor = 'rgba(235,88,70,0.5)';
-  ctx.shadowBlur = 8;
-  _pmMapRoundRect(ctx, ppx + 6, ppy + 4, T - 12, T - 8, 6);
-  ctx.fill();
-  ctx.restore();
-  // Yeux
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(ppx + 12, ppy + 10, 3, 3);
-  ctx.fillRect(ppx + 18, ppy + 10, 3, 3);
-  ctx.fillStyle = '#1a1a2e';
-  ctx.fillRect(ppx + 13, ppy + 11, 2, 2);
-  ctx.fillRect(ppx + 19, ppy + 11, 2, 2);
+  const av = PM_AVATARS.find(a => a.id === _pmMapAvatar) || PM_AVATARS[0];
+  const walkFrame = Math.floor(Date.now() / 200) % 2;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(ppx + T/2, ppy + T - 1, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+  // Body
+  ctx.fillStyle = av.body;
+  ctx.fillRect(ppx + 4, ppy + 6, 8, 7);
+  // Head
+  ctx.fillStyle = av.skin;
+  ctx.fillRect(ppx + 4, ppy + 1, 8, 6);
+  // Hair
+  ctx.fillStyle = av.hair;
+  ctx.fillRect(ppx + 3, ppy, 10, 3);
+  ctx.fillRect(ppx + 3, ppy + 1, 2, 3);
+  // Eyes
+  ctx.fillStyle = '#000';
+  ctx.fillRect(ppx + 6, ppy + 4, 1, 1);
+  ctx.fillRect(ppx + 9, ppy + 4, 1, 1);
+  // Legs (animated)
+  ctx.fillStyle = av.body;
+  if (walkFrame === 0) {
+    ctx.fillRect(ppx + 5, ppy + 13, 3, 3);
+    ctx.fillRect(ppx + 9, ppy + 13, 3, 3);
+  } else {
+    ctx.fillRect(ppx + 4, ppy + 13, 3, 3);
+    ctx.fillRect(ppx + 10, ppy + 13, 3, 3);
+  }
 
   // Zone label
   const currentZone = pmGetZoneAt(_pmMapPlayer.r, _pmMapPlayer.c);
@@ -2091,28 +2154,11 @@ function pmRenderMap() {
   const labelEl = document.getElementById('pm-map-zone-label');
   if (labelEl) labelEl.textContent = label || 'Pomel World';
 
-  // HUD combats restants
   const hudEl = document.getElementById('pm-map-hud');
   if (hudEl) {
     const player = pmGetPlayer();
-    hudEl.textContent = `🌿 ${Math.max(0, PM_DAILY_WILD - player.dailyWildCount)}/${PM_DAILY_WILD} combats`;
+    hudEl.textContent = `🌿 ${Math.max(0, PM_DAILY_WILD - player.dailyWildCount)}/${PM_DAILY_WILD}`;
   }
-}
-
-function _pmDarken(hex, factor) {
-  const r = parseInt(hex.slice(1,3), 16);
-  const g = parseInt(hex.slice(3,5), 16);
-  const b = parseInt(hex.slice(5,7), 16);
-  return '#' + [r,g,b].map(c => Math.floor(c * factor).toString(16).padStart(2,'0')).join('');
-}
-
-function _pmMapRoundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
-  ctx.closePath();
 }
 
 // ── Mouvement & interactions ──
@@ -2120,30 +2166,23 @@ function pmMapTryMove(dr, dc) {
   const now = Date.now();
   if (now - _pmMapLastStep < PM_STEP_COOLDOWN) return;
   _pmMapLastStep = now;
-
-  const nr = _pmMapPlayer.r + dr;
-  const nc = _pmMapPlayer.c + dc;
+  const nr = _pmMapPlayer.r + dr, nc = _pmMapPlayer.c + dc;
   if (nr < 0 || nr >= PM_MAP_FULL_H || nc < 0 || nc >= PM_MAP_FULL_W) return;
   const cell = _pmMapGrid[nr][nc];
 
-  // Interaction avec bâtiments
   if (cell === 3) { pmStopMap(); pmGoTo('gym'); return; }
   if (cell === 4) { pmStopMap(); pmGoTo('league'); return; }
   if (cell === 5) { pmStopMap(); _pmShowCentreMenu(); return; }
-
-  // Murs et eau = infranchissable
-  if (cell === 2 || cell === 6) return;
+  if (cell === 2 || cell === 6 || cell === 8) return; // mur, eau, arbre
 
   _pmMapPlayer.r = nr;
   _pmMapPlayer.c = nc;
 
-  // Rencontre dans les herbes ?
   if (cell === 1) {
     const zone = pmGetZoneAt(nr, nc);
     if (zone && Math.random() < PM_ENCOUNTER_CHANCE) {
       const player = pmGetPlayer();
       if (player.dailyWildCount < PM_DAILY_WILD) {
-        // Lancer un combat sauvage avec un PokePom de cette zone
         _pmPendingZoneEncounter = zone;
         pmStopMap();
         pmGoTo('wild');
@@ -2155,10 +2194,7 @@ function pmMapTryMove(dr, dc) {
   pmRenderMap();
 }
 
-let _pmPendingZoneEncounter = null;
-
 function _pmShowCentreMenu() {
-  // Mini menu : Équipe, Collection, Infos
   const page = document.getElementById('page-pokepom');
   if (!page) return;
   const player = pmGetPlayer();
@@ -2178,40 +2214,65 @@ function _pmShowCentreMenu() {
           <button class="btn-outline" onclick="pmGoTo('info')">📖 Infos & Guide</button>
         </div>
       </div>
+      <div class="pm-card">
+        <h3 style="font-size:.75rem; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:12px;">Changer de personnage</h3>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+          ${PM_AVATARS.map(av => `
+            <div onclick="_pmMapAvatar='${av.id}'; pmGoTo('home');" style="cursor:pointer; padding:8px 14px; border-radius:10px; border:2px solid ${_pmMapAvatar === av.id ? 'var(--primary)' : 'var(--border)'}; background:${_pmMapAvatar === av.id ? 'var(--primary-subtle)' : 'var(--surface2)'}; display:flex; flex-direction:column; align-items:center; gap:4px; transition:all .2s;">
+              <canvas width="16" height="16" id="pm-av-preview-${av.id}" style="width:32px; height:32px; image-rendering:pixelated;"></canvas>
+              <span style="font-size:.7rem; font-weight:600; color:${_pmMapAvatar === av.id ? 'var(--primary)' : 'var(--muted)'};">${av.label}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
     </div>
   `;
+  // Dessiner les previews
+  PM_AVATARS.forEach(av => {
+    setTimeout(() => {
+      const c = document.getElementById('pm-av-preview-' + av.id);
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#48a848';
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = av.body;
+      ctx.fillRect(4, 6, 8, 7);
+      ctx.fillStyle = av.skin;
+      ctx.fillRect(4, 1, 8, 6);
+      ctx.fillStyle = av.hair;
+      ctx.fillRect(3, 0, 10, 3);
+      ctx.fillRect(3, 1, 2, 3);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(6, 4, 1, 1);
+      ctx.fillRect(9, 4, 1, 1);
+      ctx.fillStyle = av.body;
+      ctx.fillRect(5, 13, 3, 3);
+      ctx.fillRect(9, 13, 3, 3);
+    }, 10);
+  });
 }
 
-// ── Contrôles map ──
+// ── Contrôles ──
 function pmMapKeyDown(e) {
   const dirs = {
-    ArrowUp:[- 1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1],
+    ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1],
     KeyZ:[-1,0], KeyS:[1,0], KeyQ:[0,-1], KeyD:[0,1],
   };
   const d = dirs[e.code];
-  if (d && _pmMapGrid) {
-    e.preventDefault();
-    pmMapTryMove(d[0], d[1]);
-  }
+  if (d && _pmMapGrid) { e.preventDefault(); pmMapTryMove(d[0], d[1]); }
 }
 
-function pmMapDpadMove(dr, dc) {
-  if (_pmMapGrid) pmMapTryMove(dr, dc);
-}
+function pmMapDpadMove(dr, dc) { if (_pmMapGrid) pmMapTryMove(dr, dc); }
 
-// ── Start / Stop map ──
 function pmStartMap() {
   if (!_pmMapGrid) pmBuildMap();
   if (!_pmMapPlayer) {
     _pmMapPlayer = { r: Math.floor(PM_MAP_FULL_H / 2) + 2, c: Math.floor(PM_MAP_FULL_W / 2) };
   }
   document.addEventListener('keydown', pmMapKeyDown);
-  // Animation loop pour l'eau
   if (_pmMapLoop) cancelAnimationFrame(_pmMapLoop);
-  function loop() {
-    pmRenderMap();
-    _pmMapLoop = requestAnimationFrame(loop);
-  }
+  function loop() { pmRenderMap(); _pmMapLoop = requestAnimationFrame(loop); }
   _pmMapLoop = requestAnimationFrame(loop);
 }
 
@@ -2220,11 +2281,10 @@ function pmStopMap() {
   if (_pmMapLoop) { cancelAnimationFrame(_pmMapLoop); _pmMapLoop = null; }
 }
 
-// ── Remplacement de pmRenderHome ──
+// ── pmRenderHome — la map GBA ──
 function pmRenderHome(page, player) {
   const team = pmGetTeam(player);
   const badgeCount = player.badges.length;
-  const canLeague = badgeCount >= 7;
 
   page.innerHTML = `
     <div class="pm-wrap">
@@ -2233,20 +2293,13 @@ function pmRenderHome(page, player) {
           <div class="pm-title">🐾 PokePom</div>
           <div class="pm-sub">${player.collection.length} capturés · ${badgeCount}/7 badges</div>
         </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <span id="pm-map-hud" style="font-size:.75rem; color:var(--muted); background:var(--surface2); padding:4px 10px; border-radius:6px; font-family:'Space Mono',monospace;"></span>
-        </div>
+        <span id="pm-map-hud" style="font-size:.75rem; color:var(--muted); background:var(--surface2); padding:4px 10px; border-radius:6px; font-family:'Space Mono',monospace;"></span>
       </div>
 
       <div id="pm-map-zone-label" style="text-align:center; font-size:.8rem; font-weight:700; color:var(--primary); min-height:1.2em; margin-bottom:4px;">Pomel World</div>
 
-      <div style="position:relative; width:${PM_MAP_W}px; max-width:100%; margin:0 auto; border-radius:12px; overflow:hidden; border:2px solid var(--border); box-shadow:0 0 30px var(--primary-glow);">
-        <canvas id="pm-map-canvas" width="${PM_MAP_W}" height="${PM_MAP_H}" style="display:block; width:100%; height:auto;"></canvas>
-      </div>
-
-      <div style="display:flex; justify-content:center; gap:8px; font-size:.7rem; color:var(--muted); flex-wrap:wrap;">
-        <span>⬆⬇⬅➡ / ZQSD pour se déplacer</span>
-        <span>Marche dans les herbes pour rencontrer des PokePoms</span>
+      <div style="position:relative; width:${PM_MAP_W}px; max-width:100%; margin:0 auto; border-radius:8px; overflow:hidden; border:3px solid #505868; box-shadow:0 0 0 3px #282830, 0 4px 20px rgba(0,0,0,0.5); background:#000;">
+        <canvas id="pm-map-canvas" width="${PM_MAP_W}" height="${PM_MAP_H}" style="display:block; width:100%; height:auto; image-rendering:pixelated;"></canvas>
       </div>
 
       <!-- D-pad mobile -->
@@ -2259,17 +2312,24 @@ function pmRenderHome(page, player) {
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:4px;">
         <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--muted);">
-          <span style="width:12px;height:12px;border-radius:3px;background:#3a7a28;display:inline-block;"></span> Herbes
+          <span style="width:12px;height:12px;border-radius:2px;background:${GBA.grassLight};display:inline-block;border:1px solid ${GBA.grassDark};"></span> Herbes
         </div>
         <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--muted);">
-          <span style="width:12px;height:12px;border-radius:3px;background:#c03c2c;display:inline-block;"></span> Arène
+          <span style="width:12px;height:12px;border-radius:2px;background:${GBA.roofGym};display:inline-block;"></span> Arène
         </div>
         <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--muted);">
-          <span style="width:12px;height:12px;border-radius:3px;background:#6a3aaa;display:inline-block;"></span> Ligue
+          <span style="width:12px;height:12px;border-radius:2px;background:${GBA.roofLigue};display:inline-block;"></span> Ligue
         </div>
         <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--muted);">
-          <span style="width:12px;height:12px;border-radius:3px;background:#2a6aaa;display:inline-block;"></span> Centre
+          <span style="width:12px;height:12px;border-radius:2px;background:${GBA.roofCentre};display:inline-block;"></span> Centre
         </div>
+        <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--primary); cursor:pointer; font-weight:600;" onclick="pmGoTo('info')">
+          📖 Infos & Guide
+        </div>
+      </div>
+
+      <div style="text-align:center; font-size:.65rem; color:var(--muted); margin-top:2px;">
+        ⬆⬇⬅➡ / ZQSD pour se déplacer · Marche dans les herbes pour rencontrer des PokePoms
       </div>
     </div>
   `;
