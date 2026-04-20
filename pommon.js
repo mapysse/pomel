@@ -3439,7 +3439,7 @@ function pmRenderBattleEnd(bs) {
         <div>+${PM_XP_GAIN.wild} XP</div>
         <div class="pm-quick-btns">
           <button class="btn-outline" onclick="pmGoTo('home')">Accueil</button>
-          <button class="btn-primary" onclick="pmGoTo('wild')">Nouveau combat</button>
+          <button class="btn-primary" onclick="pmGoTo('home')">Retour à la map</button>
         </div>
       `;
     } else {
