@@ -1962,15 +1962,19 @@
 
       <!-- JEUX -->
       <div class="sidenav-section">Jeux</div>
+      <button class="sidenav-item" id="snav-pokepom" onclick="if(typeof pmGoTo==='function')pmGoTo('home')">
+        <span class="sidenav-item-icon">🐾</span>
+        <span class="sidenav-item-label">PokePom</span>
+      </button>
       <button class="sidenav-item" id="snav-snake" onclick="navTo('snake')">
         <span class="sidenav-item-icon">🐍</span>
         <span class="sidenav-item-label">Serpent</span>
       </button>
-      <button class="sidenav-item" id="snav-dino" onclick="navTo('dino')">
+      <button class="sidenav-item" id="snav-dino" onclick="navTo('dino')" style="display:none">
         <span class="sidenav-item-icon">🦕</span>
         <span class="sidenav-item-label">Dino Run</span>
       </button>
-      <button class="sidenav-item" id="snav-tetris" onclick="navTo('tetris')">
+      <button class="sidenav-item" id="snav-tetris" onclick="navTo('tetris')" style="display:none">
         <span class="sidenav-item-icon">🧱</span>
         <span class="sidenav-item-label">Tetris</span>
       </button>
@@ -9498,7 +9502,7 @@ function startTimerInterval() {
 // ══════════════════════════════════════════════════
 const PAGE_TITLES = {
   home:'Accueil', roulette:'🎰 Roulette', discussion:'💬 Chat',
-  snake:'🐍 Serpent', dino:'🦕 Dino Run', tetris:'🧱 Tetris', g2048:'🔢 2048', clicker:'🌱 Clicker',
+  snake:'🐍 Serpent', dino:'🦕 Dino Run', tetris:'🧱 Tetris', g2048:'🔢 2048', pokepom:'🐾 PokePom', clicker:'🌱 Clicker',
   jardin:'🌸 Jardin', pfc:'🪨 Pierre Feuille Ciseaux',
   boutique:'🛒 Boutique', hotel:'🏨 Hôtel des Ventes',
   classement:'🏆 Classement', profils:'👥 Profils',
@@ -9509,7 +9513,7 @@ const PAGE_TITLES = {
 // Map page → id du bouton sidenav
 const SNAV_MAP = {
   home:'snav-home', roulette:'snav-roulette', discussion:'snav-chat',
-  snake:'snav-snake', dino:'snav-dino', tetris:'snav-tetris', g2048:'snav-g2048', clicker:'snav-clicker',
+  snake:'snav-snake', dino:'snav-dino', tetris:'snav-tetris', g2048:'snav-g2048', pokepom:'snav-pokepom', clicker:'snav-clicker',
   jardin:'snav-jardin', pfc:'snav-pfc', boutique:'snav-boutique',
   hotel:'snav-hotel', profils:'snav-profils', quetes:'snav-quetes',
   paris:'snav-paris', proverbe:'snav-proverbe',
@@ -9703,11 +9707,11 @@ init();
     </div>
   </div>
 
-<script src="pommon.js"></script>
+<!-- <script src="pommon.js"></script> -->
 <script src="boutique.js"></script>
 <script src="clicker_jardin.js"></script>
-<script src="dino.js"></script>
-<script src="tetris.js"></script>
+<!-- <script src="dino.js"></script> -->
+<!-- <script src="tetris.js"></script> -->
 <script src="g2048.js?v=4"></script>
 <script src="snake.js"></script>
 </body>

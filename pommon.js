@@ -1620,26 +1620,8 @@ function pmInjectStyles() {
   document.head.appendChild(style);
 }
 
-// Injection du bouton sidenav et de la page
+// Injection de la page (le bouton sidenav est dans index.html)
 function pmInjectUI() {
-  // Bouton sidenav (ajouter avant le footer)
-  const sidenav = document.getElementById('sidenav');
-  if (sidenav && !document.getElementById('snav-pokepom')) {
-    const scroll = sidenav.querySelector('.sidenav-scroll');
-    if (scroll) {
-      const btn = document.createElement('button');
-      btn.className = 'sidenav-item';
-      btn.id = 'snav-pokepom';
-      btn.onclick = () => pmGoTo('home');
-      btn.innerHTML = `
-        <span class="sidenav-item-icon">🐾</span>
-        <span class="sidenav-item-label">PokePom</span>
-      `;
-      scroll.appendChild(btn);
-    }
-  }
-
-  // Bouton mobile bottom nav (optionnel)
   // Page
   const mainContent = document.getElementById('main-content');
   if (mainContent && !document.getElementById('page-pokepom')) {
@@ -2323,7 +2305,7 @@ function pmRenderHome(page, player) {
         <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--muted);">
           <span style="width:12px;height:12px;border-radius:2px;background:${GBA.roofCentre};display:inline-block;"></span> Centre
         </div>
-        <div style="display:flex; align-items:center; gap:4px; font-size:.7rem; color:var(--primary); cursor:pointer; font-weight:600;" onclick="pmGoTo('info')">
+        <div onclick="pmGoTo('info')" style="display:flex; align-items:center; gap:5px; font-size:.72rem; color:#fff; cursor:pointer; font-weight:700; background:var(--primary); padding:4px 12px; border-radius:6px; transition:all .2s;" onmouseenter="this.style.filter='brightness(1.15)'" onmouseleave="this.style.filter=''">
           📖 Infos & Guide
         </div>
       </div>
