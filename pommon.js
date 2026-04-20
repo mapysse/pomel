@@ -1648,6 +1648,14 @@ function pmInjectUI() {
     page.className = 'page';
     page.style.maxWidth = '900px';
     mainContent.appendChild(page);
+
+    // Masquer le bouton info flottant quand on quitte PomMon
+    const observer = new MutationObserver(() => {
+      const floatBtn = document.getElementById('pm-info-float');
+      if (!floatBtn) return;
+      floatBtn.style.display = page.classList.contains('active') ? 'flex' : 'none';
+    });
+    observer.observe(page, { attributes: true, attributeFilter: ['class'] });
   }
 }
 
@@ -1723,27 +1731,31 @@ function pmRenderPage() {
     default: pmRenderHome(page, player);
   }
 
-  // Bouton info flottant (visible sur toutes les vues sauf info)
-  const existingBtn = document.getElementById('pm-info-float');
-  if (existingBtn) existingBtn.remove();
-  if (_pmView !== 'info') {
-    const btn = document.createElement('button');
-    btn.id = 'pm-info-float';
-    btn.onclick = () => pmGoTo('info');
-    btn.textContent = '📖';
-    btn.title = 'Infos & Guide';
-    Object.assign(btn.style, {
-      position:'fixed', bottom:'24px', right:'24px', zIndex:'90',
-      width:'48px', height:'48px', borderRadius:'50%',
-      background:'var(--surface)', border:'2px solid var(--border)',
-      boxShadow:'0 4px 16px rgba(0,0,0,0.3)',
-      fontSize:'1.3rem', cursor:'pointer', display:'flex',
-      alignItems:'center', justifyContent:'center',
-      transition:'all .2s',
-    });
-    btn.onmouseenter = () => { btn.style.borderColor = 'var(--primary)'; btn.style.transform = 'scale(1.1)'; };
-    btn.onmouseleave = () => { btn.style.borderColor = 'var(--border)'; btn.style.transform = 'scale(1)'; };
-    page.appendChild(btn);
+  // Bouton info flottant (visible sur toutes les vues sauf info, attaché au body pour survivre aux innerHTML)
+  let floatBtn = document.getElementById('pm-info-float');
+  if (_pmView === 'info') {
+    if (floatBtn) floatBtn.style.display = 'none';
+  } else {
+    if (!floatBtn) {
+      floatBtn = document.createElement('button');
+      floatBtn.id = 'pm-info-float';
+      floatBtn.onclick = () => pmGoTo('info');
+      floatBtn.textContent = '📖';
+      floatBtn.title = 'Infos & Guide';
+      Object.assign(floatBtn.style, {
+        position:'fixed', bottom:'24px', right:'24px', zIndex:'90',
+        width:'48px', height:'48px', borderRadius:'50%',
+        background:'var(--surface)', border:'2px solid var(--border)',
+        boxShadow:'0 4px 16px rgba(0,0,0,0.3)',
+        fontSize:'1.3rem', cursor:'pointer', display:'flex',
+        alignItems:'center', justifyContent:'center',
+        transition:'all .2s',
+      });
+      floatBtn.onmouseenter = () => { floatBtn.style.borderColor = 'var(--primary)'; floatBtn.style.transform = 'scale(1.1)'; };
+      floatBtn.onmouseleave = () => { floatBtn.style.borderColor = 'var(--border)'; floatBtn.style.transform = 'scale(1)'; };
+      document.body.appendChild(floatBtn);
+    }
+    floatBtn.style.display = 'flex';
   }
 }
 
@@ -2147,7 +2159,7 @@ let _pmPendingZoneEncounter = null;
 
 function _pmShowCentreMenu() {
   // Mini menu : Équipe, Collection, Infos
-  const page = document.getElementById('pokepom-page');
+  const page = document.getElementById('page-pokepom');
   if (!page) return;
   const player = pmGetPlayer();
   page.innerHTML = `
@@ -2590,9 +2602,16 @@ function pmRenderWildBattle(page, player) {
     page.innerHTML = `
       <div class="pm-wrap">
         <div class="pm-header"><div class="pm-title">🌿 Combats sauvages</div></div>
-        <div class="pm-card">Tu n'as aucun PokePom en équipe ! Retourne dans ta collection.</div>
+        <div class="pm-card">Tu n'as aucun PokePom en équipe ! Va au Centre PokePom pour gérer ton équipe.</div>
+        <button class="btn-outline" onclick="pmGoTo('home')">← Retour à la map</button>
       </div>
     `;
+    return;
+  }
+
+  // Si un seul PokePom dans l'équipe, lancer directement le combat
+  if (team.length === 1) {
+    pmStartWildBattle(team[0]);
     return;
   }
 
@@ -2606,7 +2625,7 @@ function pmRenderWildBattle(page, player) {
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
       <div class="pm-card" style="text-align:center;">
-        <p style="margin-bottom:14px; color:var(--muted);">Un PokePom sauvage peut apparaître... choisis lequel de ton équipe envoyer au combat.</p>
+        <p style="margin-bottom:14px; color:var(--muted);">Un PokePom sauvage apparaît ! Choisis qui envoyer au combat.</p>
         <div class="pm-team-slots" id="pm-team-pick"></div>
       </div>
     </div>
