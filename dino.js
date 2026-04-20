@@ -39,12 +39,12 @@
 const DINO_W = 600;
 const DINO_H = 200;
 const DINO_GROUND = 160;
-const DINO_GRAVITY = 0.6;
-const DINO_JUMP_FORCE = -11;
+const DINO_GRAVITY = 0.65;
+const DINO_JUMP_FORCE = -11.5;
 const DINO_POMEL_PER_OBSTACLE = 2;
-const DINO_INITIAL_SPEED = 5;
-const DINO_MAX_SPEED = 12;
-const DINO_ACCEL = 0.001; // accélération par frame
+const DINO_INITIAL_SPEED = 6;
+const DINO_MAX_SPEED = 16;
+const DINO_ACCEL = 0.003; // accélération par frame (3× plus rapide qu'avant)
 
 const DINO_COLORS = {
   bg:     '#1a1a2e',
@@ -75,7 +75,7 @@ function initDinoState() {
     score: 0,
     speed: DINO_INITIAL_SPEED,
     frame: 0,
-    nextObstacle: 80,
+    nextObstacle: 50,
     running: true,
   };
 }
@@ -111,14 +111,25 @@ function dinoTick() {
   // Obstacles
   s.nextObstacle--;
   if (s.nextObstacle <= 0) {
-    const type = Math.random() < 0.2 && s.speed > 7 ? 'bird' : 'cactus';
+    const type = Math.random() < (s.speed > 8 ? 0.25 : s.speed > 6 ? 0.1 : 0) ? 'bird' : 'cactus';
     const variants = type === 'cactus'
-      ? [{ w: 14, h: 30 }, { w: 20, h: 35 }, { w: 28, h: 25 }, { w: 10, h: 40 }]
-      : [{ w: 22, h: 18 }];
+      ? [{ w: 14, h: 30 }, { w: 20, h: 35 }, { w: 28, h: 25 }, { w: 10, h: 40 }, { w: 36, h: 28 }]
+      : [{ w: 22, h: 18 }, { w: 26, h: 14 }];
     const v = variants[Math.floor(Math.random() * variants.length)];
     const oy = type === 'bird' ? DINO_GROUND - 25 - Math.floor(Math.random() * 30) : DINO_GROUND + 30 - v.h;
     s.obstacles.push({ x: DINO_W + 10, y: oy, w: v.w, h: v.h, type, passed: false });
-    s.nextObstacle = 50 + Math.floor(Math.random() * 60) + Math.floor(80 / s.speed * 5);
+
+    // Double obstacle : à haute vitesse, 30% de chance de spawner un 2e cactus juste derrière
+    if (type === 'cactus' && s.speed >= 9 && Math.random() < 0.3) {
+      const v2 = variants[Math.floor(Math.random() * 3)]; // petits cactus seulement
+      const gap2 = 40 + Math.floor(Math.random() * 20);
+      s.obstacles.push({ x: DINO_W + 10 + gap2, y: DINO_GROUND + 30 - v2.h, w: v2.w, h: v2.h, type: 'cactus', passed: false });
+    }
+
+    // Gap vers le prochain obstacle : plus serré avec la vitesse, mais toujours sauteable
+    const minGap = Math.max(18, Math.floor(35 - s.speed * 1.2));
+    const maxGap = Math.max(28, Math.floor(55 - s.speed * 1.5));
+    s.nextObstacle = minGap + Math.floor(Math.random() * (maxGap - minGap));
   }
 
   // Bouger les obstacles
