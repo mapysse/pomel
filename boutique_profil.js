@@ -43,8 +43,8 @@
 // ── ITEMS BOUTIQUE ───────────────────────────────
 const SHOP_TITLES = [
   // ── SAISON 1 ──────────────────────────────────────
-  { id: 'survivant_bug_30mars', name: '🐛 Survivant du bug du 30 mars', price: 0, type: 'title', hidden: true },
-  { id: 'migration', name: '📡 Migration réussie. Over.', price: 0, type: 'title', hidden: true  },
+  { id: 'survivant_bug_30mars', name: '🐛 Survivant du bug du 30 mars', price: 0, type: 'title' },
+  { id: 'migration', name: '📡 Migration réussie. Over.', price: 0, type: 'title' },
   { id: 'free_plstn', name: 'Free Palestine', price: 1000, type: 'title' },
   { id: 'larry_malicieux', name: 'Larry le Malicieux', price: 1000, type: 'title' },
   { id: 'fan_burger_lidl', name: 'Fan 2 burgers LIDL', price: 1000, type: 'title' },
@@ -58,7 +58,7 @@ const SHOP_TITLES = [
   { id: 'color_orange', name: '🟠 Pseudo Orange', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en orange' },
   { id: 'color_red', name: '🔴 Pseudo Rouge', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en rouge' },
   { id: 'color_brown', name: '🟤 Pseudo Marron', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en marron' },
-  { id: 'badge_survivant_30mars', name: 'Badge Survivant 🪲', price: 0, type: 'badge', emoji: '🪲', hidden: true },
+  { id: 'badge_survivant_30mars', name: 'Badge Survivant 🪲', price: 0, type: 'badge', emoji: '🪲'},
   { id: 'badge_plstn', name: 'Badge Palestine 🇵🇸', price: 500, type: 'badge', emoji: '🇵🇸' },
   { id: 'badge_expert', name: 'Badge Expert 🎖️', price: 1000, type: 'badge', emoji: '🎖️' },
   { id: 'badge_toilettes', name: 'Badge Trône du criminel 🚽', price: 2500, type: 'badge', emoji: '🚽' },
@@ -80,17 +80,17 @@ const SHOP_TITLES = [
   { id: 'banner_aurora',  name: '🌌 Effet Aurore',     price: 75000, type: 'banner', bannerClass: 'banner-aurora',  desc: 'Blobs de lumière qui dérivent doucement' },
   { id: 'banner_plasma',  name: '⚡ Effet Plasma',     price: 75000, type: 'banner', bannerClass: 'banner-plasma',  desc: 'Pulsation électrique rouge intense' },
   // ── SAISON 2 ──────────────────────────────────────
-  { id: 'fan_malicieux', name: 'Fan des Malicieux', price: 10000, type: 'title', hidden: true },
-  { id: 'fan_foufoufdefou', name: 'Fan des Foufous de Fou', price: 10000, type: 'title', hidden: true },
-  { id: 'guerrier_saison2', name: '🥷 Guerrier/ère de la Saison 2', price: 50000, type: 'title', hidden: true },
-  { id: 'survivant_saison1', name: '🪖 Survivant/te de la Saison 1', price: 100000, type: 'title', hidden: true },
-  { id: 'badge_casquette', name: 'Casquette Corpo 🧢', price: 1000, type: 'badge', emoji: '🧢', hidden: true },
-  { id: 'badge_pomfest', name: 'PomFest 2026 🎉', price: 5000, type: 'badge', emoji: '🎉', hidden: true },
-  { id: 'badge_pomies', name: 'Pomies Money 💰', price: 10000, type: 'badge', emoji: '💰', hidden: true },
+  { id: 'fan_malicieux', name: 'Fan des Malicieux', price: 10000, type: 'title' },
+  { id: 'fan_foufoufdefou', name: 'Fan des Foufous de Fou', price: 10000, type: 'title' },
+  { id: 'guerrier_saison2', name: '🥷 Guerrier/ère de la Saison 2', price: 50000, type: 'title' },
+  { id: 'survivant_saison1', name: '🪖 Survivant/te de la Saison 1', price: 100000, type: 'title' },
+  { id: 'badge_casquette', name: 'Casquette Corpo 🧢', price: 1000, type: 'badge', emoji: '🧢' },
+  { id: 'badge_pomfest', name: 'PomFest 2026 🎉', price: 5000, type: 'badge', emoji: '🎉' },
+  { id: 'badge_pomies', name: 'Pomies Money 💰', price: 10000, type: 'badge', emoji: '💰' },
   // ── BANNIÈRES ──────────────────────────────────────
   // Couleurs unies
-  { id: 'banner_gold',    name: '🟨 Bannière Dorée',   price: 5000,  type: 'banner', bannerClass: 'banner-gold',    desc: 'Fond dorée sur ta carte de profil', hidden: true },
-  { id: 'banner_black',    name: '⬛ Bannière Noire',   price: 5000,  type: 'banner', bannerClass: 'banner-black',    desc: 'Fond noir sur ta carte de profil', hidden: true },
+  { id: 'banner_gold',    name: '🟨 Bannière Dorée',   price: 5000,  type: 'banner', bannerClass: 'banner-gold',    desc: 'Fond dorée sur ta carte de profil' },
+  { id: 'banner_black',    name: '⬛ Bannière Noire',   price: 5000,  type: 'banner', bannerClass: 'banner-black',    desc: 'Fond noir sur ta carte de profil' },
   // Motifs
   
   // Effets animés
