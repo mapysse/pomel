@@ -82,7 +82,7 @@ const SHOP_TITLES = [
   // ── SAISON 2 ──────────────────────────────────────
   { id: 'fan_malicieux', name: 'Fan des Malicieux', price: 10000, type: 'title' },
   { id: 'fan_foufoufdefou', name: 'Fan des Foufous de Fou', price: 10000, type: 'title' },
-  { id: 'fan_foufoufdefou', name: 'Fan des Étincelles', price: 10000, type: 'title' },
+  { id: 'fan_etincelles', name: 'Fan des Étincelles', price: 10000, type: 'title' },
   { id: 'guerrier_saison2', name: '🥷 Guerrier/ère de la Saison 2', price: 50000, type: 'title' },
   { id: 'survivant_saison1', name: '🪖 Survivant/te de la Saison 1', price: 100000, type: 'title' },
   { id: 'badge_casquette', name: 'Badge Corpo 🧢', price: 1000, type: 'badge', emoji: '🧢' },
