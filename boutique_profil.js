@@ -51,6 +51,13 @@ const SHOP_TITLES = [
   { id: 'maitre_pokemon', name: 'Maître Pokemon', price: 10000, type: 'title' },
   { id: 'criminel_wc', name: 'Criminel des WC', price: 10000, type: 'title' },
   { id: 'expert_pomdoc', name: 'Expert Pomdoc', price: 100000, type: 'title' },
+  { id: 'fan_malicieux', name: 'Fan des Malicieux', price: 10000, type: 'title' },
+  { id: 'fan_foufoufdefou', name: 'Fan des Foufous de Fou', price: 10000, type: 'title' },
+  { id: 'guerrier_saison2', name: '🥷 Guerrier/ère de la Saison 2', price: 50000, type: 'title' },
+  { id: 'survivant_saison1', name: '🪖 Survivant/te de la Saison 1', price: 100000, type: 'title' },
+  { id: 'badge_casquette', name: 'Casquette Corpo 🧢', price: 1000, type: 'badge', emoji: '🧢' },
+  { id: 'badge_pomfest', name: 'PomFest 2026 🎉', price: 5000, type: 'badge', emoji: '🎉' },
+  { id: 'badge_pomies', name: 'Pomies Money 💰', price: 10000, type: 'badge', emoji: '💰' },
   { id: 'rainbow', name: 'Effet Arc-en-ciel', price: 50000, type: 'color', desc: 'Pseudo arc-en-ciel animé !' },
   { id: 'sparkle', name: '✨ Effet Particules Brillantes', price: 50000, type: 'color', desc: 'Pseudo entouré de particules colorées scintillantes !' },
   { id: 'color_green', name: '🟢 Pseudo Vert', price: 1000, type: 'color', desc: 'Ton pseudo s\'affiche en vert' },
@@ -71,6 +78,8 @@ const SHOP_TITLES = [
   { id: 'banner_blue',   name: '🟦 Bannière Bleue',   price: 5000,  type: 'banner', bannerClass: 'banner-blue',   desc: 'Fond bleu sur ta carte de profil' },
   { id: 'banner_orange', name: '🟧 Bannière Orange',  price: 5000,  type: 'banner', bannerClass: 'banner-orange', desc: 'Fond orange sur ta carte de profil' },
   { id: 'banner_purple', name: '🟪 Bannière Violette',price: 5000,  type: 'banner', bannerClass: 'banner-purple', desc: 'Fond violet sur ta carte de profil' },
+  { id: 'banner_gold',    name: '🟨 Bannière Dorée',   price: 5000,  type: 'banner', bannerClass: 'banner-gold',    desc: 'Fond dorée sur ta carte de profil' },
+  { id: 'banner_black',    name: '⬛ Bannière Noire',   price: 5000,  type: 'banner', bannerClass: 'banner-black',    desc: 'Fond noir sur ta carte de profil' },
   // Motifs
   { id: 'banner_damier',        name: '🔲 Motif Damier',       price: 25000, type: 'banner', bannerClass: 'banner-damier',        desc: 'Fond en damier subtil' },
   { id: 'banner_vagues',        name: '〰️ Motif Vagues',        price: 25000, type: 'banner', bannerClass: 'banner-vagues',        desc: 'Fond orné de vagues ondulées' },
@@ -79,22 +88,6 @@ const SHOP_TITLES = [
   { id: 'banner_rainbow', name: '🌈 Effet Arc-en-ciel', price: 75000, type: 'banner', bannerClass: 'banner-rainbow', desc: 'Fond arc-en-ciel animé en boucle !' },
   { id: 'banner_aurora',  name: '🌌 Effet Aurore',     price: 75000, type: 'banner', bannerClass: 'banner-aurora',  desc: 'Blobs de lumière qui dérivent doucement' },
   { id: 'banner_plasma',  name: '⚡ Effet Plasma',     price: 75000, type: 'banner', bannerClass: 'banner-plasma',  desc: 'Pulsation électrique rouge intense' },
-  // ── SAISON 2 ──────────────────────────────────────
-  { id: 'fan_malicieux', name: 'Fan des Malicieux', price: 10000, type: 'title' },
-  { id: 'fan_foufoufdefou', name: 'Fan des Foufous de Fou', price: 10000, type: 'title' },
-  { id: 'guerrier_saison2', name: '🥷 Guerrier/ère de la Saison 2', price: 50000, type: 'title' },
-  { id: 'survivant_saison1', name: '🪖 Survivant/te de la Saison 1', price: 100000, type: 'title' },
-  { id: 'badge_casquette', name: 'Casquette Corpo 🧢', price: 1000, type: 'badge', emoji: '🧢' },
-  { id: 'badge_pomfest', name: 'PomFest 2026 🎉', price: 5000, type: 'badge', emoji: '🎉' },
-  { id: 'badge_pomies', name: 'Pomies Money 💰', price: 10000, type: 'badge', emoji: '💰' },
-  // ── BANNIÈRES ──────────────────────────────────────
-  // Couleurs unies
-  { id: 'banner_gold',    name: '🟨 Bannière Dorée',   price: 5000,  type: 'banner', bannerClass: 'banner-gold',    desc: 'Fond dorée sur ta carte de profil' },
-  { id: 'banner_black',    name: '⬛ Bannière Noire',   price: 5000,  type: 'banner', bannerClass: 'banner-black',    desc: 'Fond noir sur ta carte de profil' },
-  // Motifs
-  
-  // Effets animés
-  
 ];
 
 // ── BOUTIQUE / SHOP ─────────────────────────────
