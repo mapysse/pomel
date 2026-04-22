@@ -832,6 +832,71 @@
   .group-item-meta { font-size: .78rem; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .group-item-score { font-family: 'Space Mono', monospace; font-size: .85rem; color: var(--yellow); font-weight: 700; }
   .group-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ── LEADERBOARDS JEUX (snake, dino, tetris, 2048, clicker) ── */
+  .snake-lb-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    margin-top: 20px;
+  }
+  @media (max-width: 768px) {
+    .snake-lb-row { grid-template-columns: 1fr; }
+  }
+  .snake-lb-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 0; overflow: hidden;
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-highlight);
+  }
+  .snake-lb-title {
+    font-size: .85rem; font-weight: 800; letter-spacing: -.01em;
+    margin-bottom: 10px; color: var(--text);
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .snake-lb-list {
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 0;
+  }
+  .snake-lb-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 10px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border-soft);
+    transition: background .15s, border-color .15s;
+    min-width: 0; overflow: hidden;
+  }
+  .snake-lb-item:hover { background: rgba(255,255,255,0.05); border-color: var(--border); }
+  .snake-lb-item.me { background: rgba(235,88,70,0.08); border-color: rgba(235,88,70,0.3); }
+  .snake-lb-rank {
+    font-family: 'Space Mono', monospace; font-weight: 700; font-size: .85rem;
+    width: 24px; text-align: center; color: var(--muted); flex-shrink: 0;
+  }
+  .snake-lb-rank.top1 { color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.4); font-size: 1rem; }
+  .snake-lb-rank.top2 { color: #E8E8E8; text-shadow: 0 0 8px rgba(232,232,232,0.3); }
+  .snake-lb-rank.top3 { color: #E0925B; text-shadow: 0 0 8px rgba(224,146,91,0.3); }
+  .snake-lb-avatar-wrap {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--surface2); border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; flex-shrink: 0; font-size: .75rem;
+  }
+  .snake-lb-avatar-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  .snake-lb-name {
+    font-weight: 700; font-size: .88rem;
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .snake-lb-score {
+    font-family: 'Space Mono', monospace; font-weight: 700;
+    font-size: .82rem; color: var(--primary); flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .snake-lb-pomels {
+    font-family: 'Space Mono', monospace; font-size: .72rem;
+    color: var(--yellow); flex-shrink: 0; white-space: nowrap;
+  }
+  .snake-lb-pomels:empty { display: none; }
   .btn-group { border: none; border-radius: 8px; padding: 8px 16px; font-family: 'Syne', sans-serif; font-size: .82rem; font-weight: 700; cursor: pointer; transition: all .2s; white-space: nowrap; }
   .btn-group.join  { background: var(--primary); color: #fff; }
   .btn-group.leave { background: transparent; border: 1px solid var(--red); color: var(--red); }
@@ -2549,31 +2614,31 @@
       <!-- style="display:none" --> 
       <details class="snav-group" open>
         <summary>Jeux <span class="snav-chevron">▸</span></summary>
-      <button class="sidenav-item" id="snav-pokepom" onclick="if(typeof pmGoTo==='function')pmGoTo('home')">
+      <button class="sidenav-item" id="snav-pokepom" onclick="if(typeof pmGoTo==='function')pmGoTo('home')" style="display:none">
         <span class="sidenav-item-icon">🐾</span>
         <span class="sidenav-item-label">PokePom</span>
       </button>
-      <button class="sidenav-item" id="snav-snake" onclick="navTo('snake')" style="display:none">
+      <button class="sidenav-item" id="snav-snake" onclick="navTo('snake')">
         <span class="sidenav-item-icon">🐍</span>
         <span class="sidenav-item-label">Serpent</span>
       </button>
-      <button class="sidenav-item" id="snav-dino" onclick="navTo('dino')">
+      <button class="sidenav-item" id="snav-dino" onclick="navTo('dino')" style="display:none">
         <span class="sidenav-item-icon">🦕</span>
         <span class="sidenav-item-label">Dino Run</span>
       </button>
-      <button class="sidenav-item" id="snav-tetris" onclick="navTo('tetris')">
+      <button class="sidenav-item" id="snav-tetris" onclick="navTo('tetris')" style="display:none">
         <span class="sidenav-item-icon">🧱</span>
         <span class="sidenav-item-label">Tetris</span>
       </button>
-      <button class="sidenav-item" id="snav-g2048" onclick="navTo('g2048')" style="display:none">
+      <button class="sidenav-item" id="snav-g2048" onclick="navTo('g2048')">
         <span class="sidenav-item-icon">🔢</span>
         <span class="sidenav-item-label">2048</span>
       </button>
-      <button class="sidenav-item" id="snav-clicker" onclick="navTo('clicker')" style="display:none">
+      <button class="sidenav-item" id="snav-clicker" onclick="navTo('clicker')">
         <span class="sidenav-item-icon">🌱</span>
         <span class="sidenav-item-label">Clicker</span>
       </button>
-      <button class="sidenav-item" id="snav-jardin" onclick="navTo('jardin')" style="display:none">
+      <button class="sidenav-item" id="snav-jardin" onclick="navTo('jardin')">
         <span class="sidenav-item-icon">🌸</span>
         <span class="sidenav-item-label">Jardin</span>
       </button>
@@ -3353,7 +3418,7 @@
           <!-- CRÉER UN GROUPE -->
           <div class="group-section" id="createGroupSection">
             <h3>Créer un groupe</h3>
-            <div style="font-size:.78rem;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:8px;">💡 Maximum 5 groupes au total. Chaque groupe accepte jusqu'à 5 membres. Créer un groupe coûte <strong>5 000 🪙</strong>. Rejoindre coûte <strong>3 000 🪙</strong>.</div>
+            <div style="font-size:.78rem;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:8px;">💡 Maximum 5 groupes au total. Chaque groupe accepte jusqu'à 3 membres. Créer un groupe coûte <strong>5 000 🪙</strong>. Rejoindre coûte <strong>3 000 🪙</strong>.</div>
             <div class="form-group">
               <label>Nom du groupe</label>
               <input type="text" id="newGroupNameInput" placeholder="ex: Les Champions" maxlength="30" />
@@ -3780,79 +3845,47 @@
       <div class="info-category-title">🎮 Jeux</div>
       <div class="info-accordion">
 
-        <div class="info-item" id="info-snake">
-          <button class="info-trigger" onclick="toggleInfo('snake')">
-            <span class="info-trigger-icon">🐍</span>
-            <span class="info-trigger-label">Serpent & 2048</span>
+        <div class="info-item" id="info-dino">
+          <button class="info-trigger" onclick="toggleInfo('dino')">
+            <span class="info-trigger-icon">🦕</span>
+            <span class="info-trigger-label">Dino Run</span>
             <span class="info-trigger-arrow">▼</span>
           </button>
           <div class="info-body">
-            <p>Deux jeux avec leaderboard général (all-time) et classement hebdomadaire. Récompenses chaque lundi à 9h.</p>
+            <p>Cours, saute, esquive et accumule des points tant que tu peux.</p>
             <ul>
-              <li><strong>Serpent</strong> — +5 Pomels par fruit mangé. Le serpent grandit et accélère tous les 5 fruits. Espace = pause.</li>
-              <li><strong>2048</strong> — 1 Pomel tous les 10 points. Tu peux continuer après avoir atteint 2048.</li>
-              <li>Récompenses hebdo : 🥇 2 000 · 🥈 1 500 · 🥉 1 000 · autres 500 🪙</li>
-              <li>Contrôles : flèches, ZQSD ou swipe mobile</li>
+              <li>Contrôles : <strong>Espace / ↑ / clic</strong> pour sauter, <strong>↓</strong> pour se baisser</li>
+              <li>Leaderboard général (all-time) et classement hebdo</li>
+              <li>Récompenses hebdo (lundi 9h) : 🥇 2 000 · 🥈 1 500 · 🥉 1 000 · autres 500 🪙</li>
             </ul>
           </div>
         </div>
 
-        <div class="info-item" id="info-clicker">
-          <button class="info-trigger" onclick="toggleInfo('clicker')">
-            <span class="info-trigger-icon">🌱</span>
-            <span class="info-trigger-label">Clicker</span>
+        <div class="info-item" id="info-tetris">
+          <button class="info-trigger" onclick="toggleInfo('tetris')">
+            <span class="info-trigger-icon">🧱</span>
+            <span class="info-trigger-label">Tetris</span>
             <span class="info-trigger-arrow">▼</span>
           </button>
           <div class="info-body">
-            <p>Génère des <strong>graines</strong> en cliquant sur un fruit. Les graines sont la monnaie du Clicker et du Jardin.</p>
+            <p>Le classique : empile les pièces, complète des lignes pour marquer.</p>
             <ul>
-              <li>1 graine par clic (2 avec le Second Fruit)</li>
-              <li>Échange : <strong>100 graines = 1 Pomel</strong></li>
-              <li>Améliorations : Auto-Clicker (200 🌱), Turbo (1 000 🌱), Hyper (10 000 🌱), Ultra (100 000 🌱)</li>
-              <li>Stocks : Extension (2 000 🌱), Grand Entrepôt (5 000 🌱), Méga Entrepôt (100 000 🌱)</li>
-              <li>Second Fruit (10 000 🌱) — 2e fruit cliquable, auto-clicker sur les deux</li>
-              <li>Quand ton stock est plein, un raccourci s'affiche sur la page d'accueil</li>
+              <li>Gains : <strong>3 Pomels par ligne</strong> complétée</li>
+              <li>Leaderboard général et classement hebdo</li>
+              <li>Récompenses hebdo (lundi 9h) : 🥇 2 000 · 🥈 1 500 · 🥉 1 000 · autres 500 🪙</li>
             </ul>
           </div>
         </div>
 
-        <div class="info-item" id="info-jardin">
-          <button class="info-trigger" onclick="toggleInfo('jardin')">
-            <span class="info-trigger-icon">🌸</span>
-            <span class="info-trigger-label">Jardin de Pomel'Land</span>
+        <div class="info-item" id="info-pokepom">
+          <button class="info-trigger" onclick="toggleInfo('pokepom')">
+            <span class="info-trigger-icon">🐾</span>
+            <span class="info-trigger-label">PokePom</span>
             <span class="info-trigger-arrow">▼</span>
           </button>
           <div class="info-body">
-            <p>Un jardin communautaire partagé. Plante des fleurs avec tes graines et grimpe au classement de la semaine.</p>
-            <ul>
-              <li>Planter une fleur coûte <strong>10 000 graines</strong></li>
-              <li>Chaque fleur a un design unique généré depuis ton pseudo</li>
-              <li>Le jardin ferme le <strong>dimanche à 12h</strong> et rouvre le <strong>lundi à 12h30</strong></li>
-              <li>Récompenses le lundi à 12h : 🥇 2 000 · 🥈 1 500 · 🥉 1 000 · participants 500 🪙</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="info-item" id="info-pfc">
-          <button class="info-trigger" onclick="toggleInfo('pfc')">
-            <span class="info-trigger-icon">🪨</span>
-            <span class="info-trigger-label">Pierre Feuille Ciseaux — Groupes</span>
-            <span class="info-trigger-arrow">▼</span>
-          </button>
-          <div class="info-body">
-            <p>Un mode multijoueur <strong>réservé aux membres d'un groupe</strong>. Défie un joueur d'un autre groupe en temps réel.</p>
-            <ul>
-              <li>Tu choisis ton coup en envoyant le défi, l'adversaire choisit le sien en répondant</li>
-              <li>Le défi expire au bout d'<strong>1 heure</strong> — si pas de réponse, ta partie quotidienne est rendue</li>
-              <li>On ne peut défier que des membres d'un <strong>autre groupe</strong></li>
-              <li><strong>1 partie par joueur par jour</strong> (résolue uniquement)</li>
-              <li>Récompenses pour ton groupe :
-                <span class="info-tag green">🏆 Victoire : +500 💠 +1 000 pts</span>
-                <span class="info-tag yellow">🤝 Égalité : +500 💠 +1 000 pts (les deux)</span>
-                <span class="info-tag red">💀 Défaite : +200 💠</span>
-              </li>
-              <li>Les points PFC s'ajoutent au score hebdomadaire de ton groupe</li>
-            </ul>
+            <p>Un mode à part, plus complexe que les autres jeux — explore, collectionne et progresse à ton rythme.</p>
+            <p style="margin-top:10px;color:var(--muted);font-size:.82rem;">Les règles complètes sont détaillées directement dans le jeu.</p>
           </div>
         </div>
 
@@ -3921,7 +3954,7 @@
           </button>
           <div class="info-body">
             <ul>
-              <li>Maximum <strong>5 groupes</strong> simultanés · <strong>5 membres</strong> par groupe</li>
+              <li>Maximum <strong>5 groupes</strong> simultanés · <strong>3 membres</strong> par groupe</li>
               <li>Créer un groupe : <strong>5 000 🪙</strong> — impossible deux mois de suite (roulement des capitaines)</li>
               <li>Rejoindre un groupe : <strong>3 000 🪙</strong> reversés au créateur</li>
               <li>Tu peux quitter à tout moment — si le dernier membre part, le groupe est supprimé</li>
@@ -3939,7 +3972,6 @@
             <p>Le score d'un groupe est calculé chaque semaine :</p>
             <ul>
               <li><strong>Pomels gagnés</strong> cette semaine par tous les membres</li>
-              <li>+ <strong>Graines récoltées</strong> cette semaine ÷ 10 (dépenser des graines ne pénalise pas)</li>
               <li>+ <strong>Points PFC</strong> gagnés en Pierre Feuille Ciseaux</li>
             </ul>
             <p style="margin-top:10px;">Chaque lundi à 9h :</p>
@@ -3949,6 +3981,29 @@
               <li>🥉 3e : <strong>+2 000 🪙 / membre</strong> · <strong>500 💠 fixes + 500 💠 × membres</strong></li>
               <li style="color:var(--red)">💥 4e et 5e : groupe dissous, membres expulsés</li>
               <li>Tous les groupes sont remis à zéro chaque mois</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-item" id="info-pfc">
+          <button class="info-trigger" onclick="toggleInfo('pfc')">
+            <span class="info-trigger-icon">🪨</span>
+            <span class="info-trigger-label">Pierre Feuille Ciseaux</span>
+            <span class="info-trigger-arrow">▼</span>
+          </button>
+          <div class="info-body">
+            <p>Mode multijoueur <strong>réservé aux membres d'un groupe</strong>. Défie un joueur d'un autre groupe en temps réel.</p>
+            <ul>
+              <li>Tu choisis ton coup en envoyant le défi, l'adversaire choisit le sien en répondant</li>
+              <li>Le défi expire au bout d'<strong>1 heure</strong> — si pas de réponse, ta partie quotidienne est rendue</li>
+              <li>On ne peut défier que des membres d'un <strong>autre groupe</strong></li>
+              <li><strong>1 partie par joueur par jour</strong> (résolue uniquement)</li>
+              <li>Récompenses pour ton groupe :
+                <span class="info-tag green">🏆 Victoire : +500 💠 +1 000 pts</span>
+                <span class="info-tag yellow">🤝 Égalité : +500 💠 +1 000 pts (les deux)</span>
+                <span class="info-tag red">💀 Défaite : +200 💠</span>
+              </li>
+              <li>Les points PFC s'ajoutent au score hebdomadaire de ton groupe</li>
             </ul>
           </div>
         </div>
@@ -5310,7 +5365,7 @@ async function renderGroupsOnPage() {
         <span class="lb-medal">${medals[i] || ''}</span>
         <div class="lb-info">
           <span class="lb-name" style="cursor:default">${badgeEmoji ? badgeEmoji + ' ' : ''}<span class="${nameCls}">${escapeHTML(g.name)}</span></span>
-          <span class="lb-group-badge">${(g.members||[]).length}/5 membres</span>
+          <span class="lb-group-badge">${(g.members||[]).length}/3 membres</span>
           ${isMyG ? '<span class="lb-you-badge">Mon groupe</span>' : ''}
           ${rank === 1 ? '<span style="font-size:.65rem;color:var(--yellow);font-weight:700;background:rgba(245,200,66,0.1);border:1px solid rgba(245,200,66,0.3);border-radius:4px;padding:2px 6px;">👑 En tête</span>' : ''}
           ${inDanger ? '<span style="font-size:.65rem;color:var(--red);font-weight:700;background:rgba(235,88,70,0.1);border:1px solid rgba(235,88,70,0.3);border-radius:4px;padding:2px 6px;">💥 En danger</span>' : ''}
@@ -5334,7 +5389,7 @@ async function renderGroupsOnPage() {
     groups.forEach(g => {
       const isMine = (g.members || []).includes(state.code);
       const isCreator = g.creatorCode === state.code;
-      const isFull = (g.members || []).length >= 5;
+      const isFull = (g.members || []).length >= 3;
       const item = document.createElement('div');
       item.className = 'group-item' + (isMine ? ' mine' : '');
       const weekScore = (weekScores.find(w => w.id === g.id) || {}).weekScore || 0;
@@ -5447,7 +5502,7 @@ async function joinGroup(groupId) {
   if (groups.find(g => (g.members || []).includes(state.code))) { alert('Quitte ton groupe actuel avant d\'en rejoindre un autre !'); return; }
   const group = await getGroup(groupId);
   if (!group) { alert('Groupe introuvable.'); return; }
-  if ((group.members || []).length >= 5) { alert('Ce groupe est complet (5 membres max) !'); return; }
+  if ((group.members || []).length >= 3) { alert('Ce groupe est complet (3 membres max) !'); return; }
 
   // Débiter le nouveau membre
   state.balance -= 3000;
@@ -10270,13 +10325,13 @@ init();
   </div>
   
 <!-- <script src="xxx.js"></script> -->
-<script src="pommon.js"></script>
+<!-- <script src="pommon.js"></script> -->
 <script src="boutique_profil.js"></script>
 <script src="boutique.js?v=3"></script>
-<!-- <script src="clicker_jardin.js"></script> -->
-<script src="dino.js"></script>
-<script src="tetris.js"></script>
-<!-- <script src="g2048.js?v=4"></script> -->
-<!-- <script src="snake.js"></script> -->
+<script src="clicker_jardin.js"></script>
+<!-- <script src="dino.js"></script> -->
+<!-- <script src="tetris.js"></script> -->
+<script src="g2048.js?v=4"></script>
+<script src="snake.js"></script>
 </body>
 </html>
