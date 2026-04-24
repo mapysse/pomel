@@ -631,10 +631,26 @@
   .nav-dropdown-item { display: none; } /* plus utilisé */
   .nav-btn { display: none; }           /* plus utilisé */
   /* ── HOME ───────────────────────────────────── */
-  .home-wrap { display: flex; flex-direction: column; gap: 20px; }
+  .home-wrap { display: flex; flex-direction: column; gap: 14px; }
 
-  /* Section d'alertes urgentes */
+  /* Section d'alertes urgentes — bandeaux fins */
   .home-alerts { display: flex; flex-direction: column; gap: 8px; }
+
+  /* Bandeau d'alerte urgente (remplace les home-card-full urgentes) */
+  .home-alert-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid;
+    cursor: pointer; transition: all .18s;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    min-width: 0;
+  }
+  .home-alert-row:hover { transform: translateY(-1px); }
+  .home-alert-row-icon { font-size: 1.05rem; flex-shrink: 0; }
+  .home-alert-row-text { flex: 1; min-width: 0; font-size: .85rem; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home-alert-row-cta { font-size: .72rem; font-weight: 700; opacity: .85; flex-shrink: 0; }
 
   /* Section titre avec ligne */
   .home-section-header {
@@ -664,7 +680,8 @@
   .home-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
+    align-items: start;
   }
   .home-card-full  { grid-column: 1 / -1; }
   .home-card-span2 { grid-column: span 2; }
@@ -1163,18 +1180,18 @@
 
   /* HOME */
   .home-greeting {
-    font-size: 1.8rem; font-weight: 800; letter-spacing: -.5px;
+    font-size: 1.35rem; font-weight: 800; letter-spacing: -.3px;
     background: linear-gradient(135deg, var(--text) 0%, var(--text-soft) 100%);
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  .home-sub { font-size: .9rem; color: var(--muted); margin-top: -16px; }
+  .home-sub { font-size: .78rem; color: var(--muted); margin-top: 2px; }
   .home-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 22px;
-    display: flex; flex-direction: column; gap: 12px;
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 10px;
     transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), background var(--transition);
     min-width: 0; overflow: hidden;
     position: relative;
@@ -1194,7 +1211,27 @@
     transform: translateY(-1px);
   }
   .home-card:hover::after { opacity: 1; }
-  .home-card-title { font-size: .72rem; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .home-card-title { font-size: .68rem; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .home-card-divider {
+    height: 1px; background: var(--border-soft); margin: 4px -4px; opacity: .6;
+  }
+  .home-card-subtitle {
+    font-size: .64rem; font-weight: 700; color: var(--muted);
+    letter-spacing: .12em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 2px;
+  }
+  /* Zones scrollables internes pour ne pas faire déborder la page */
+  .home-bets-zone, .home-live-zone {
+    max-height: 260px; overflow-y: auto; min-height: 0;
+    scrollbar-width: thin;
+  }
+  .home-proverbe-zone {
+    max-height: 140px; overflow-y: auto; min-height: 0;
+    scrollbar-width: thin;
+  }
+  .home-bets-zone::-webkit-scrollbar, .home-live-zone::-webkit-scrollbar, .home-proverbe-zone::-webkit-scrollbar { width: 4px; }
+  .home-bets-zone::-webkit-scrollbar-thumb, .home-live-zone::-webkit-scrollbar-thumb, .home-proverbe-zone::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
   .home-card-list { display: flex; flex-direction: column; gap: 8px; }
   .home-rank-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--surface2); border-radius: var(--radius-sm); transition: background var(--transition); }
   .home-rank-row:hover { background: var(--surface3); }
@@ -1204,35 +1241,62 @@
   .home-rank-num.top3 { color: #CD7F32; }
   .home-rank-name { flex: 1; font-weight: 700; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .home-rank-val { font-family: 'Space Mono', monospace; font-size: .8rem; color: var(--primary); font-weight: 700; flex-shrink: 0; }
-  .home-proverbe-zone { display: flex; flex-direction: column; gap: 8px; }
-  .home-proverbe-text { font-size: 1.05rem; font-style: italic; line-height: 1.6; color: var(--text); }
-  .home-proverbe-author { font-size: .82rem; color: var(--muted); }
-  .home-proverbe-waiting { font-size: .9rem; color: var(--muted); font-style: italic; }
-  .home-live-label { font-size: .7rem; font-weight: 700; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 4px; }
+  .home-proverbe-zone { display: flex; flex-direction: column; gap: 4px; }
+  .home-proverbe-text { font-size: .92rem; font-style: italic; line-height: 1.45; color: var(--text); }
+  .home-proverbe-author { font-size: .74rem; color: var(--muted); }
+  .home-proverbe-waiting { font-size: .82rem; color: var(--muted); font-style: italic; }
+  .home-live-label { font-size: .66rem; font-weight: 700; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 4px; }
   .home-live-label:first-child { margin-top: 0; }
   .home-live-zone { display: flex; flex-direction: column; gap: 8px; }
-  .home-live-post { background: var(--surface2); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
-  .home-live-post-meta { display: flex; align-items: center; justify-content: space-between; font-size: .78rem; color: var(--muted); }
-  .home-live-post-text { font-size: .95rem; line-height: 1.5; }
-  .home-live-post-likes { font-size: .82rem; color: var(--green); font-weight: 700; }
-  .home-live-empty { font-size: .88rem; color: var(--muted); font-style: italic; }
-  .home-bets-zone { display: flex; flex-direction: column; gap: 10px; }
-  .home-bet-row { background: var(--surface2); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
-  .home-bet-desc { font-size: .92rem; font-weight: 700; line-height: 1.4; }
-  .home-bet-meta { display: flex; gap: 16px; font-size: .78rem; color: var(--muted); flex-wrap: wrap; }
-  .home-bet-options { display: flex; gap: 8px; flex-wrap: wrap; }
-  .home-bet-option { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .78rem; font-weight: 600; color: var(--muted); }
-  .home-empty { font-size: .88rem; color: var(--muted); font-style: italic; }
+  .home-live-post { background: var(--surface2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .home-live-post-meta { display: flex; align-items: center; justify-content: space-between; font-size: .72rem; color: var(--muted); }
+  .home-live-post-text { font-size: .85rem; line-height: 1.4; }
+  .home-live-post-likes { font-size: .74rem; color: var(--green); font-weight: 700; }
+  .home-live-empty { font-size: .82rem; color: var(--muted); font-style: italic; }
+  .home-bets-zone { display: flex; flex-direction: column; gap: 8px; }
+  .home-bet-row { background: var(--surface2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .home-bet-desc { font-size: .85rem; font-weight: 700; line-height: 1.35; }
+  .home-bet-meta { display: flex; gap: 10px; font-size: .72rem; color: var(--muted); flex-wrap: wrap; }
+  .home-bet-options { display: flex; gap: 6px; flex-wrap: wrap; }
+  .home-bet-option { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: .72rem; font-weight: 600; color: var(--muted); }
+  .home-empty { font-size: .82rem; color: var(--muted); font-style: italic; }
+
+  /* Marché Noir home */
+  .home-mn-zone { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+  .home-mn-zone::-webkit-scrollbar { width: 4px; }
+  .home-mn-zone::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+  .home-mn-row { background: var(--surface2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; border: 1px solid transparent; transition: border-color .15s; }
+  .home-mn-row:hover { border-color: var(--border-strong); }
+  .home-mn-row-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .85rem; font-weight: 700; line-height: 1.35; }
+  .home-mn-row-meta { display: flex; gap: 10px; font-size: .72rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
+  .home-mn-row-price { font-family: 'Space Mono', monospace; font-weight: 700; color: var(--yellow); }
+  .home-mn-row-reserved { font-size: .7rem; color: var(--yellow); font-weight: 700; }
+
+  /* Missions home */
+  .home-missions-zone { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+  .home-missions-zone::-webkit-scrollbar { width: 4px; }
+  .home-missions-zone::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+  .home-mission-row { background: var(--surface2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; border: 1px solid transparent; transition: border-color .15s; }
+  .home-mission-row:hover { border-color: var(--border-strong); }
+  .home-mission-row.mine { border-color: rgba(235,88,70,0.35); background: rgba(235,88,70,0.04); }
+  .home-mission-row.accepted-by-me { border-color: rgba(245,200,66,0.45); background: rgba(245,200,66,0.06); }
+  .home-mission-row-desc { font-size: .85rem; font-weight: 600; line-height: 1.35; }
+  .home-mission-row-meta { display: flex; gap: 10px; font-size: .72rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
+  .home-mission-row-reward { font-family: 'Space Mono', monospace; font-weight: 700; color: var(--green); }
+  .home-mission-row-status { font-size: .64rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: .04em; text-transform: uppercase; }
+  .home-mission-row-status.open     { background: rgba(62,207,110,0.15); color: var(--green); }
+  .home-mission-row-status.accepted { background: rgba(245,200,66,0.15); color: var(--yellow); }
+  .home-mission-row-status.mine     { background: rgba(235,88,70,0.15); color: var(--primary); }
   .home-roulette-status { border-color: var(--border); transition: border-color .2s, box-shadow .2s; }
   .home-roulette-status:hover { border-color: var(--primary); box-shadow: 0 0 20px var(--primary-glow); }
-  .home-roulette-available { display: flex; align-items: center; gap: 14px; }
-  .home-roulette-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); flex-shrink: 0; animation: pulse-dot 1.4s ease-in-out infinite; }
+  .home-roulette-available { display: flex; align-items: center; gap: 10px; }
+  .home-roulette-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); flex-shrink: 0; animation: pulse-dot 1.4s ease-in-out infinite; }
   .home-roulette-dot.off { background: var(--muted); box-shadow: none; animation: none; }
   @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
-  .home-roulette-text { display: flex; flex-direction: column; gap: 2px; }
-  .home-roulette-text strong { font-size: 1rem; font-weight: 700; }
-  .home-roulette-text span { font-size: .82rem; color: var(--muted); }
-  .home-roulette-cta { margin-left: auto; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-family: 'Syne', sans-serif; font-size: .85rem; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .home-roulette-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+  .home-roulette-text strong { font-size: .88rem; font-weight: 700; }
+  .home-roulette-text span { font-size: .74rem; color: var(--muted); }
+  .home-roulette-cta { margin-left: auto; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font-family: 'Syne', sans-serif; font-size: .75rem; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   .home-roulette-cta.disabled { background: var(--surface2); color: var(--muted); cursor: default; }
 
   /* QUÊTES */
@@ -2947,80 +3011,102 @@
   <!-- HOME -->
   <div class="page active" id="page-home">
     <div class="home-wrap">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <!-- En-tête : greeting + widget groupe sur une ligne -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
         <div>
-          <div class="home-greeting" id="homeGreeting" style="font-size:1.4rem;font-weight:800;letter-spacing:-.02em;">Bonjour ! 👋</div>
-          <div class="home-sub" style="color:var(--muted);font-size:.85rem;margin-top:2px;">Voici ce qui se passe sur Pomel. aujourd'hui</div>
+          <div class="home-greeting" id="homeGreeting">Bonjour ! 👋</div>
+          <div class="home-sub">Voici ce qui se passe sur Pomel. aujourd'hui</div>
+        </div>
+        <div id="homeGroupWidget" style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 14px;cursor:pointer;transition:border-color .2s;min-width:180px;" onclick="navToClassement('groupes')">
+          <span style="font-size:1rem;">🏅</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Mon groupe</div>
+            <div id="homeGroupName" style="font-weight:700;font-size:.85rem;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Chargement…</div>
+          </div>
+          <span style="font-size:.72rem;color:var(--muted);">▸</span>
         </div>
       </div>
 
-      <!-- Alertes urgentes -->
+      <!-- Alertes urgentes — bandeaux fins -->
       <div class="home-alerts" id="homeAlerts"></div>
 
-      <!-- Widget groupe -->
-      <div id="homeGroupWidget" style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;cursor:pointer;transition:border-color .2s;" onclick="navToClassement('groupes')">
-        <span style="font-size:1.1rem;">🏅</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Mon groupe</div>
-          <div id="homeGroupName" style="font-weight:700;font-size:.92rem;margin-top:2px;">Chargement…</div>
-        </div>
-        <span style="font-size:.75rem;color:var(--muted);">▸</span>
+      <!-- Bandeaux "actions pour toi" : quêtes / PFC / missions -->
+      <!-- 1. Quêtes reçues -->
+      <div class="home-alert-row" id="homeQuetesInCard" style="display:none; border-color:rgba(91,141,239,0.35); background:rgba(91,141,239,0.06);" onclick="navTo('quetes')">
+        <span class="home-alert-row-icon">⚔️</span>
+        <div class="home-alert-row-text" id="homeQuetesIn" style="color:#5b8def;">Tu as des quêtes à accomplir !</div>
+        <span class="home-alert-row-cta" style="color:#5b8def;">Voir ▸</span>
       </div>
 
+      <!-- 2. Quêtes créées à suivre -->
+      <div class="home-alert-row" id="homeQuetesOutCard" style="display:none; border-color:rgba(235,88,70,0.35); background:rgba(235,88,70,0.06);" onclick="navTo('quetes')">
+        <span class="home-alert-row-icon">🧭</span>
+        <div class="home-alert-row-text" id="homeQuetesOut" style="color:var(--primary);">Tes quêtes créées ont des nouvelles</div>
+        <span class="home-alert-row-cta" style="color:var(--primary);">Voir ▸</span>
+      </div>
+
+      <!-- 3. Défi PFC reçu -->
+      <div class="home-alert-row" id="homePFCCard" style="display:none; border-color:rgba(245,200,66,0.35); background:rgba(245,200,66,0.06);" onclick="navTo('pfc')">
+        <span class="home-alert-row-icon">🪨</span>
+        <div class="home-alert-row-text" id="homePFCStatus" style="color:var(--yellow);">Défi Pierre Feuille Ciseaux reçu !</div>
+        <span class="home-alert-row-cta" style="color:var(--yellow);">Jouer ▸</span>
+      </div>
+
+      <!-- 4. Mission acceptée en cours (je dois la faire) -->
+      <div class="home-alert-row" id="homeMissionDoingCard" style="display:none; border-color:rgba(245,200,66,0.45); background:rgba(245,200,66,0.08);" onclick="navTo('missions')">
+        <span class="home-alert-row-icon">🔥</span>
+        <div class="home-alert-row-text" id="homeMissionDoing" style="color:var(--yellow);">Tu as une mission en cours</div>
+        <span class="home-alert-row-cta" style="color:var(--yellow);">Accomplir ▸</span>
+      </div>
+
+      <!-- 5. Ma mission a été acceptée (je dois valider) -->
+      <div class="home-alert-row" id="homeMissionValidateCard" style="display:none; border-color:rgba(62,207,110,0.4); background:rgba(62,207,110,0.07);" onclick="navTo('missions')">
+        <span class="home-alert-row-icon">🏆</span>
+        <div class="home-alert-row-text" id="homeMissionValidate" style="color:var(--green);">Quelqu'un a accompli ta mission</div>
+        <span class="home-alert-row-cta" style="color:var(--green);">Valider ▸</span>
+      </div>
+
+      <!-- 6. Une demande d'achat au Marché Noir (je dois accepter/refuser) -->
+      <div class="home-alert-row" id="homeMnRequestCard" style="display:none; border-color:rgba(169,116,255,0.4); background:rgba(169,116,255,0.07);" onclick="navTo('marcheNoir')">
+        <span class="home-alert-row-icon">🕶️</span>
+        <div class="home-alert-row-text" id="homeMnRequest" style="color:#a974ff;">Demande d'achat sur un titre</div>
+        <span class="home-alert-row-cta" style="color:#a974ff;">Répondre ▸</span>
+      </div>
+
+      <!-- Grille principale : 3 colonnes équilibrées -->
       <div class="home-grid">
 
-        <!-- 1. Clicker stock plein (urgent, personnel) — full width -->
-        <div class="home-card home-card-full" id="homeClickerCard" style="display:none; border-color:var(--green); box-shadow:0 0 16px rgba(62,207,110,0.2); cursor:pointer;" onclick="navTo('clicker')">
-          <div class="home-card-title" style="color:var(--green);">🌱 Clicker — Stock prêt !</div>
-          <div id="homeClickerStatus"></div>
-        </div>
-
-        <!-- 2. Quêtes reçues (urgent, personnel) — full width -->
-        <div class="home-card home-card-full" id="homeQuetesInCard" style="display:none; border-color:#5b8def; box-shadow:0 0 16px rgba(91,141,239,0.15); cursor:pointer;" onclick="navTo('quetes')">
-          <div class="home-card-title" style="color:#5b8def;">⚔️ Quêtes reçues</div>
-          <div id="homeQuetesIn" class="home-bets-zone"></div>
-        </div>
-
-        <!-- 3. Quêtes créées (suivi personnel) — full width -->
-        <div class="home-card home-card-full" id="homeQuetesOutCard" style="display:none; border-color:var(--primary); box-shadow:0 0 16px var(--primary-glow); cursor:pointer;" onclick="navTo('quetes')">
-          <div class="home-card-title" style="color:var(--primary);">🧭 Mes quêtes créées</div>
-          <div id="homeQuetesOut" class="home-bets-zone"></div>
-        </div>
-
-        <!-- 3b. Défi PFC reçu (urgent, personnel) — full width -->
-        <div class="home-card home-card-full" id="homePFCCard" style="display:none; border-color:var(--yellow); box-shadow:0 0 16px rgba(245,200,66,0.15); cursor:pointer;" onclick="navTo('pfc')">
-          <div class="home-card-title" style="color:var(--yellow);">🪨 Pierre Feuille Ciseaux — Défi reçu !</div>
-          <div id="homePFCStatus" class="home-bets-zone"></div>
-        </div>
-
-        <!-- 4. Roulette (quotidien) — pleine largeur pour le CTA -->
-        <div class="home-card home-card-full home-roulette-status" id="homeRouletteCard" onclick="navTo('roulette')" style="cursor:pointer;">
-          <div class="home-card-title">🎰 Roulette Quotidienne</div>
-          <div id="homeRouletteStatus"></div>
-        </div>
-
-        <!-- 5. Proverbe du jour — 1 colonne, sous la roulette -->
-        <div class="home-card">
-          <div class="home-card-title">📜 Proverbe du Jour</div>
+        <!-- COLONNE 1 : Résumé du jour (Roulette + Proverbe fusionnés) -->
+        <div class="home-card" style="cursor:default;">
+          <div class="home-card-title">✨ Résumé du jour</div>
+          <div id="homeRouletteStatus" onclick="navTo('roulette')" style="cursor:pointer;"></div>
+          <div class="home-card-divider"></div>
+          <div class="home-card-subtitle">📜 Proverbe</div>
           <div id="homeProverbe" class="home-proverbe-zone"></div>
         </div>
 
-        <!-- 6. Hôtel des Ventes — span 2 -->
-        <div class="home-card home-card-span2" id="homeHotelCard" style="cursor:pointer;display:none;" onclick="navTo('hotel')">
-          <div class="home-card-title">🏨 Hôtel des Ventes</div>
-          <div id="homeHotelList" class="home-bets-zone"></div>
+        <!-- COLONNE 2 : Marché Noir — 3 derniers titres en vente -->
+        <div class="home-card" style="cursor:pointer;" onclick="navTo('marcheNoir')">
+          <div class="home-card-title">🕶️ Marché Noir</div>
+          <div id="homeMarcheNoir" class="home-mn-zone"></div>
         </div>
 
-        <!-- 7. Paris en cours — span 2 -->
-        <div class="home-card home-card-span2">
+        <!-- COLONNE 3 : Missions — 3 dernières missions disponibles -->
+        <div class="home-card" style="cursor:pointer;" onclick="navTo('missions')">
+          <div class="home-card-title">🎯 Missions</div>
+          <div id="homeMissions" class="home-missions-zone"></div>
+        </div>
+
+        <!-- Paris en cours — pleine largeur en bas -->
+        <div class="home-card home-card-full" style="cursor:pointer;" onclick="navTo('paris')">
           <div class="home-card-title">🎲 Paris en cours</div>
           <div id="homeBets" class="home-bets-zone"></div>
         </div>
 
-        <!-- 9. Chat du jour — 1 colonne -->
-        <div class="home-card">
-          <div class="home-card-title">💬 Chat</div>
-          <div id="homeLivePost" class="home-live-zone"></div>
+        <!-- Hôtel (masqué, conservé pour compatibilité) -->
+        <div class="home-card home-card-span2" id="homeHotelCard" style="cursor:pointer;display:none;" onclick="navTo('hotel')">
+          <div class="home-card-title">🏨 Hôtel des Ventes</div>
+          <div id="homeHotelList" class="home-bets-zone"></div>
         </div>
 
       </div>
@@ -6393,13 +6479,12 @@ async function renderHome() {
   // Run all sections in parallel
   await Promise.all([
     renderHomeGroup(),
-    renderHomeClicker(),
     renderHomeQuetes(),
     renderHomeRoulette(),
-    (typeof renderHomeHotel === 'function') ? renderHomeHotel() : Promise.resolve(),
     renderHomeProverbe(),
-    renderHomeLivePost(),
     renderHomeBets(),
+    renderHomeMarcheNoir(),
+    renderHomeMissions(),
   ]);
 
   // Déplacer les alertes urgentes dans la zone dédiée
@@ -6411,7 +6496,7 @@ function _moveUrgentCards() {
   if (!alertsZone) return;
   alertsZone.innerHTML = '';
   // Cards urgentes = celles avec display != none et qui ont une border colorée
-  const urgentIds = ['homeClickerCard','homeQuetesInCard','homePFCCard'];
+  const urgentIds = ['homeQuetesInCard','homeQuetesOutCard','homePFCCard','homeMissionDoingCard','homeMissionValidateCard','homeMnRequestCard'];
   urgentIds.forEach(id => {
     const card = document.getElementById(id);
     if (card && card.style.display !== 'none') {
@@ -6444,53 +6529,7 @@ async function renderHomeGroup() {
   }
 }
 
-async function renderHomeClicker() {
-  const card = document.getElementById('homeClickerCard');
-  const el   = document.getElementById('homeClickerStatus');
-  const saved = await dbGet('clicker/' + state.code);
-  if (!saved || !saved.upgrades || !saved.upgrades.autoClicker) {
-    card.style.display = 'none';
-    return;
-  }
-  // Compute max stock from saved upgrades
-  let maxStock = 1000;
-  if (saved.upgrades.stockExt)  maxStock = Math.max(maxStock, 2000);
-  if (saved.upgrades.stockExt2) maxStock = Math.max(maxStock, 5000);
-  if (saved.upgrades.stockExt3) maxStock = Math.max(maxStock, 10000);
-  if (saved.upgrades.secondFruit) maxStock += 1000;
-
-  // Compute offline production since lastSaved
-  let autoStock = Math.floor(saved.autoStock || 0);
-  if (saved.lastSaved) {
-    const elapsed = (Date.now() - new Date(saved.lastSaved).getTime()) / 1000;
-    const u = saved.upgrades;
-    const intervalSec = (u.autoSpeed || u.superSpeed || u.ultraSpeed) ? 1 : 2;
-    const fruitsUnlocked = u.secondFruit ? 2 : 1;
-    let ratePerFruit = 1;
-    if (u.superSpeed) ratePerFruit = 2;
-    if (u.ultraSpeed) ratePerFruit = 5;
-    const autoRate = fruitsUnlocked * ratePerFruit;
-    const ticks = Math.floor(elapsed / intervalSec);
-    autoStock = Math.min(maxStock, autoStock + ticks * autoRate);
-  }
-
-  if (autoStock < maxStock) {
-    card.style.display = 'none';
-    return;
-  }
-
-  card.style.display = 'block';
-  el.innerHTML = `
-    <div class="home-roulette-available">
-      <div class="home-roulette-dot" style="background:var(--green);box-shadow:0 0 10px var(--green);"></div>
-      <div class="home-roulette-text">
-        <strong style="color:var(--green);">📦 Stock auto-clicker plein ! (${autoStock.toLocaleString('fr-FR')} 🌱)</strong>
-        <span>Clique ici pour récupérer tes graines</span>
-      </div>
-      <button class="home-roulette-cta" style="background:var(--green);">Récupérer</button>
-    </div>
-  `;
-}
+// ── renderHomeClicker retirée (jeu masqué) ──
 
 async function renderHomeQuetes() {
   const allQuetes = await getAllQuetes();
@@ -6503,25 +6542,14 @@ async function renderHomeQuetes() {
   const inCard = document.getElementById('homeQuetesInCard');
   const inEl   = document.getElementById('homeQuetesIn');
   if (incoming.length) {
-    inCard.style.display = 'block';
-    inEl.innerHTML = '';
-    incoming.forEach(q => {
-      const statusLabel = q.status === 'pending' ? '⏳ En attente de ta réponse' : '🔥 En cours — à toi de jouer !';
-      const statusColor = q.status === 'pending' ? '#5b8def' : 'var(--yellow)';
-      const queteExpires = q.deadline ? new Date(q.deadline).getTime() : new Date(q.createdAt).getTime() + 7*24*3600*1000;
-      const div = document.createElement('div');
-      div.className = 'home-bet-row';
-      div.innerHTML = `
-        <div class="home-bet-desc">${escapeHTML(q.desc)}</div>
-        <div class="home-bet-meta">
-          <span>De <strong>${escapeHTML(q.creatorName)}</strong></span>
-          <span style="color:var(--green);font-weight:700;">+${q.reward.toLocaleString('fr-FR')} 🪙</span>
-          <span style="color:${statusColor};font-weight:600;">${statusLabel}</span>
-          <span class="timer-badge" data-expires="${queteExpires}">⏱ ...</span>
-        </div>
-      `;
-      inEl.appendChild(div);
-    });
+    inCard.style.display = 'flex';
+    const pendingCount = incoming.filter(q => q.status === 'pending').length;
+    const activeCount = incoming.filter(q => q.status === 'accepted').length;
+    let msg;
+    if (pendingCount && activeCount) msg = `${incoming.length} quête${incoming.length > 1 ? 's' : ''} : ${pendingCount} en attente, ${activeCount} en cours`;
+    else if (pendingCount) msg = `${pendingCount} nouvelle${pendingCount > 1 ? 's' : ''} quête${pendingCount > 1 ? 's' : ''} à accepter`;
+    else msg = `${activeCount} quête${activeCount > 1 ? 's' : ''} en cours — à toi de jouer !`;
+    inEl.textContent = msg;
   } else {
     inCard.style.display = 'none';
   }
@@ -6539,23 +6567,12 @@ async function renderHomeQuetes() {
   const outCard = document.getElementById('homeQuetesOutCard');
   const outEl   = document.getElementById('homeQuetesOut');
   if (created.length) {
-    outCard.style.display = 'block';
-    outEl.innerHTML = '';
-    created.forEach(q => {
-      const s = STATUS_LABELS[q.status] || { label: q.status, color: 'var(--muted)' };
-      const creatorBonus = Math.ceil(q.reward / 2);
-      const div = document.createElement('div');
-      div.className = 'home-bet-row';
-      div.innerHTML = `
-        <div class="home-bet-desc">${escapeHTML(q.desc)}</div>
-        <div class="home-bet-meta">
-          <span>Pour <strong>${escapeHTML(q.targetName)}</strong></span>
-          <span style="color:var(--green);font-weight:700;">${q.reward.toLocaleString('fr-FR')} 🪙 + ${creatorBonus} 🪙 pour toi</span>
-          <span style="color:${s.color};font-weight:600;">${s.label}</span>
-        </div>
-      `;
-      outEl.appendChild(div);
-    });
+    outCard.style.display = 'flex';
+    const acceptedCount = created.filter(q => q.status === 'accepted').length;
+    let msg;
+    if (acceptedCount) msg = `${created.length} quête${created.length > 1 ? 's' : ''} créée${created.length > 1 ? 's' : ''} · ${acceptedCount} en cours d'accomplissement`;
+    else msg = `${created.length} quête${created.length > 1 ? 's' : ''} créée${created.length > 1 ? 's' : ''} en attente de réponse`;
+    outEl.textContent = msg;
   } else {
     outCard.style.display = 'none';
   }
@@ -6563,7 +6580,8 @@ async function renderHomeQuetes() {
 
 async function renderHomeRoulette() {
   const el = document.getElementById('homeRouletteStatus');
-  const card = document.getElementById('homeRouletteCard');
+  if (!el) return;
+  const card = el.closest('.home-card'); // card parente (colonne "Résumé du jour")
   // Rafraîchir lastSpin depuis Firebase pour éviter un état local périmé
   try {
     const freshAcc = await getAccount(state.code);
@@ -6574,21 +6592,19 @@ async function renderHomeRoulette() {
   const beforeTime = now.getHours() < 9 || (now.getHours() === 9 && now.getMinutes() < 15);
 
   if (available) {
-    card.style.borderColor = 'var(--green)';
-    card.style.boxShadow = '0 0 20px rgba(62,207,110,0.2)';
+    if (card) { card.style.borderColor = 'var(--green)'; card.style.boxShadow = '0 0 20px rgba(62,207,110,0.2)'; }
     el.innerHTML = `
       <div class="home-roulette-available">
         <div class="home-roulette-dot"></div>
         <div class="home-roulette-text">
           <strong style="color:var(--green)">Tirage disponible !</strong>
-          <span>Clique ici pour tourner la roulette maintenant</span>
+          <span>Tourner la roulette</span>
         </div>
         <button class="home-roulette-cta">Tourner 🎰</button>
       </div>
     `;
   } else if (beforeTime) {
-    card.style.borderColor = '';
-    card.style.boxShadow = '';
+    if (card) { card.style.borderColor = ''; card.style.boxShadow = ''; }
     const t = new Date(); t.setHours(9,15,0,0);
     const diff = t - now;
     const h = Math.floor(diff/3600000);
@@ -6598,23 +6614,20 @@ async function renderHomeRoulette() {
         <div class="home-roulette-dot off"></div>
         <div class="home-roulette-text">
           <strong>Pas encore disponible</strong>
-          <span>La roulette ouvre à 9h15 — dans ${h > 0 ? h + 'h ' : ''}${m}min</span>
+          <span>Ouverture à 9h15 · ${h > 0 ? h + 'h ' : ''}${m}min</span>
         </div>
-        <button class="home-roulette-cta disabled" onclick="event.stopPropagation()">Bientôt…</button>
       </div>
     `;
   } else {
-    card.style.borderColor = '';
-    card.style.boxShadow = '';
+    if (card) { card.style.borderColor = ''; card.style.boxShadow = ''; }
     const next = nextSpinTime();
     el.innerHTML = `
       <div class="home-roulette-available">
         <div class="home-roulette-dot off"></div>
         <div class="home-roulette-text">
           <strong>Déjà tourné aujourd'hui</strong>
-          <span>Prochain tirage demain à ${next.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>
+          <span>Demain à ${next.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>
         </div>
-        <button class="home-roulette-cta disabled" onclick="event.stopPropagation()">Reviens demain</button>
       </div>
     `;
   }
@@ -6636,37 +6649,152 @@ async function renderHomeProverbe() {
   `;
 }
 
-async function renderHomeLivePost() {
-  const el = document.getElementById('homeLivePost');
+// ── renderHomeLivePost retirée (chat masqué de la home) ──
+
+// ── Marché Noir : 3 derniers titres en vente ──
+async function renderHomeMarcheNoir() {
+  const el = document.getElementById('homeMarcheNoir');
   if (!el) return;
-  const today = getTodayKey();
-  const rawData = await dbGet('discussion') || {};
-  const msgs = Object.values(rawData)
-    .filter(m => m.date === today)
+  // Le fichier marche_noir.js peut ne pas encore être chargé au tout premier render
+  if (typeof getAllMarcheNoirListings !== 'function') {
+    el.innerHTML = '<div class="home-empty">Chargement…</div>';
+    return;
+  }
+  const all = await getAllMarcheNoirListings();
+
+  // Bandeau d'alerte : demande d'achat en attente (je suis vendeur)
+  const myPendingRequests = all.filter(l => l.sellerCode === state.code && l.status === 'reserved');
+  const mnReqCard = document.getElementById('homeMnRequestCard');
+  const mnReqEl   = document.getElementById('homeMnRequest');
+  if (mnReqCard && mnReqEl) {
+    if (myPendingRequests.length) {
+      mnReqCard.style.display = 'flex';
+      const l = myPendingRequests[0];
+      const extra = myPendingRequests.length > 1 ? ` (+${myPendingRequests.length - 1} autre${myPendingRequests.length - 1 > 1 ? 's' : ''})` : '';
+      mnReqEl.textContent = `${l.requesterName || 'Quelqu\'un'} veut acheter « ${l.titleName} »${extra}`;
+    } else {
+      mnReqCard.style.display = 'none';
+    }
+  }
+
+  // Garder actifs ou réservés, trier par date, prendre les 3 plus récents
+  const sorted = all
+    .filter(l => l.status === 'active' || l.status === 'reserved')
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 3);
+  if (!sorted.length) {
+    el.innerHTML = '<div class="home-empty">Aucun titre en vente.</div>';
+    return;
+  }
+  el.innerHTML = '';
+  sorted.forEach(l => {
+    const isMine   = l.sellerCode === state.code;
+    const iOwn     = (state.ownedTitles || []).includes(l.titleId);
+    const reserved = l.status === 'reserved';
+    const badgeStyle = l.customColor && typeof titleBadgeStyle === 'function'
+      ? titleBadgeStyle({ customColor: l.customColor })
+      : '';
+    const div = document.createElement('div');
+    div.className = 'home-mn-row';
+    div.innerHTML = `
+      <div class="home-mn-row-title">
+        <span class="title-badge" style="${badgeStyle}">${escapeHTML(l.titleName)}</span>
+        ${isMine ? '<span class="mn-badge mine" style="font-size:.6rem;">Moi</span>' : ''}
+        ${iOwn && !isMine ? '<span class="mn-badge owned" style="font-size:.6rem;">Possédé</span>' : ''}
+      </div>
+      <div class="home-mn-row-meta">
+        <span>Par <strong>${escapeHTML(l.sellerName)}</strong></span>
+        <span class="home-mn-row-price">${l.price.toLocaleString('fr-FR')} 🪙</span>
+        ${reserved ? '<span class="home-mn-row-reserved">🔒 Réservé</span>' : ''}
+      </div>
+    `;
+    el.appendChild(div);
+  });
+}
 
-  if (!msgs.length) {
-    el.innerHTML = '<div class="home-live-empty">Aucun message aujourd\'hui.</div>';
+// ── Missions : ma mission en cours + 3 dernières + bandeaux d'alerte ──
+async function renderHomeMissions() {
+  const el = document.getElementById('homeMissions');
+  if (!el) return;
+  const all = await getAllMissions();
+
+  // Préparer les bandeaux d'alerte
+  const myAccepted = all.filter(m => m.acceptedBy === state.code && m.status === 'accepted');
+  const myToValidate = all.filter(m => m.creatorCode === state.code && m.status === 'accepted');
+
+  const doingCard = document.getElementById('homeMissionDoingCard');
+  const doingEl   = document.getElementById('homeMissionDoing');
+  if (doingCard && doingEl) {
+    if (myAccepted.length) {
+      doingCard.style.display = 'flex';
+      const m = myAccepted[0];
+      const descShort = m.desc.length > 60 ? m.desc.slice(0, 57) + '…' : m.desc;
+      doingEl.textContent = `Mission en cours : « ${descShort} » · ${m.reward.toLocaleString('fr-FR')} 🪙`;
+    } else {
+      doingCard.style.display = 'none';
+    }
+  }
+  const validateCard = document.getElementById('homeMissionValidateCard');
+  const validateEl   = document.getElementById('homeMissionValidate');
+  if (validateCard && validateEl) {
+    if (myToValidate.length) {
+      validateCard.style.display = 'flex';
+      const m = myToValidate[0];
+      validateEl.textContent = `${m.acceptedByName || 'Quelqu\'un'} a accompli ta mission « ${m.desc.length > 40 ? m.desc.slice(0, 37) + '…' : m.desc} » — à valider !`;
+    } else {
+      validateCard.style.display = 'none';
+    }
+  }
+
+  // Liste des 3 dernières missions disponibles (+ mes missions acceptées en priorité)
+  const activeMissions = all
+    .filter(m => m.status === 'open' || m.status === 'accepted')
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  // On met en priorité MA mission acceptée si elle existe, puis les 3 plus récentes (sans doublon)
+  const recentIds = new Set();
+  const display = [];
+  if (myAccepted.length) { display.push(myAccepted[0]); recentIds.add(myAccepted[0].id); }
+  for (const m of activeMissions) {
+    if (display.length >= 3) break;
+    if (recentIds.has(m.id)) continue;
+    display.push(m);
+    recentIds.add(m.id);
+  }
+
+  if (!display.length) {
+    el.innerHTML = '<div class="home-empty">Aucune mission en ce moment.</div>';
     return;
   }
 
-  el.innerHTML = msgs.map(msg => {
-    const nameClass = getNameColorClass(msg.authorColor || null);
-    const badgeDef = msg.authorBadge ? (resolveTitleDef(msg.authorBadge) || {}) : {};
-    const badge = badgeDef.emoji || '';
-    const likes = Object.keys(msg.likes || {}).length;
-    const time = new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    return `
-      <div class="home-live-post">
-        <div class="home-live-post-meta">
-          <span class="${nameClass}"><strong>${escapeHTML(msg.authorName)}</strong>${badge ? ' ' + badge : ''}</span>
-          <span>${time}</span>
-        </div>
-        <div class="home-live-post-text">${escapeHTML(msg.text)}</div>
-        ${likes > 0 ? `<span class="home-live-post-likes">👍 ${likes}</span>` : ''}
-      </div>`;
-  }).join('');
+  el.innerHTML = '';
+  display.forEach(m => {
+    const isMine = m.creatorCode === state.code;
+    const isAcceptedByMe = m.acceptedBy === state.code;
+    let cls = 'home-mission-row';
+    if (isAcceptedByMe) cls += ' accepted-by-me';
+    else if (isMine) cls += ' mine';
+
+    let statusLabel = '';
+    if (isAcceptedByMe) statusLabel = '<span class="home-mission-row-status accepted">🔥 À faire</span>';
+    else if (isMine && m.status === 'accepted') statusLabel = '<span class="home-mission-row-status accepted">À valider</span>';
+    else if (isMine) statusLabel = '<span class="home-mission-row-status mine">Ma mission</span>';
+    else if (m.status === 'accepted') statusLabel = '<span class="home-mission-row-status accepted">Réservée</span>';
+    else statusLabel = '<span class="home-mission-row-status open">Disponible</span>';
+
+    const descShort = m.desc.length > 80 ? m.desc.slice(0, 77) + '…' : m.desc;
+    const div = document.createElement('div');
+    div.className = cls;
+    div.innerHTML = `
+      <div class="home-mission-row-desc">${escapeHTML(descShort)}</div>
+      <div class="home-mission-row-meta">
+        <span>Par <strong>${escapeHTML(m.creatorName)}</strong></span>
+        <span class="home-mission-row-reward">+${m.reward.toLocaleString('fr-FR')} 🪙</span>
+        ${statusLabel}
+      </div>
+    `;
+    el.appendChild(div);
+  });
 }
 
 
@@ -9404,6 +9532,38 @@ async function checkNotifUpdates() {
         .reduce((max, l) => Math.max(max, new Date(l.createdAt).getTime()), 0);
       if (latest) setLatestContent('hotel', new Date(latest).toISOString());
     }
+    // Marché Noir — pastille si nouveau listing (pas le mien) OU demande d'achat sur mon listing
+    if (typeof getAllMarcheNoirListings === 'function') {
+      const mnItems = await getAllMarcheNoirListings();
+      let mnLatest = 0;
+      for (const l of (mnItems || [])) {
+        // Nouveau listing d'un autre joueur
+        if (l.sellerCode !== state.code && (l.status === 'active' || l.status === 'reserved')) {
+          mnLatest = Math.max(mnLatest, new Date(l.createdAt).getTime());
+        }
+        // Demande d'achat sur un de mes listings
+        if (l.sellerCode === state.code && l.status === 'reserved' && l.requestedAt) {
+          mnLatest = Math.max(mnLatest, new Date(l.requestedAt).getTime());
+        }
+      }
+      if (mnLatest) setLatestContent('marcheNoir', new Date(mnLatest).toISOString());
+    }
+    // Missions — pastille si nouvelle mission (pas la mienne) OU ma mission a été acceptée
+    if (typeof getAllMissions === 'function') {
+      const missions = await getAllMissions();
+      let missLatest = 0;
+      for (const m of (missions || [])) {
+        // Nouvelle mission créée par quelqu'un d'autre
+        if (m.creatorCode !== state.code && (m.status === 'open' || m.status === 'accepted')) {
+          missLatest = Math.max(missLatest, new Date(m.createdAt).getTime());
+        }
+        // Ma mission a été acceptée par quelqu'un
+        if (m.creatorCode === state.code && m.status === 'accepted' && m.acceptedAt) {
+          missLatest = Math.max(missLatest, new Date(m.acceptedAt).getTime());
+        }
+      }
+      if (missLatest) setLatestContent('missions', new Date(missLatest).toISOString());
+    }
     // Paris ouverts
     const bets = await getAllBets();
     if (bets && bets.length) {
@@ -9460,11 +9620,11 @@ async function checkNotifUpdates() {
     const pfcStatus = document.getElementById('homePFCStatus');
     if (pfcCard && pfcStatus) {
       if (pendingChallenges.length) {
-        pfcCard.style.display = '';
-        pfcStatus.innerHTML = pendingChallenges.map(c => {
-          const remaining = Math.max(0, Math.ceil((c.expiresAt - now) / 60000));
-          return `<div style="font-size:.85rem;color:var(--text);">⚔️ <strong>${escapeHTML(c.challengerName)}</strong> te défie ! <span style="color:var(--muted);font-size:.78rem;">⏱ ${remaining} min</span></div>`;
-        }).join('');
+        pfcCard.style.display = 'flex';
+        const names = pendingChallenges.map(c => c.challengerName).slice(0, 2).join(', ');
+        const more = pendingChallenges.length > 2 ? ` et ${pendingChallenges.length - 2} autre${pendingChallenges.length - 2 > 1 ? 's' : ''}` : '';
+        const label = pendingChallenges.length > 1 ? `${pendingChallenges.length} défis PFC reçus` : `Défi PFC de ${names}`;
+        pfcStatus.textContent = label + (more && pendingChallenges.length === 1 ? '' : ` · ${names}${more}`);
       } else {
         pfcCard.style.display = 'none';
       }
@@ -10527,8 +10687,10 @@ let _prevNotifState = {
   proverbeDate: '',
   missionsAccepted: new Set(), // missions dont l'acceptation par quelqu'un a déjà été notifiée au créateur
   missionsDone: new Set(),     // missions validées déjà notifiées à l'accomplisseur
+  missionsNew: new Set(),      // nouvelles missions déjà notifiées (tous les joueurs)
   mnRequests: new Set(),       // listings MN dont la demande a été notifiée au vendeur (id|requesterCode)
   mnDecisions: new Set(),      // listings MN dont la décision a été notifiée à l'acheteur (id|status)
+  mnNew: new Set(),            // nouveaux listings MN déjà notifiés (tous les joueurs)
 };
 
 async function checkPushNotifications() {
@@ -10551,6 +10713,14 @@ async function checkPushNotifications() {
     // ── Missions : ma mission a été acceptée par quelqu'un ──
     const allM = await getAllMissions();
     for (const m of allM) {
+      // Notifier TOUS les joueurs (sauf le créateur) d'une nouvelle mission fraîchement créée
+      if (m.creatorCode !== state.code && m.status === 'open' && !_prevNotifState.missionsNew.has(m.id)) {
+        if (m.createdAt && now - new Date(m.createdAt).getTime() < 120000) {
+          const descShort = m.desc.length > 50 ? m.desc.slice(0, 47) + '…' : m.desc;
+          showNotif('🎯', 'Nouvelle mission !', `${escapeHTML(m.creatorName)} a lancé : « ${escapeHTML(descShort)} » · ${m.reward.toLocaleString('fr-FR')} 🪙`, 'quete', () => navTo('missions'));
+        }
+        _prevNotifState.missionsNew.add(m.id);
+      }
       // Notifier le créateur quand quelqu'un accepte sa mission
       if (m.creatorCode === state.code && m.status === 'accepted' && m.acceptedBy) {
         const key = m.id + '|' + m.acceptedBy;
@@ -10574,6 +10744,13 @@ async function checkPushNotifications() {
     if (typeof getAllMarcheNoirListings === 'function') {
       const allMN = await getAllMarcheNoirListings();
       for (const l of allMN) {
+        // Notifier TOUS les joueurs (sauf le vendeur) d'un nouveau listing fraîchement créé
+        if (l.sellerCode !== state.code && l.status === 'active' && !_prevNotifState.mnNew.has(l.id)) {
+          if (l.createdAt && now - new Date(l.createdAt).getTime() < 120000) {
+            showNotif('🕶️', 'Nouveau titre en vente !', `${escapeHTML(l.sellerName)} vend "${escapeHTML(l.titleName)}" pour ${l.price.toLocaleString('fr-FR')} 🪙`, 'quete', () => navTo('marcheNoir'));
+          }
+          _prevNotifState.mnNew.add(l.id);
+        }
         // Notifier le vendeur quand quelqu'un fait une demande
         if (l.sellerCode === state.code && l.status === 'reserved' && l.requesterCode) {
           const key = l.id + '|' + l.requesterCode;
