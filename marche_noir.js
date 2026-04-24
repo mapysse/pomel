@@ -60,6 +60,25 @@ function _getMyOwnedTitles() {
   return titles;
 }
 
+// Met à jour l'aperçu du titre sélectionné (badge visuel sous le select)
+function _mnUpdateTitlePreview() {
+  const selectEl = document.getElementById('mnTitleSelect');
+  const previewEl = document.getElementById('mnTitlePreview');
+  if (!selectEl || !previewEl) return;
+  const tid = selectEl.value;
+  if (!tid) { previewEl.innerHTML = ''; return; }
+  const def = resolveTitleDef(tid);
+  if (!def) { previewEl.innerHTML = ''; return; }
+  const source = tid.startsWith('custom_') ? 'custom' : 'shop';
+  previewEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-glass);border:1px solid var(--border-soft);border-radius:8px;">
+      <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Aperçu :</span>
+      <span class="title-badge">${escapeHTML(def.name)}</span>
+      <span class="mn-badge ${source === 'custom' ? 'hotel' : 'shop'}">${source === 'custom' ? 'Hôtel' : 'Boutique'}</span>
+    </div>
+  `;
+}
+
 // Nettoyer les annonces archivées trop anciennes
 async function _cleanupMarcheNoir() {
   const all = await getAllMarcheNoirListings();
@@ -81,30 +100,41 @@ async function renderMarcheNoir() {
   const all = await getAllMarcheNoirListings();
 
   // ─ Sélecteur "Mes titres à mettre en vente" ─
-  const myTitlesEl = document.getElementById('mnMyTitles');
-  if (myTitlesEl) {
+  const selectEl = document.getElementById('mnTitleSelect');
+  const previewEl = document.getElementById('mnTitlePreview');
+  if (selectEl) {
     const owned = _getMyOwnedTitles();
     const alreadyListed = await _getMyActivelyListedTitleIds();
     const available = owned.filter(t => !alreadyListed.has(t.id));
 
+    // Mémoriser le titre choisi pour re-sélectionner après un re-render
+    const prevSelected = selectEl.value;
+
+    selectEl.innerHTML = '';
     if (!owned.length) {
-      myTitlesEl.innerHTML = '<div class="mn-empty-titles">Tu n\'as aucun titre à vendre. Achètes-en à la Boutique !</div>';
+      selectEl.innerHTML = '<option value="">Aucun titre — achètes-en à la Boutique !</option>';
+      selectEl.disabled = true;
     } else if (!available.length) {
-      myTitlesEl.innerHTML = '<div class="mn-empty-titles">Tous tes titres sont déjà en vente.</div>';
+      selectEl.innerHTML = '<option value="">Tous tes titres sont déjà en vente</option>';
+      selectEl.disabled = true;
     } else {
-      myTitlesEl.innerHTML = '';
-      available.forEach((t, i) => {
-        const row = document.createElement('label');
-        row.className = 'mn-select-row';
-        row.style.cssText += 'cursor:pointer;flex-direction:row;align-items:center;gap:10px;';
-        row.innerHTML = `
-          <input type="radio" name="mnTitleChoice" value="${escapeHTML(t.id)}" ${i === 0 ? 'checked' : ''} style="margin:0;" />
-          <span class="title-badge" style="flex:1;">${escapeHTML(t.name)}</span>
-          <span class="mn-badge ${t.source === 'custom' ? 'hotel' : 'shop'}">${t.source === 'custom' ? 'Hôtel' : 'Boutique'}</span>
-        `;
-        myTitlesEl.appendChild(row);
+      selectEl.disabled = false;
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = `— Choisir parmi tes ${available.length} titre${available.length > 1 ? 's' : ''} —`;
+      selectEl.appendChild(placeholder);
+      available.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.name} ${t.source === 'custom' ? '(Hôtel)' : '(Boutique)'}`;
+        selectEl.appendChild(opt);
       });
+      // Re-sélectionner le titre précédent si toujours disponible
+      if (prevSelected && available.some(t => t.id === prevSelected)) {
+        selectEl.value = prevSelected;
+      }
     }
+    _mnUpdateTitlePreview();
   }
 
   // ─ Mes annonces actives ou réservées (vendeur) ─
@@ -231,14 +261,13 @@ function _buildMarcheNoirCard(l, role) {
 
 // ── CRÉER UNE ANNONCE ─────────────────────────────
 async function handleCreateMarcheNoirListing() {
-  const choiceEl = document.querySelector('input[name="mnTitleChoice"]:checked');
+  const selectEl = document.getElementById('mnTitleSelect');
+  const titleId = selectEl ? selectEl.value : '';
   const price = parseInt(document.getElementById('mnPriceInput').value);
 
-  if (!choiceEl) { setAlert('mnCreateAlert', 'Sélectionne un titre à vendre !', 'error'); return; }
+  if (!titleId) { setAlert('mnCreateAlert', 'Sélectionne un titre à vendre !', 'error'); return; }
   if (!price || price < 1) { setAlert('mnCreateAlert', 'Entre un prix valide !', 'error'); return; }
   if (price > 999999) { setAlert('mnCreateAlert', 'Prix maximum : 999 999 Pomels.', 'error'); return; }
-
-  const titleId = choiceEl.value;
 
   // Vérifier qu'on possède toujours le titre
   if (!(state.ownedTitles || []).includes(titleId)) {

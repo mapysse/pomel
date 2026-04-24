@@ -1428,18 +1428,6 @@
     transition: all .2s;
   }
   .mn-btn-withdraw:hover { border-color: var(--red); color: var(--red); }
-  .mn-select-row {
-    display: flex; flex-direction: column; gap: 4px;
-    padding: 10px 12px; border-radius: 8px;
-    background: var(--surface-glass); border: 1px solid var(--border-soft);
-    transition: all .15s;
-  }
-  .mn-select-row:hover { border-color: var(--border-strong); }
-  .mn-empty-titles {
-    font-size: .85rem; color: var(--muted); text-align: center;
-    padding: 16px; border: 1px dashed var(--border); border-radius: 8px;
-    background: var(--surface-glass);
-  }
   .mn-item.reserved {
     border-color: rgba(245,200,66,0.4);
     background: linear-gradient(135deg, rgba(245,200,66,0.08), rgba(20,20,28,0.4));
@@ -3134,9 +3122,10 @@
         <h3>Mettre un titre en vente</h3>
         <div class="form-group">
           <label>Choisis un titre à vendre</label>
-          <div id="mnMyTitles" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
-            <div class="mn-empty-titles">Chargement…</div>
-          </div>
+          <select id="mnTitleSelect" class="quete-select" onchange="_mnUpdateTitlePreview()">
+            <option value="">Chargement…</option>
+          </select>
+          <div id="mnTitlePreview" style="margin-top:10px;"></div>
         </div>
         <div class="form-group">
           <label>Prix de vente (Pomels)</label>
