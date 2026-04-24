@@ -1387,6 +1387,90 @@
   .hotel-badge-mine { font-size: .62rem; font-weight: 700; background: rgba(235,88,70,0.15); color: var(--primary); border: 1px solid rgba(235,88,70,0.3); border-radius: 4px; padding: 2px 6px; }
   .hotel-badge-owned { font-size: .62rem; font-weight: 700; background: rgba(62,207,110,0.15); color: var(--green); border: 1px solid rgba(62,207,110,0.3); border-radius: 4px; padding: 2px 6px; }
 
+  /* ── MARCHÉ NOIR ──────────────────────────────── */
+  .mn-wrap { display: flex; flex-direction: column; gap: 24px; }
+  .mn-list { display: flex; flex-direction: column; gap: 12px; }
+  .mn-item {
+    background: linear-gradient(135deg, rgba(20,20,28,0.6), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 22px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap;
+    min-width: 0; overflow: hidden;
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-highlight);
+    transition: all .2s;
+    position: relative;
+  }
+  .mn-item::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(120,120,150,0.4), transparent);
+    pointer-events: none;
+  }
+  .mn-item:hover { border-color: rgba(160,160,200,0.35); transform: translateY(-1px); }
+  .mn-item.mine { border-color: rgba(235,88,70,0.4); background: linear-gradient(135deg, rgba(235,88,70,0.08), rgba(20,20,28,0.4)); box-shadow: 0 0 0 1px var(--primary-subtle), var(--glass-highlight); }
+  .mn-item.sold { opacity: .55; }
+  .mn-item-info { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+  .mn-item-name { font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mn-item-seller { font-size: .78rem; color: var(--muted); }
+  .mn-item-source { font-size: .7rem; color: var(--muted); font-style: italic; }
+  .mn-item-date   { font-size: .7rem; color: var(--muted); font-family: 'Space Mono', monospace; }
+  .mn-item-price  { font-family: 'Space Mono', monospace; font-size: 1rem; font-weight: 700; color: var(--yellow); white-space: nowrap; }
+  .mn-badge       { font-size: .62rem; font-weight: 700; border-radius: 4px; padding: 2px 6px; }
+  .mn-badge.mine  { background: rgba(235,88,70,0.15);  color: var(--primary); border: 1px solid rgba(235,88,70,0.3); }
+  .mn-badge.owned { background: rgba(62,207,110,0.15); color: var(--green);   border: 1px solid rgba(62,207,110,0.3); }
+  .mn-badge.hotel { background: rgba(78,201,217,0.12); color: var(--accent);  border: 1px solid rgba(78,201,217,0.3); }
+  .mn-badge.shop  { background: rgba(245,200,66,0.12); color: var(--yellow);  border: 1px solid rgba(245,200,66,0.3); }
+  .mn-btn-withdraw {
+    background: transparent; border: 1px solid var(--muted); color: var(--muted);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-size: .8rem; font-weight: 700;
+    transition: all .2s;
+  }
+  .mn-btn-withdraw:hover { border-color: var(--red); color: var(--red); }
+  .mn-select-row {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 12px; border-radius: 8px;
+    background: var(--surface-glass); border: 1px solid var(--border-soft);
+    transition: all .15s;
+  }
+  .mn-select-row:hover { border-color: var(--border-strong); }
+  .mn-empty-titles {
+    font-size: .85rem; color: var(--muted); text-align: center;
+    padding: 16px; border: 1px dashed var(--border); border-radius: 8px;
+    background: var(--surface-glass);
+  }
+  .mn-item.reserved {
+    border-color: rgba(245,200,66,0.4);
+    background: linear-gradient(135deg, rgba(245,200,66,0.08), rgba(20,20,28,0.4));
+    box-shadow: 0 0 24px rgba(245,200,66,0.12), var(--glass-highlight);
+  }
+  .mn-reserved-info {
+    font-size: .78rem; font-weight: 600; color: var(--yellow);
+    background: rgba(245,200,66,0.08);
+    border: 1px solid rgba(245,200,66,0.25);
+    border-radius: 8px; padding: 8px 12px; margin-top: 4px;
+  }
+  .mn-btn-accept {
+    background: var(--green); color: #fff; border: none;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-size: .8rem; font-weight: 700;
+    transition: all .2s;
+  }
+  .mn-btn-accept:hover { transform: translateY(-1px); filter: brightness(1.1); }
+  .mn-btn-refuse {
+    background: transparent; border: 1px solid var(--red); color: var(--red);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-size: .8rem; font-weight: 700;
+    transition: all .2s;
+  }
+  .mn-btn-refuse:hover { background: var(--red); color: #fff; }
+  .mn-btn-want {
+    background: linear-gradient(135deg, var(--yellow), #e8a92c) !important;
+    color: #000 !important; font-weight: 800 !important;
+  }
+  .mn-btn-want:hover { filter: brightness(1.1); }
+
   /* JARDIN + CLICKER — styles dans clicker_jardin.js */
   /* SNAKE — styles dans snake.js */
 
@@ -2745,9 +2829,13 @@
         <span class="sidenav-item-icon">🛒</span>
         <span class="sidenav-item-label">Boutique</span>
       </button>
-      <button class="sidenav-item" id="snav-hotel" onclick="navTo('hotel')">
+      <button class="sidenav-item" id="snav-hotel" onclick="navTo('hotel')" style="display:none;">
         <span class="sidenav-item-icon">🏨</span>
         <span class="sidenav-item-label">Hôtel des Ventes</span>
+      </button>
+      <button class="sidenav-item" id="snav-marche-noir" onclick="navTo('marcheNoir')">
+        <span class="sidenav-item-icon">🕶️</span>
+        <span class="sidenav-item-label">Marché Noir</span>
       </button>
       </details>
 
@@ -2930,7 +3018,7 @@
         </div>
 
         <!-- 6. Hôtel des Ventes — span 2 -->
-        <div class="home-card home-card-span2" id="homeHotelCard" style="cursor:pointer;" onclick="navTo('hotel')">
+        <div class="home-card home-card-span2" id="homeHotelCard" style="cursor:pointer;display:none;" onclick="navTo('hotel')">
           <div class="home-card-title">🏨 Hôtel des Ventes</div>
           <div id="homeHotelList" class="home-bets-zone"></div>
         </div>
@@ -3027,6 +3115,50 @@
       <div>
         <h3 style="font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;">Titres disponibles</h3>
         <div id="hotelList" class="hotel-list">
+          <div class="bet-empty">Chargement…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MARCHÉ NOIR -->
+  <div class="page" id="page-marcheNoir">
+    <div class="mn-wrap">
+      <div>
+        <div class="section-title">🕶️ Marché Noir</div>
+        <div class="section-sub">Revends tes titres à d'autres joueurs. Les acheteurs envoient une demande — c'est toi qui choisis à qui vendre !</div>
+      </div>
+
+      <!-- Mettre en vente -->
+      <div class="bet-create-card" id="mnCreateZone">
+        <h3>Mettre un titre en vente</h3>
+        <div class="form-group">
+          <label>Choisis un titre à vendre</label>
+          <div id="mnMyTitles" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
+            <div class="mn-empty-titles">Chargement…</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Prix de vente (Pomels)</label>
+          <input type="number" id="mnPriceInput" placeholder="ex: 1000" min="1" max="999999" />
+        </div>
+        <div id="mnCreateAlert" class="alert"></div>
+        <button class="btn-primary" id="mnCreateBtn" onclick="handleCreateMarcheNoirListing()">Mettre en vente 🕶️</button>
+        <div style="font-size:.72rem;color:var(--muted);line-height:1.5;">
+          ℹ️ Quand un joueur clique sur "Je veux !", ses Pomels sont réservés et tu reçois une demande à valider. Tu peux accepter ou refuser — s'il est refusé, il est remboursé. Tu peux continuer à afficher ton titre tant qu'il n'est pas vendu.
+        </div>
+      </div>
+
+      <!-- Mes annonces actives -->
+      <div id="mnMyListingsSection" style="display:none;">
+        <h3 style="font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;">Mes annonces en cours</h3>
+        <div id="mnMyListings" class="mn-list"></div>
+      </div>
+
+      <!-- Listings actifs des autres -->
+      <div>
+        <h3 style="font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;">Titres en vente</h3>
+        <div id="mnList" class="mn-list">
           <div class="bet-empty">Chargement…</div>
         </div>
       </div>
@@ -4453,11 +4585,7 @@ async function saveBet(bet) { await dbSet('bets/' + bet.id, bet); }
 async function deleteBet(id) { await dbDelete('bets/' + id); }
 async function getAllBets() { return dbGetAll('bets'); }
 
-// ── HOTEL HELPERS ─────────────────────────────────
-async function getHotelListing(id) { return dbGet('hotel/' + id); }
-async function saveHotelListing(item) { await dbSet('hotel/' + item.id, item); }
-async function deleteHotelListing(id) { await dbDelete('hotel/' + id); }
-async function getAllHotelListings() { return dbGetAll('hotel'); }
+// ── HOTEL HELPERS — code extrait dans hotel.js ────
 
 // ── QUÊTE HELPERS ─────────────────────────────────
 async function getQuete(id) { return dbGet('quetes/' + id); }
@@ -4853,7 +4981,7 @@ _modalObserver.observe(document.body, { childList: true });
 const DROPDOWN_MAP = {
   // roulette est standalone — pas de dropdown trigger à mettre en surbrillance
   snake: 'games', g2048: 'games', clicker: 'games', jardin: 'games',
-  boutique: 'commerce', hotel: 'commerce',
+  boutique: 'commerce', hotel: 'commerce', marcheNoir: 'commerce',
   classement: 'classement',
   profils: 'social', quetes: 'social', missions: 'social', paris: 'social', proverbe: 'social', live: 'social',
   monprofil: 'profil', banque: 'profil',
@@ -4971,6 +5099,7 @@ function _onPageLoad(id) {
   if (id === 'paris') { renderBets(); markPageSeen('paris'); }
   if (id === 'boutique') { _shopCurrentTab = 'buy'; if (typeof switchShopTab === 'function') switchShopTab('buy'); }
   if (id === 'hotel') { renderHotel(); markPageSeen('hotel'); }
+  if (id === 'marcheNoir') { renderMarcheNoir(); markPageSeen('marcheNoir'); }
   if (id === 'proverbe') { renderProverbe(); markPageSeen('proverbe'); }
   if (id === 'quetes') renderQuetes();
   if (id === 'missions') renderMissions();
@@ -6474,49 +6603,7 @@ async function renderHomeRoulette() {
   }
 }
 
-async function renderHomeHotel() {
-  const el = document.getElementById('homeHotelList');
-  if (!el) return;
-  el.innerHTML = '<div class="home-empty">Chargement…</div>';
-  const all = await getAllHotelListings();
-  // Nettoyer les expirés
-  const now = Date.now();
-  const active = all.filter(l => now - new Date(l.createdAt).getTime() < 24 * 3600 * 1000);
-  if (!active.length) {
-    el.innerHTML = '<div class="home-empty">Aucun titre en vente pour le moment.</div>';
-    return;
-  }
-  // Les 4 plus récents
-  const recent = [...active].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 4);
-  el.innerHTML = '';
-  recent.forEach(item => {
-    const owned = (state.ownedTitles || []).includes('custom_' + item.id);
-    const isMine = item.creatorCode === state.code;
-    const canAfford = state.balance >= item.price;
-    const div = document.createElement('div');
-    div.className = 'home-bet-row';
-    div.innerHTML = `
-      <div class="home-bet-desc">
-        <span class="title-badge">${escapeHTML(item.titleName)}</span>
-        ${isMine ? ' <span style="font-size:.7rem;color:var(--muted);">(mon titre)</span>' : ''}
-        ${owned && !isMine ? ' <span style="font-size:.7rem;color:var(--green);">✅ Possédé</span>' : ''}
-      </div>
-      <div class="home-bet-meta">
-        <span>Par <strong>${escapeHTML(item.creatorName)}</strong></span>
-        <span style="color:var(--primary);font-weight:700;">${item.price.toLocaleString('fr-FR')} 🪙</span>
-        <span>${timeLeft(item.createdAt)}</span>
-        ${!isMine && !owned ? `<span style="color:${canAfford ? 'var(--green)' : 'var(--muted)'};font-size:.78rem;font-weight:600;">${canAfford ? '✓ Tu peux acheter' : '✗ Solde insuffisant'}</span>` : ''}
-      </div>
-    `;
-    el.appendChild(div);
-  });
-  if (active.length > 4) {
-    const more = document.createElement('div');
-    more.style.cssText = 'font-size:.78rem;color:var(--muted);text-align:center;padding:6px 0;';
-    more.textContent = `+ ${active.length - 4} autre${active.length - 4 > 1 ? 's' : ''} titre${active.length - 4 > 1 ? 's' : ''} en vente…`;
-    el.appendChild(more);
-  }
-}
+// ── renderHomeHotel — code extrait dans hotel.js ──
 
 async function renderHomeProverbe() {
   const el = document.getElementById('homeProverbe');
@@ -6678,171 +6765,7 @@ async function g2048RenderLb() {
 }
 
 // ── 2048 WEEKLY + CONTRÔLES — code extrait dans g2048.js ──
-// ── HOTEL DES VENTES ─────────────────────────────
-async function cleanupHotelListings() {
-  const all = await getAllHotelListings();
-  const now = Date.now();
-  for (const item of all) {
-    if (now - new Date(item.createdAt).getTime() > 24 * 3600 * 1000) {
-      await deleteHotelListing(item.id);
-    }
-  }
-}
-
-async function handleCreateHotelListing() {
-  const titleName = document.getElementById('hotelTitleInput').value.trim();
-  const price     = parseInt(document.getElementById('hotelPriceInput').value);
-
-  if (!titleName)          { setAlert('hotelCreateAlert', 'Donne un nom à ton titre !', 'error'); return; }
-  if (titleName.length > 50) { setAlert('hotelCreateAlert', 'Le titre ne peut pas dépasser 50 caractères !', 'error'); return; }
-  if (!price || price < 1) { setAlert('hotelCreateAlert', 'Entre un prix valide !', 'error'); return; }
-
-  // One listing per day per user
-  await cleanupHotelListings();
-  const all = await getAllHotelListings();
-  const today = getTodayKey();
-  const alreadyToday = all.find(l => l.creatorCode === state.code && l.createdAt.startsWith(today));
-  if (alreadyToday) { setAlert('hotelCreateAlert', 'Tu as déjà mis un titre en vente aujourd\'hui !', 'error'); return; }
-
-  const id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
-  const listing = {
-    id, titleName, price,
-    creatorCode: state.code,
-    creatorName: state.name,
-    createdAt: new Date().toISOString(),
-    buyers: [],  // list of codes who bought
-  };
-  await saveHotelListing(listing);
-  document.getElementById('hotelTitleInput').value = '';
-  document.getElementById('hotelPriceInput').value = '';
-  setAlert('hotelCreateAlert', '✅ Titre mis en vente pour 24h !', 'success');
-  setTimeout(() => { document.getElementById('hotelCreateAlert').className = 'alert'; }, 3000);
-  checkNotifUpdates();
-  renderHotel();
-}
-
-async function buyHotelListing(listingId) {
-  const listing = await getHotelListing(listingId);
-  if (!listing) { alert('Ce titre n\'est plus disponible.'); renderHotel(); return; }
-
-  // Check already bought
-  if ((listing.buyers || []).includes(state.code)) { alert('Tu possèdes déjà ce titre !'); return; }
-  // Creator can't buy their own
-  if (listing.creatorCode === state.code) { alert('Tu ne peux pas acheter ton propre titre !'); return; }
-  // Check balance
-  if (state.balance < listing.price) { alert(`Solde insuffisant ! Il te faut ${listing.price.toLocaleString('fr-FR')} Pomels.`); return; }
-
-  // Débiter l'acheteur atomiquement
-  const hotelBuyerUpd = await addBalanceTransaction(state.code, -listing.price, {
-    type: 'hotel', desc: `Titre acheté : "${listing.titleName}" (Hôtel des Ventes)`, amount: -listing.price, date: new Date().toISOString()
-  });
-  if (hotelBuyerUpd) {
-    state = migrateAccount(hotelBuyerUpd);
-  } else {
-    alert('Erreur réseau — réessaie dans quelques secondes.');
-    return;
-  }
-
-  // Add custom title to buyer's owned titles
-  const customId = 'custom_' + listingId;
-  if (!state.ownedTitles) state.ownedTitles = [];
-  if (!state.ownedTitles.includes(customId)) state.ownedTitles.push(customId);
-
-  // Store custom title definition locally in account
-  if (!state.customTitles) state.customTitles = {};
-  state.customTitles[customId] = { id: customId, name: listing.titleName, type: 'title' };
-
-  await saveAccount(state);
-
-  // Créditer le vendeur atomiquement
-  await addBalanceTransaction(listing.creatorCode, listing.price, {
-    type: 'hotel', desc: `Titre vendu : "${listing.titleName}"`, amount: listing.price, date: new Date().toISOString()
-  });
-
-  // Mark buyer in listing
-  listing.buyers = listing.buyers || [];
-  listing.buyers.push(state.code);
-  await saveHotelListing(listing);
-
-  refreshUI();
-  setAlert('hotelCreateAlert', `✅ Titre "${listing.titleName}" acheté et ajouté à tes paramètres !`, 'success');
-  setTimeout(() => { document.getElementById('hotelCreateAlert').className = 'alert'; }, 4000);
-  renderHotel();
-}
-
-function timeLeft(createdAt) {
-  const expiresAt = new Date(createdAt).getTime() + 24 * 3600 * 1000;
-  const diff = expiresAt - Date.now();
-  if (diff <= 0) return 'Expiré';
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return `⏳ ${h}h ${m}min`;
-}
-
-async function renderHotel() {
-  await cleanupHotelListings();
-  const all = await getAllHotelListings();
-  const list = document.getElementById('hotelList');
-  list.innerHTML = '';
-
-  // Check if user already posted today
-  const today = getTodayKey();
-  const alreadyToday = all.find(l => l.creatorCode === state.code && l.createdAt.startsWith(today));
-  const createZone = document.getElementById('hotelCreateZone');
-  if (alreadyToday) {
-    createZone.style.opacity = '.5';
-    createZone.style.pointerEvents = 'none';
-    createZone.querySelector('h3').textContent = 'Titre en vente (1 par jour max — reviens demain !)';
-  } else {
-    createZone.style.opacity = '';
-    createZone.style.pointerEvents = '';
-    createZone.querySelector('h3').textContent = 'Mettre en vente un titre';
-  }
-
-  const sorted = [...all].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  if (!sorted.length) {
-    list.innerHTML = '<div class="bet-empty">Aucun titre en vente pour le moment.</div>';
-    return;
-  }
-
-  sorted.forEach(item => {
-    const isMine   = item.creatorCode === state.code;
-    const alreadyBought = (item.buyers || []).includes(state.code);
-    // Check if owned via ownedTitles
-    const customId = 'custom_' + item.id;
-    const owned    = (state.ownedTitles || []).includes(customId);
-    const canAfford = state.balance >= item.price;
-
-    const div = document.createElement('div');
-    div.className = 'hotel-item' + (isMine ? ' mine' : '') + (owned ? ' owned' : '');
-
-    let actionBtn = '';
-    if (isMine) {
-      actionBtn = '<span class="hotel-badge-mine">Mon titre</span>';
-    } else if (owned) {
-      actionBtn = '<button class="btn-buy owned-btn" disabled>✅ Possédé</button>';
-    } else {
-      actionBtn = `<button class="btn-buy" ${!canAfford ? 'disabled title="Solde insuffisant"' : ''} onclick="buyHotelListing('${item.id}')">${canAfford ? 'Acheter' : 'Pas assez'}</button>`;
-    }
-
-    div.innerHTML = `
-      <div class="hotel-item-info">
-        <div class="hotel-item-name">
-          <span class="title-badge">${escapeHTML(item.titleName)}</span>
-          ${isMine ? '<span class="hotel-badge-mine">Moi</span>' : ''}
-          ${owned && !isMine ? '<span class="hotel-badge-owned">Possédé</span>' : ''}
-        </div>
-        <div class="hotel-item-creator">Par <strong>${escapeHTML(item.creatorName)}</strong> · ${(item.buyers||[]).length} acheteur${(item.buyers||[]).length > 1 ? 's' : ''}</div>
-        <div class="hotel-item-expires">${timeLeft(item.createdAt)}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
-        <span class="hotel-item-price">${item.price.toLocaleString('fr-FR')} 🪙</span>
-        ${actionBtn}
-      </div>
-    `;
-    list.appendChild(div);
-  });
-}
+// ── HOTEL DES VENTES — code extrait dans hotel.js ──
 
 // ── QUÊTES ──────────────────────────────────────
 // Statuses: pending → accepted / refused → done
@@ -8783,7 +8706,9 @@ function renderHistory() {
       : h.type === 'snake'    ? '🐍'
       : h.type === '2048'     ? '🔢'
       : h.type === 'hotel'    ? '🏨'
+      : h.type === 'marche_noir' ? '🕶️'
       : h.type === 'quete'    ? '⚔️'
+      : h.type === 'mission'  ? '🎯'
       : h.type === 'clicker'  ? '🌱'
       : h.type === 'jardin'   ? '🌸'
       : h.type === 'streak'   ? '🔥'
@@ -10585,6 +10510,8 @@ let _prevNotifState = {
   proverbeDate: '',
   missionsAccepted: new Set(), // missions dont l'acceptation par quelqu'un a déjà été notifiée au créateur
   missionsDone: new Set(),     // missions validées déjà notifiées à l'accomplisseur
+  mnRequests: new Set(),       // listings MN dont la demande a été notifiée au vendeur (id|requesterCode)
+  mnDecisions: new Set(),      // listings MN dont la décision a été notifiée à l'acheteur (id|status)
 };
 
 async function checkPushNotifications() {
@@ -10623,6 +10550,35 @@ async function checkPushNotifications() {
           showNotif('🏆', 'Mission validée !', `${escapeHTML(m.creatorName)} a validé ta mission — tu reçois ${m.reward.toLocaleString('fr-FR')} 🪙 !`, 'quete', () => navTo('missions'));
         }
         _prevNotifState.missionsDone.add(m.id);
+      }
+    }
+
+    // ── Marché Noir : demandes et décisions ──
+    if (typeof getAllMarcheNoirListings === 'function') {
+      const allMN = await getAllMarcheNoirListings();
+      for (const l of allMN) {
+        // Notifier le vendeur quand quelqu'un fait une demande
+        if (l.sellerCode === state.code && l.status === 'reserved' && l.requesterCode) {
+          const key = l.id + '|' + l.requesterCode;
+          if (!_prevNotifState.mnRequests.has(key)) {
+            if (l.requestedAt && now - new Date(l.requestedAt).getTime() < 120000) {
+              showNotif('🕶️', 'Nouvelle demande !', `${escapeHTML(l.requesterName || '?')} veut acheter "${escapeHTML(l.titleName)}" pour ${l.price.toLocaleString('fr-FR')} 🪙`, 'quete', () => navTo('marcheNoir'));
+            }
+            _prevNotifState.mnRequests.add(key);
+          }
+        }
+        // Notifier l'acheteur quand sa demande est acceptée ou refusée
+        if (l.status === 'sold' && l.buyerCode === state.code) {
+          const key = l.id + '|sold';
+          if (!_prevNotifState.mnDecisions.has(key)) {
+            if (l.soldAt && now - new Date(l.soldAt).getTime() < 120000) {
+              showNotif('✅', 'Demande acceptée !', `${escapeHTML(l.sellerName)} t'a vendu "${escapeHTML(l.titleName)}" !`, 'quete', () => navTo('marcheNoir'));
+            }
+            _prevNotifState.mnDecisions.add(key);
+          }
+        }
+        // Pour un refus, on ne peut pas le détecter via le listing (il repasse 'active'),
+        // donc on se base sur l'historique de transactions du joueur — pas critique ici
       }
     }
 
@@ -10753,7 +10709,7 @@ const PAGE_TITLES = {
   home:'Accueil', roulette:'🎰 Roulette', discussion:'💬 Chat',
   snake:'🐍 Serpent', dino:'🦕 Dino Run', tetris:'🧱 Tetris', g2048:'🔢 2048', pokepom:'🐾 PokePom', clicker:'🌱 Clicker',
   jardin:'🌸 Jardin', pfc:'🪨 Pierre Feuille Ciseaux',
-  boutique:'🛒 Boutique', hotel:'🏨 Hôtel des Ventes',
+  boutique:'🛒 Boutique', hotel:'🏨 Hôtel des Ventes', marcheNoir:'🕶️ Marché Noir',
   classement:'🏆 Classement', profils:'👥 Profils',
   quetes:'⚔️ Quêtes', missions:'🎯 Missions', paris:'🎲 Paris', proverbe:'📜 Proverbe',
   monprofil:'🙋 Mon profil', banque:'🏦 Banque', infos:'ℹ️ Infos',
@@ -10764,7 +10720,7 @@ const SNAV_MAP = {
   home:'snav-home', roulette:'snav-roulette', discussion:'snav-chat',
   snake:'snav-snake', dino:'snav-dino', tetris:'snav-tetris', g2048:'snav-g2048', pokepom:'snav-pokepom', clicker:'snav-clicker',
   jardin:'snav-jardin', pfc:'snav-pfc', boutique:'snav-boutique',
-  hotel:'snav-hotel', profils:'snav-profils', quetes:'snav-quetes',
+  hotel:'snav-hotel', marcheNoir:'snav-marche-noir', profils:'snav-profils', quetes:'snav-quetes',
   missions:'snav-missions',
   paris:'snav-paris', proverbe:'snav-proverbe',
   monprofil:'snav-monprofil', banque:'snav-banque',
@@ -10961,6 +10917,8 @@ init();
 <script src="pommon.js"></script> -->
 <script src="boutique_profil.js"></script>
 <script src="boutique.js?v=3"></script>
+<script src="hotel.js"></script>
+<script src="marche_noir.js"></script>
 <!-- <script src="clicker_jardin.js"></script> -->
 <script src="dino.js"></script> -->
 <script src="tetris.js"></script> -->
