@@ -107,6 +107,12 @@ async function renderMarcheNoir() {
     const alreadyListed = await _getMyActivelyListedTitleIds();
     const available = owned.filter(t => !alreadyListed.has(t.id));
 
+    // Debug
+    console.log('[Marché Noir] state.ownedTitles =', state.ownedTitles);
+    console.log('[Marché Noir] titres reconnus (type=title) =', owned);
+    console.log('[Marché Noir] déjà en vente =', [...alreadyListed]);
+    console.log('[Marché Noir] disponibles à la vente =', available);
+
     // Mémoriser le titre choisi pour re-sélectionner après un re-render
     const prevSelected = selectEl.value;
 
