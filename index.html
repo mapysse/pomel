@@ -1274,6 +1274,96 @@
   .btn-quete.cancel  { background: transparent; border: 1px solid var(--muted); color: var(--muted); }
   .btn-quete.cancel:hover { border-color: var(--red); color: var(--red); }
 
+  /* ── MISSIONS ──────────────────────────────── */
+  .missions-wrap { display: flex; flex-direction: column; gap: 24px; }
+  .missions-accepted-top {
+    background: linear-gradient(135deg, rgba(245,200,66,0.12), rgba(245,200,66,0.04));
+    border: 1px solid rgba(245,200,66,0.35);
+    border-radius: var(--radius);
+    padding: 22px 26px;
+    box-shadow: 0 0 32px rgba(245,200,66,0.12), var(--glass-highlight);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    display: flex; flex-direction: column; gap: 14px;
+    position: relative; overflow: hidden;
+  }
+  .missions-accepted-top::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at top right, rgba(245,200,66,0.15), transparent 60%);
+    pointer-events: none;
+  }
+  .missions-accepted-top-label {
+    font-size: .72rem; font-weight: 800; color: var(--yellow);
+    letter-spacing: .12em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .missions-accepted-top-label::before {
+    content: '🔥'; font-size: 1rem;
+    animation: missionFirePulse 1.6s ease-in-out infinite;
+  }
+  @keyframes missionFirePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+  .missions-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .missions-grid { grid-template-columns: 1fr; }
+  }
+  .missions-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .missions-list { display: flex; flex-direction: column; gap: 12px; }
+  .mission-section-label {
+    font-size: .75rem; font-weight: 700; color: var(--muted);
+    letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px;
+  }
+  .mission-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 22px;
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-highlight);
+    transition: all .2s;
+  }
+  .mission-card:hover { border-color: var(--border-strong); background: var(--surface2); transform: translateY(-1px); }
+  .mission-card.mine { border-color: rgba(235,88,70,0.4); background: rgba(235,88,70,0.05); box-shadow: 0 0 0 1px var(--primary-subtle), var(--glass-highlight); }
+  .mission-card.mine-accepted { border-color: rgba(245,200,66,0.4); background: rgba(245,200,66,0.05); box-shadow: 0 0 24px rgba(245,200,66,0.15), var(--glass-highlight); }
+  .mission-card.taken { opacity: .75; }
+  .mission-card.done { opacity: .6; }
+  .mission-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .mission-status { font-size: .7rem; font-weight: 700; padding: 3px 10px; border-radius: 6px; text-transform: uppercase; letter-spacing: .05em; }
+  .mission-status.open     { background: rgba(62,207,110,0.15); color: var(--green); }
+  .mission-status.accepted { background: rgba(245,200,66,0.15); color: var(--yellow); }
+  .mission-status.done     { background: rgba(78,201,217,0.15); color: var(--accent); }
+  .mission-desc { font-size: .95rem; line-height: 1.5; }
+  .mission-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+  .mission-meta strong { color: var(--text); }
+  .mission-reward { font-family: 'Space Mono', monospace; font-weight: 700; color: var(--green); font-size: .95rem; }
+  .mission-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-mission { border: none; border-radius: 8px; padding: 9px 18px; font-family: 'Syne', sans-serif; font-size: .82rem; font-weight: 700; cursor: pointer; transition: all .2s; }
+  .btn-mission:hover { transform: translateY(-1px); }
+  .btn-mission.accept   { background: var(--green); color: #fff; }
+  .btn-mission.validate { background: var(--green); color: #fff; }
+  .btn-mission.abandon  { background: transparent; border: 1px solid var(--yellow); color: var(--yellow); }
+  .btn-mission.abandon:hover { background: var(--yellow); color: #000; }
+  .btn-mission.cancel   { background: transparent; border: 1px solid var(--muted); color: var(--muted); }
+  .btn-mission.cancel:hover { border-color: var(--red); color: var(--red); }
+  .mission-accepted-info {
+    font-size: .82rem; color: var(--yellow); font-weight: 600;
+    background: rgba(245,200,66,0.08);
+    border: 1px solid rgba(245,200,66,0.2);
+    border-radius: 8px; padding: 8px 12px;
+  }
+  .mission-limit-info {
+    font-size: .78rem; color: var(--muted);
+    background: var(--surface-glass);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px; padding: 8px 12px;
+    text-align: center;
+  }
+
   /* HOTEL DES VENTES */
   .hotel-wrap { display: flex; flex-direction: column; gap: 24px; }
   .hotel-list { display: flex; flex-direction: column; gap: 12px; }
@@ -2685,6 +2775,10 @@
         <span class="sidenav-item-icon">⚔️</span>
         <span class="sidenav-item-label">Quêtes</span>
       </button>
+      <button class="sidenav-item" id="snav-missions" onclick="navTo('missions')">
+        <span class="sidenav-item-icon">🎯</span>
+        <span class="sidenav-item-label">Missions</span>
+      </button>
       <button class="sidenav-item" id="snav-paris" onclick="navTo('paris')">
         <span class="sidenav-item-icon">🎲</span>
         <span class="sidenav-item-label">Paris</span>
@@ -3615,6 +3709,67 @@
     </div>
   </div>
 
+  <!-- MISSIONS -->
+  <div class="page" id="page-missions">
+    <div class="missions-wrap">
+      <div>
+        <div class="section-title">🎯 Missions</div>
+        <div class="section-sub">Lance une mission ouverte à tous — la première personne qui l'accepte a 24h pour la réaliser !</div>
+      </div>
+
+      <!-- Mission acceptée (en haut, si existe) -->
+      <div id="missionAcceptedTop" style="display:none;"></div>
+
+      <!-- 2 colonnes : création | liste -->
+      <div class="missions-grid">
+
+        <!-- Colonne gauche : créer une mission -->
+        <div class="missions-col">
+          <div class="bet-create-card">
+            <h3>Créer une mission</h3>
+            <div class="form-group">
+              <label>Description de la mission</label>
+              <textarea id="missionDescInput" placeholder="ex: Faire une photo marrante et la poster sur InstaPom 📸" maxlength="200" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Récompense (Pomels offerts par le système)</label>
+              <input type="number" id="missionRewardInput" placeholder="ex: 200" min="1" max="5000" />
+            </div>
+            <div id="missionCreateAlert" class="alert"></div>
+            <div id="missionLimitInfo" class="mission-limit-info" style="display:none;"></div>
+            <button class="btn-primary" id="missionCreateBtn" onclick="handleCreateMission()">Lancer la mission 🎯</button>
+            <div style="font-size:.72rem;color:var(--muted);line-height:1.5;">
+              ℹ️ 1 mission par jour. Quand quelqu'un accepte et accomplit la mission, tu valides manuellement et reçois 75% de la récompense en bonus créateur.
+            </div>
+          </div>
+
+          <!-- Mes missions créées -->
+          <div id="missionsMySection" style="display:none;">
+            <h3 class="mission-section-label">🧭 Mes missions créées</h3>
+            <div class="missions-list" id="missionsMyList"></div>
+          </div>
+        </div>
+
+        <!-- Colonne droite : liste de toutes les missions -->
+        <div class="missions-col">
+          <div>
+            <h3 class="mission-section-label">🎯 Missions disponibles</h3>
+            <div class="missions-list" id="missionsAvailableList">
+              <div class="bet-empty">Aucune mission disponible pour le moment.</div>
+            </div>
+          </div>
+
+          <!-- Missions terminées -->
+          <div id="missionsDoneSection" style="display:none;">
+            <h3 class="mission-section-label">✅ Missions terminées</h3>
+            <div class="missions-list" id="missionsDoneList"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- JARDIN DE POMEL'LAND -->
   <div class="page" id="page-jardin">
     <div class="jardin-wrap">
@@ -4310,6 +4465,12 @@ async function saveQuete(q) { await dbSet('quetes/' + q.id, q); }
 async function deleteQuete(id) { await dbDelete('quetes/' + id); }
 async function getAllQuetes() { return dbGetAll('quetes'); }
 
+// ── MISSION HELPERS ───────────────────────────────
+async function getMission(id) { return dbGet('missions/' + id); }
+async function saveMission(m) { await dbSet('missions/' + m.id, m); }
+async function deleteMission(id) { await dbDelete('missions/' + id); }
+async function getAllMissions() { return dbGetAll('missions'); }
+
 // ── JARDIN HELPERS — dans clicker_jardin.js ──
 
 // ── SESSION (local only) ────────────────────────
@@ -4694,7 +4855,7 @@ const DROPDOWN_MAP = {
   snake: 'games', g2048: 'games', clicker: 'games', jardin: 'games',
   boutique: 'commerce', hotel: 'commerce',
   classement: 'classement',
-  profils: 'social', quetes: 'social', paris: 'social', proverbe: 'social', live: 'social',
+  profils: 'social', quetes: 'social', missions: 'social', paris: 'social', proverbe: 'social', live: 'social',
   monprofil: 'profil', banque: 'profil',
 };
 // Standalone nav button ids (reserved for future use)
@@ -4812,6 +4973,7 @@ function _onPageLoad(id) {
   if (id === 'hotel') { renderHotel(); markPageSeen('hotel'); }
   if (id === 'proverbe') { renderProverbe(); markPageSeen('proverbe'); }
   if (id === 'quetes') renderQuetes();
+  if (id === 'missions') renderMissions();
   if (id === 'snake' && typeof renderSnakePage === 'function') renderSnakePage();
   if (id === 'dino' && typeof renderDinoPage === 'function') renderDinoPage();
   if (id === 'tetris' && typeof renderTetrisPage === 'function') renderTetrisPage();
@@ -6939,6 +7101,452 @@ async function cancelQuete(queteId) {
     await deleteQuete(queteId);
     closeConfirm();
     renderQuetes();
+  });
+}
+
+// ══════════════════════════════════════════════════
+// MISSIONS — quêtes ouvertes à tous
+// ══════════════════════════════════════════════════
+// Modèle de mission :
+// {
+//   id, creatorCode, creatorName,
+//   desc, reward,
+//   status: 'open' | 'accepted' | 'done',
+//   createdAt, updatedAt,
+//   acceptedBy: code | null, acceptedByName: string | null,
+//   acceptedAt: ISO | null, deadline: ISO | null, // deadline = acceptedAt + 24h
+//   completedAt: ISO | null,
+//   previousAccepters: [code, ...], // mémoire des gens qui ont laissé expirer
+// }
+
+const MISSION_EXPIRE_MS        = 3 * 24 * 3600 * 1000;  // 3 jours avant suppression
+const MISSION_DONE_EXPIRE_MS   = 24 * 3600 * 1000;      // 24h après done → suppression
+const MISSION_ACCEPT_DURATION  = 24 * 3600 * 1000;      // 24h pour accomplir
+const MISSION_MAX_REWARD       = 5000;
+
+function _missionDayKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+async function _cleanupMissions() {
+  const all = await getAllMissions();
+  const now = Date.now();
+  for (const m of all) {
+    // Mission 'done' depuis plus de 24h → supprimer
+    if (m.status === 'done' && m.completedAt) {
+      if (now - new Date(m.completedAt).getTime() > MISSION_DONE_EXPIRE_MS) {
+        await deleteMission(m.id);
+        continue;
+      }
+    }
+    // Mission 'open' (ou 'accepted' non validée) créée depuis plus de 3 jours → supprimer
+    if (m.status !== 'done') {
+      if (now - new Date(m.createdAt).getTime() > MISSION_EXPIRE_MS) {
+        // Rembourser moralement : pas de perte pour le créateur (les Pomels viennent du système à la validation)
+        // Juste logger dans l'historique du créateur
+        try {
+          const creator = await getAccount(m.creatorCode);
+          if (creator) {
+            creator.history = creator.history || [];
+            creator.history.unshift({
+              type: 'mission',
+              desc: `🎯 Mission expirée (3 jours) : "${m.desc}"`,
+              amount: 0,
+              date: new Date().toISOString(),
+            });
+            await saveAccount(creator);
+          }
+        } catch(e) {}
+        await deleteMission(m.id);
+        continue;
+      }
+      // Mission 'accepted' avec deadline dépassée → retour à 'open'
+      if (m.status === 'accepted' && m.deadline) {
+        if (now > new Date(m.deadline).getTime()) {
+          m.previousAccepters = m.previousAccepters || [];
+          if (m.acceptedBy && !m.previousAccepters.includes(m.acceptedBy)) {
+            m.previousAccepters.push(m.acceptedBy);
+          }
+          m.status = 'open';
+          m.acceptedBy = null;
+          m.acceptedByName = null;
+          m.acceptedAt = null;
+          m.deadline = null;
+          m.updatedAt = new Date().toISOString();
+          await saveMission(m);
+        }
+      }
+    }
+  }
+}
+
+async function _hasCreatedMissionToday(code) {
+  const all = await getAllMissions();
+  const todayKey = getTodayKey();
+  return all.some(m => m.creatorCode === code && _missionDayKey(m.createdAt) === todayKey);
+}
+
+async function renderMissions() {
+  await _cleanupMissions();
+
+  const all = await getAllMissions();
+  const now = Date.now();
+
+  // Ma mission acceptée (une seule à la fois en pratique, mais on gère multiple au cas où)
+  const myAccepted = all.filter(m => m.acceptedBy === state.code && m.status === 'accepted');
+  // Mes missions créées (pas encore supprimées)
+  const myCreated = all.filter(m => m.creatorCode === state.code && m.status !== 'done');
+  // Missions disponibles (open ou accepted par quelqu'un d'autre)
+  const available = all
+    .filter(m => (m.status === 'open' || m.status === 'accepted'))
+    .filter(m => !(m.acceptedBy === state.code)) // mes missions acceptées sont affichées en haut
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Missions terminées récemment (dernières 24h)
+  const doneRecent = all
+    .filter(m => m.status === 'done')
+    .sort((a, b) => new Date(b.completedAt || b.updatedAt).getTime() - new Date(a.completedAt || a.updatedAt).getTime());
+
+  // ─ Zone "mission acceptée" en haut ─
+  const topZone = document.getElementById('missionAcceptedTop');
+  if (topZone) {
+    if (myAccepted.length) {
+      topZone.style.display = '';
+      topZone.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'missions-accepted-top';
+      wrap.innerHTML = `<div class="missions-accepted-top-label">Ma mission en cours</div>`;
+      myAccepted.forEach(m => wrap.appendChild(buildMissionCard(m, 'accepted_by_me')));
+      topZone.appendChild(wrap);
+    } else {
+      topZone.style.display = 'none';
+      topZone.innerHTML = '';
+    }
+  }
+
+  // ─ Limite de création (1/jour) ─
+  const alreadyCreated = await _hasCreatedMissionToday(state.code);
+  const limitInfo = document.getElementById('missionLimitInfo');
+  const createBtn = document.getElementById('missionCreateBtn');
+  if (alreadyCreated) {
+    if (limitInfo) {
+      limitInfo.style.display = '';
+      limitInfo.textContent = '⏳ Tu as déjà créé une mission aujourd\'hui. Reviens demain !';
+    }
+    if (createBtn) { createBtn.disabled = true; createBtn.style.opacity = '.5'; createBtn.style.cursor = 'not-allowed'; }
+  } else {
+    if (limitInfo) { limitInfo.style.display = 'none'; limitInfo.textContent = ''; }
+    if (createBtn) { createBtn.disabled = false; createBtn.style.opacity = ''; createBtn.style.cursor = ''; }
+  }
+
+  // ─ Mes missions créées ─
+  const mySection = document.getElementById('missionsMySection');
+  const myList = document.getElementById('missionsMyList');
+  if (myList) {
+    myList.innerHTML = '';
+    if (myCreated.length === 0) {
+      if (mySection) mySection.style.display = 'none';
+    } else {
+      if (mySection) mySection.style.display = '';
+      myCreated.forEach(m => myList.appendChild(buildMissionCard(m, 'mine')));
+    }
+  }
+
+  // ─ Missions disponibles ─
+  const availList = document.getElementById('missionsAvailableList');
+  if (availList) {
+    availList.innerHTML = '';
+    if (available.length === 0) {
+      availList.innerHTML = '<div class="bet-empty">Aucune mission disponible pour le moment.</div>';
+    } else {
+      available.forEach(m => availList.appendChild(buildMissionCard(m, 'available')));
+    }
+  }
+
+  // ─ Missions terminées ─
+  const doneSection = document.getElementById('missionsDoneSection');
+  const doneList = document.getElementById('missionsDoneList');
+  if (doneList) {
+    doneList.innerHTML = '';
+    if (doneRecent.length === 0) {
+      if (doneSection) doneSection.style.display = 'none';
+    } else {
+      if (doneSection) doneSection.style.display = '';
+      doneRecent.forEach(m => doneList.appendChild(buildMissionCard(m, 'done')));
+    }
+  }
+
+  startTimerInterval();
+}
+
+function buildMissionCard(m, role) {
+  const card = document.createElement('div');
+  const statusLabels = {
+    open:     '🟢 Disponible',
+    accepted: '🔥 En cours',
+    done:     '✅ Terminée',
+  };
+
+  // Classes
+  let cls = 'mission-card';
+  if (role === 'accepted_by_me') cls += ' mine-accepted';
+  else if (role === 'mine') cls += ' mine';
+  else if (m.status === 'accepted') cls += ' taken';
+  else if (m.status === 'done') cls += ' done';
+  card.className = cls;
+
+  const date = new Date(m.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  // Timer : soit deadline (accepted), soit createdAt + 3j (open)
+  let timerExp = null;
+  if (m.status === 'accepted' && m.deadline) {
+    timerExp = new Date(m.deadline).getTime();
+  } else if (m.status === 'open') {
+    timerExp = new Date(m.createdAt).getTime() + MISSION_EXPIRE_MS;
+  } else if (m.status === 'done' && m.completedAt) {
+    timerExp = new Date(m.completedAt).getTime() + MISSION_DONE_EXPIRE_MS;
+  }
+
+  const isMine = m.creatorCode === state.code;
+  const isAcceptedByMe = m.acceptedBy === state.code;
+  const hasPreviouslyFailed = (m.previousAccepters || []).includes(state.code);
+
+  // Construction des actions selon le rôle
+  let actionsHTML = '';
+
+  if (role === 'available') {
+    if (m.status === 'open' && !isMine) {
+      if (hasPreviouslyFailed) {
+        actionsHTML = `<div class="mission-accepted-info" style="color:var(--muted);background:var(--surface-glass);border-color:var(--border-soft);">⏳ Tu as déjà accepté cette mission et n'as pas réussi à temps.</div>`;
+      } else {
+        actionsHTML = `
+          <div class="mission-actions">
+            <button class="btn-mission accept" onclick="acceptMission('${m.id}')">🎯 Accepter la mission</button>
+          </div>`;
+      }
+    } else if (m.status === 'accepted' && !isMine) {
+      actionsHTML = `<div class="mission-accepted-info" style="color:var(--muted);background:var(--surface-glass);border-color:var(--border-soft);">🔒 Mission en cours par <strong style="color:var(--text);">${escapeHTML(m.acceptedByName || '?')}</strong>.</div>`;
+    } else if (isMine && m.status === 'open') {
+      actionsHTML = `<div class="mission-accepted-info" style="color:var(--muted);background:var(--surface-glass);border-color:var(--border-soft);">C'est ta mission — en attente d'un volontaire.</div>`;
+    } else if (isMine && m.status === 'accepted') {
+      actionsHTML = `
+        <div class="mission-accepted-info">🔥 <strong style="color:var(--text);">${escapeHTML(m.acceptedByName || '?')}</strong> a accepté ta mission !</div>
+        <div class="mission-actions">
+          <button class="btn-mission validate" onclick="validateMission('${m.id}')">🏆 Valider l'accomplissement</button>
+        </div>`;
+    }
+  } else if (role === 'accepted_by_me') {
+    actionsHTML = `
+      <div class="mission-accepted-info">🔥 Accomplis la mission avant expiration ! Le créateur validera manuellement.</div>
+      <div class="mission-actions">
+        <button class="btn-mission abandon" onclick="abandonMission('${m.id}')">↩️ Abandonner</button>
+      </div>`;
+  } else if (role === 'mine') {
+    // Mes missions (création) — open ou accepted
+    if (m.status === 'open') {
+      actionsHTML = `
+        <div class="mission-actions">
+          <button class="btn-mission cancel" onclick="cancelMission('${m.id}')">🗑️ Annuler</button>
+        </div>`;
+    } else if (m.status === 'accepted') {
+      actionsHTML = `
+        <div class="mission-accepted-info">🔥 Acceptée par <strong style="color:var(--text);">${escapeHTML(m.acceptedByName || '?')}</strong></div>
+        <div class="mission-actions">
+          <button class="btn-mission validate" onclick="validateMission('${m.id}')">🏆 Valider l'accomplissement</button>
+        </div>`;
+    }
+  }
+
+  const showTimer = (m.status === 'open' || m.status === 'accepted') && timerExp;
+  const creatorBonus = Math.ceil(m.reward * 0.75);
+
+  card.innerHTML = `
+    <div class="mission-header">
+      <span class="mission-status ${m.status}">${statusLabels[m.status] || m.status}</span>
+      <span style="font-size:.72rem;color:var(--muted);">${date}</span>
+      ${showTimer ? `<span class="timer-badge" data-expires="${timerExp}">⏱ ...</span>` : ''}
+    </div>
+    <div class="mission-desc">${escapeHTML(m.desc)}</div>
+    <div class="mission-meta">
+      <span>Créée par <strong>${escapeHTML(m.creatorName)}</strong></span>
+      ${m.status === 'done' && m.acceptedByName ? `<span>Réalisée par <strong>${escapeHTML(m.acceptedByName)}</strong></span>` : ''}
+      <span class="mission-reward">+${m.reward.toLocaleString('fr-FR')} 🪙</span>
+      <span style="color:var(--muted);font-size:.72rem;">(bonus créateur : ${creatorBonus.toLocaleString('fr-FR')} 🪙)</span>
+    </div>
+    ${actionsHTML}
+  `;
+  return card;
+}
+
+async function handleCreateMission() {
+  const desc = document.getElementById('missionDescInput').value.trim();
+  const reward = parseInt(document.getElementById('missionRewardInput').value);
+
+  if (!desc)                 { setAlert('missionCreateAlert', 'Décris la mission !', 'error'); return; }
+  if (!reward || reward < 1) { setAlert('missionCreateAlert', 'Entre une récompense valide !', 'error'); return; }
+  if (reward > MISSION_MAX_REWARD) { setAlert('missionCreateAlert', `La récompense maximum est de ${MISSION_MAX_REWARD.toLocaleString('fr-FR')} Pomels !`, 'error'); return; }
+
+  // Check : 1 mission par jour
+  const alreadyCreated = await _hasCreatedMissionToday(state.code);
+  if (alreadyCreated) {
+    setAlert('missionCreateAlert', '⏳ Tu as déjà créé une mission aujourd\'hui. Reviens demain !', 'error');
+    return;
+  }
+
+  const id = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const mission = {
+    id,
+    creatorCode: state.code,
+    creatorName: state.name,
+    desc,
+    reward,
+    status: 'open',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    acceptedBy: null,
+    acceptedByName: null,
+    acceptedAt: null,
+    deadline: null,
+    completedAt: null,
+    previousAccepters: [],
+  };
+
+  await saveMission(mission);
+  document.getElementById('missionDescInput').value = '';
+  document.getElementById('missionRewardInput').value = '';
+  setAlert('missionCreateAlert', `✅ Mission lancée ! Les joueurs peuvent maintenant l'accepter.`, 'success');
+  setTimeout(() => { document.getElementById('missionCreateAlert').className = 'alert'; }, 3000);
+  renderMissions();
+}
+
+async function acceptMission(missionId) {
+  // Relire depuis la DB pour éviter race
+  const m = await getMission(missionId);
+  if (!m) { renderMissions(); return; }
+  if (m.status !== 'open') {
+    setAlert('missionCreateAlert', '❌ Cette mission n\'est plus disponible.', 'error');
+    setTimeout(() => { document.getElementById('missionCreateAlert').className = 'alert'; }, 3000);
+    renderMissions();
+    return;
+  }
+  if (m.creatorCode === state.code) {
+    setAlert('missionCreateAlert', '❌ Tu ne peux pas accepter ta propre mission.', 'error');
+    setTimeout(() => { document.getElementById('missionCreateAlert').className = 'alert'; }, 3000);
+    return;
+  }
+  if ((m.previousAccepters || []).includes(state.code)) {
+    setAlert('missionCreateAlert', '❌ Tu as déjà accepté cette mission sans la terminer à temps.', 'error');
+    setTimeout(() => { document.getElementById('missionCreateAlert').className = 'alert'; }, 3000);
+    return;
+  }
+
+  const now = new Date();
+  m.status = 'accepted';
+  m.acceptedBy = state.code;
+  m.acceptedByName = state.name;
+  m.acceptedAt = now.toISOString();
+  m.deadline = new Date(now.getTime() + MISSION_ACCEPT_DURATION).toISOString();
+  m.updatedAt = now.toISOString();
+  await saveMission(m);
+
+  // Anti-race : relire pour vérifier que notre save a pris
+  const fresh = await getMission(missionId);
+  if (!fresh || fresh.acceptedBy !== state.code) {
+    setAlert('missionCreateAlert', '❌ Un autre joueur a accepté cette mission en premier.', 'error');
+    setTimeout(() => { document.getElementById('missionCreateAlert').className = 'alert'; }, 3000);
+    renderMissions();
+    return;
+  }
+
+  renderMissions();
+}
+
+async function abandonMission(missionId) {
+  const m = await getMission(missionId);
+  if (!m || m.acceptedBy !== state.code || m.status !== 'accepted') { renderMissions(); return; }
+  showConfirm('Abandonner cette mission ? Tu ne pourras plus la reprendre.', async () => {
+    const fresh = await getMission(missionId);
+    if (!fresh || fresh.acceptedBy !== state.code || fresh.status !== 'accepted') {
+      closeConfirm(); renderMissions(); return;
+    }
+    fresh.previousAccepters = fresh.previousAccepters || [];
+    if (!fresh.previousAccepters.includes(state.code)) fresh.previousAccepters.push(state.code);
+    fresh.status = 'open';
+    fresh.acceptedBy = null;
+    fresh.acceptedByName = null;
+    fresh.acceptedAt = null;
+    fresh.deadline = null;
+    fresh.updatedAt = new Date().toISOString();
+    await saveMission(fresh);
+    closeConfirm();
+    renderMissions();
+  });
+}
+
+async function validateMission(missionId) {
+  // Relire depuis la DB pour anti-race
+  const m = await getMission(missionId);
+  if (!m || m.creatorCode !== state.code || m.status !== 'accepted') { renderMissions(); return; }
+
+  // Marquer 'done' IMMÉDIATEMENT pour bloquer double-validation
+  m.status = 'done';
+  m.completedAt = new Date().toISOString();
+  m.updatedAt = m.completedAt;
+  await saveMission(m);
+
+  // Re-vérifier
+  const fresh = await getMission(missionId);
+  if (!fresh || fresh.status !== 'done') return;
+
+  const reward = m.reward;
+  const creatorBonus = Math.ceil(reward * 0.75);
+  const isSamePerson = m.acceptedBy === m.creatorCode; // cas edge (ne devrait pas arriver car on bloque l'auto-acceptation)
+  const now = new Date().toISOString();
+
+  // Récompense à la personne qui a accompli (offerte par le système)
+  const updatedTarget = await addBalanceTransaction(m.acceptedBy, reward, {
+    type: 'mission',
+    desc: `🎯 Mission accomplie : "${m.desc}"`,
+    amount: reward,
+    date: now,
+  });
+  if (updatedTarget && m.acceptedBy === state.code) { state = migrateAccount(updatedTarget); refreshUI(); }
+
+  // Bonus 75% au créateur (sauf si même personne, ce qui n'arrive pas en pratique)
+  if (!isSamePerson) {
+    const updatedCreator = await addBalanceTransaction(m.creatorCode, creatorBonus, {
+      type: 'mission',
+      desc: `🎯 Mission validée — bonus créateur (75%) : "${m.desc}"`,
+      amount: creatorBonus,
+      date: now,
+    });
+    if (updatedCreator && m.creatorCode === state.code) { state = migrateAccount(updatedCreator); refreshUI(); }
+  } else {
+    const updatedSame = await addBalanceTransaction(m.acceptedBy, creatorBonus, {
+      type: 'mission',
+      desc: `🎯 Mission validée — bonus créateur (75%) : "${m.desc}"`,
+      amount: creatorBonus,
+      date: now,
+    });
+    if (updatedSame && m.acceptedBy === state.code) { state = migrateAccount(updatedSame); refreshUI(); }
+  }
+
+  setAlert('missionCreateAlert',
+    `🏆 Mission validée ! ${escapeHTML(m.acceptedByName)} reçoit ${reward.toLocaleString('fr-FR')} 🪙 et tu reçois ${creatorBonus.toLocaleString('fr-FR')} 🪙 (75%) en bonus créateur !`,
+    'success'
+  );
+  setTimeout(() => { document.getElementById('missionCreateAlert').className = 'alert'; }, 5000);
+  renderMissions();
+}
+
+async function cancelMission(missionId) {
+  const m = await getMission(missionId);
+  if (!m || m.creatorCode !== state.code) return;
+  if (m.status !== 'open') return; // ne pas annuler une mission déjà acceptée
+  showConfirm('Annuler cette mission ?', async () => {
+    await deleteMission(missionId);
+    closeConfirm();
+    renderMissions();
   });
 }
 
@@ -9975,6 +10583,8 @@ let _prevNotifState = {
   pompostIds: new Set(),
   instapomIds: new Set(),
   proverbeDate: '',
+  missionsAccepted: new Set(), // missions dont l'acceptation par quelqu'un a déjà été notifiée au créateur
+  missionsDone: new Set(),     // missions validées déjà notifiées à l'accomplisseur
 };
 
 async function checkPushNotifications() {
@@ -9991,6 +10601,28 @@ async function checkPushNotifications() {
           showNotif('⚔️', 'Nouvelle quête !', `${escapeHTML(q.creatorName)} t'a assigné une mission — ${q.reward.toLocaleString('fr-FR')} 🪙`, 'quete', () => navTo('quetes'));
         }
         _prevNotifState.quetes.add(q.id);
+      }
+    }
+
+    // ── Missions : ma mission a été acceptée par quelqu'un ──
+    const allM = await getAllMissions();
+    for (const m of allM) {
+      // Notifier le créateur quand quelqu'un accepte sa mission
+      if (m.creatorCode === state.code && m.status === 'accepted' && m.acceptedBy) {
+        const key = m.id + '|' + m.acceptedBy;
+        if (!_prevNotifState.missionsAccepted.has(key)) {
+          if (m.acceptedAt && now - new Date(m.acceptedAt).getTime() < 120000) {
+            showNotif('🎯', 'Mission acceptée !', `${escapeHTML(m.acceptedByName || '?')} a accepté ta mission — valide quand elle est accomplie !`, 'quete', () => navTo('missions'));
+          }
+          _prevNotifState.missionsAccepted.add(key);
+        }
+      }
+      // Notifier l'accomplisseur quand le créateur valide
+      if (m.acceptedBy === state.code && m.status === 'done' && !_prevNotifState.missionsDone.has(m.id)) {
+        if (m.completedAt && now - new Date(m.completedAt).getTime() < 120000) {
+          showNotif('🏆', 'Mission validée !', `${escapeHTML(m.creatorName)} a validé ta mission — tu reçois ${m.reward.toLocaleString('fr-FR')} 🪙 !`, 'quete', () => navTo('missions'));
+        }
+        _prevNotifState.missionsDone.add(m.id);
       }
     }
 
@@ -10123,7 +10755,7 @@ const PAGE_TITLES = {
   jardin:'🌸 Jardin', pfc:'🪨 Pierre Feuille Ciseaux',
   boutique:'🛒 Boutique', hotel:'🏨 Hôtel des Ventes',
   classement:'🏆 Classement', profils:'👥 Profils',
-  quetes:'⚔️ Quêtes', paris:'🎲 Paris', proverbe:'📜 Proverbe',
+  quetes:'⚔️ Quêtes', missions:'🎯 Missions', paris:'🎲 Paris', proverbe:'📜 Proverbe',
   monprofil:'🙋 Mon profil', banque:'🏦 Banque', infos:'ℹ️ Infos',
 };
 
@@ -10133,6 +10765,7 @@ const SNAV_MAP = {
   snake:'snav-snake', dino:'snav-dino', tetris:'snav-tetris', g2048:'snav-g2048', pokepom:'snav-pokepom', clicker:'snav-clicker',
   jardin:'snav-jardin', pfc:'snav-pfc', boutique:'snav-boutique',
   hotel:'snav-hotel', profils:'snav-profils', quetes:'snav-quetes',
+  missions:'snav-missions',
   paris:'snav-paris', proverbe:'snav-proverbe',
   monprofil:'snav-monprofil', banque:'snav-banque',
 };
