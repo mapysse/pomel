@@ -69,12 +69,10 @@ function _mnUpdateTitlePreview() {
   if (!tid) { previewEl.innerHTML = ''; return; }
   const def = resolveTitleDef(tid);
   if (!def) { previewEl.innerHTML = ''; return; }
-  const source = tid.startsWith('custom_') ? 'custom' : 'shop';
   previewEl.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-glass);border:1px solid var(--border-soft);border-radius:8px;">
       <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Aperçu :</span>
       <span class="title-badge">${escapeHTML(def.name)}</span>
-      <span class="mn-badge ${source === 'custom' ? 'hotel' : 'shop'}">${source === 'custom' ? 'Hôtel' : 'Boutique'}</span>
     </div>
   `;
 }
@@ -107,12 +105,6 @@ async function renderMarcheNoir() {
     const alreadyListed = await _getMyActivelyListedTitleIds();
     const available = owned.filter(t => !alreadyListed.has(t.id));
 
-    // Debug
-    console.log('[Marché Noir] state.ownedTitles =', state.ownedTitles);
-    console.log('[Marché Noir] titres reconnus (type=title) =', owned);
-    console.log('[Marché Noir] déjà en vente =', [...alreadyListed]);
-    console.log('[Marché Noir] disponibles à la vente =', available);
-
     // Mémoriser le titre choisi pour re-sélectionner après un re-render
     const prevSelected = selectEl.value;
 
@@ -132,7 +124,7 @@ async function renderMarcheNoir() {
       available.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.textContent = `${t.name} ${t.source === 'custom' ? '(Hôtel)' : '(Boutique)'}`;
+        opt.textContent = t.name;
         selectEl.appendChild(opt);
       });
       // Re-sélectionner le titre précédent si toujours disponible
