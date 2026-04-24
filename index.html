@@ -6368,7 +6368,7 @@ async function renderHome() {
     renderHomeClicker(),
     renderHomeQuetes(),
     renderHomeRoulette(),
-    renderHomeHotel(),
+    (typeof renderHomeHotel === 'function') ? renderHomeHotel() : Promise.resolve(),
     renderHomeProverbe(),
     renderHomeLivePost(),
     renderHomeBets(),
