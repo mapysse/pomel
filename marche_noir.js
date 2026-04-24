@@ -31,6 +31,16 @@ async function saveMarcheNoirListing(l)   { await dbSet('marche_noir/' + l.id, l
 async function deleteMarcheNoirListing(id){ await dbDelete('marche_noir/' + id); }
 async function getAllMarcheNoirListings() { return dbGetAll('marche_noir'); }
 
+// ── COULEUR CUSTOM (picker) ───────────────────────
+// Presets rapides — l'utilisateur peut aussi piocher librement via l'input color
+const MN_COLOR_PRESETS = [
+  '#eb5846', '#f5c842', '#3ecf6e', '#4ec9d9', '#a974ff',
+  '#ff7eb9', '#ff9140', '#ffffff', '#111111',
+];
+
+// Couleur sélectionnée pour la mise en vente en cours (null = défaut)
+let _mnSelectedColor = null;
+
 // ── UTILS ─────────────────────────────────────────
 // Durée pendant laquelle une annonce 'sold' ou 'cancelled' reste visible avant suppression
 const MN_ARCHIVE_MS = 24 * 3600 * 1000; // 24h
@@ -69,12 +79,77 @@ function _mnUpdateTitlePreview() {
   if (!tid) { previewEl.innerHTML = ''; return; }
   const def = resolveTitleDef(tid);
   if (!def) { previewEl.innerHTML = ''; return; }
+  // Prévisualiser avec la couleur en cours
+  const previewDef = _mnSelectedColor ? { ...def, customColor: _mnSelectedColor } : def;
+  const style = titleBadgeStyle(previewDef);
   previewEl.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-glass);border:1px solid var(--border-soft);border-radius:8px;">
       <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Aperçu :</span>
-      <span class="title-badge">${escapeHTML(def.name)}</span>
+      <span class="title-badge" style="${style}">${escapeHTML(def.name)}</span>
     </div>
   `;
+}
+
+// ── Picker couleur : UI ───────────────────────────
+function _mnRenderColorPresets() {
+  const row = document.getElementById('mnColorPresets');
+  if (!row) return;
+  row.innerHTML = '';
+  MN_COLOR_PRESETS.forEach(c => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = c;
+    btn.onclick = () => _mnPickPreset(c);
+    const selected = _mnSelectedColor && _mnSelectedColor.toLowerCase() === c.toLowerCase();
+    btn.style.cssText = `width:26px;height:26px;border-radius:50%;border:2px solid ${selected ? 'var(--text)' : 'var(--border)'};background:${c};cursor:pointer;padding:0;transition:transform .15s;`;
+    btn.onmouseenter = () => { btn.style.transform = 'scale(1.15)'; };
+    btn.onmouseleave = () => { btn.style.transform = ''; };
+    row.appendChild(btn);
+  });
+}
+
+function _mnPickPreset(color) {
+  _mnSelectedColor = color;
+  const input = document.getElementById('mnColorInput');
+  if (input) input.value = color;
+  _mnRenderColorPresets();
+  _mnUpdateTitlePreview();
+}
+
+function _mnOnColorChange() {
+  const input = document.getElementById('mnColorInput');
+  if (!input) return;
+  _mnSelectedColor = input.value;
+  _mnRenderColorPresets();
+  _mnUpdateTitlePreview();
+}
+
+function _mnResetColor() {
+  _mnSelectedColor = null;
+  const input = document.getElementById('mnColorInput');
+  if (input) input.value = '#ffffff';
+  _mnRenderColorPresets();
+  _mnUpdateTitlePreview();
+}
+
+// Appelé quand on change de titre dans le select :
+// si le titre a déjà une customColor (revente), pré-charge cette couleur dans le picker.
+function _mnOnTitleSelect() {
+  const selectEl = document.getElementById('mnTitleSelect');
+  if (!selectEl) return;
+  const tid = selectEl.value;
+  if (!tid) { _mnResetColor(); return; }
+  const def = resolveTitleDef(tid);
+  const input = document.getElementById('mnColorInput');
+  if (def && def.customColor) {
+    _mnSelectedColor = def.customColor;
+    if (input) input.value = def.customColor;
+  } else {
+    _mnSelectedColor = null;
+    if (input) input.value = '#ffffff';
+  }
+  _mnRenderColorPresets();
+  _mnUpdateTitlePreview();
 }
 
 // Nettoyer les annonces archivées trop anciennes
@@ -96,6 +171,9 @@ async function renderMarcheNoir() {
   await _cleanupMarcheNoir();
 
   const all = await getAllMarcheNoirListings();
+
+  // ─ Picker couleur : presets ─
+  _mnRenderColorPresets();
 
   // ─ Sélecteur "Mes titres à mettre en vente" ─
   const selectEl = document.getElementById('mnTitleSelect');
@@ -240,7 +318,7 @@ function _buildMarcheNoirCard(l, role) {
   div.innerHTML = `
     <div class="mn-item-info">
       <div class="mn-item-name">
-        <span class="title-badge">${escapeHTML(l.titleName)}</span>
+        <span class="title-badge" style="${l.customColor ? titleBadgeStyle({customColor:l.customColor}) : ''}">${escapeHTML(l.titleName)}</span>
         <span class="mn-badge ${l.titleSource === 'custom' ? 'hotel' : 'shop'}">${l.titleSource === 'custom' ? 'Hôtel' : 'Boutique'}</span>
         ${role === 'mine' ? '<span class="mn-badge mine">Mon annonce</span>' : ''}
         ${role !== 'mine' && iAlreadyOwn && (l.status === 'active' || l.status === 'reserved') ? '<span class="mn-badge owned">Déjà possédé</span>' : ''}
@@ -291,6 +369,9 @@ async function handleCreateMarcheNoirListing() {
   const source = titleId.startsWith('custom_') ? 'custom' : 'shop';
   const titleDef = (source === 'custom') ? ((state.customTitles || {})[titleId] || def) : null;
 
+  // Couleur custom choisie (null si couleur par défaut)
+  const customColor = _mnSelectedColor || null;
+
   const id = 'mn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const now = new Date().toISOString();
   const listing = {
@@ -301,6 +382,7 @@ async function handleCreateMarcheNoirListing() {
     titleName: def.name,
     titleSource: source,
     titleDef: titleDef, // null pour les titres shop, objet complet pour les custom
+    customColor,        // null ou hex
     price,
     status: 'active',
     createdAt: now,
@@ -309,6 +391,7 @@ async function handleCreateMarcheNoirListing() {
   await saveMarcheNoirListing(listing);
 
   document.getElementById('mnPriceInput').value = '';
+  _mnResetColor();
   setAlert('mnCreateAlert', `✅ Titre "${def.name}" mis en vente pour ${price.toLocaleString('fr-FR')} 🪙 !`, 'success');
   setTimeout(() => { document.getElementById('mnCreateAlert').className = 'alert'; }, 3000);
   renderMarcheNoir();
@@ -454,11 +537,27 @@ async function acceptMarcheNoirOffer(listingId) {
       if (buyer) {
         if (!buyer.ownedTitles) buyer.ownedTitles = [];
         if (!buyer.ownedTitles.includes(l.titleId)) buyer.ownedTitles.push(l.titleId);
-        // Si custom (Hôtel), copier la définition
+
+        // Titre custom (Hôtel) : copier la définition avec la couleur custom si applicable
         if (l.titleSource === 'custom' && l.titleDef) {
           if (!buyer.customTitles) buyer.customTitles = {};
-          buyer.customTitles[l.titleId] = l.titleDef;
+          buyer.customTitles[l.titleId] = {
+            ...l.titleDef,
+            ...(l.customColor ? { customColor: l.customColor } : {}),
+          };
         }
+        // Titre shop avec couleur custom : créer une surcharge dans customTitles
+        // (resolveTitleDef mergera shop + custom pour appliquer la couleur)
+        else if (l.titleSource === 'shop' && l.customColor) {
+          if (!buyer.customTitles) buyer.customTitles = {};
+          buyer.customTitles[l.titleId] = {
+            id: l.titleId,
+            name: l.titleName,
+            type: 'title',
+            customColor: l.customColor,
+          };
+        }
+
         await saveAccount(buyer);
       }
     } catch(e) { console.error('Erreur ajout titre acheteur:', e); }

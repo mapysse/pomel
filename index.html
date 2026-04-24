@@ -3122,10 +3122,18 @@
         <h3>Mettre un titre en vente</h3>
         <div class="form-group">
           <label>Choisis un titre à vendre</label>
-          <select id="mnTitleSelect" class="quete-select" onchange="_mnUpdateTitlePreview()">
+          <select id="mnTitleSelect" class="quete-select" onchange="_mnOnTitleSelect()">
             <option value="">Chargement…</option>
           </select>
           <div id="mnTitlePreview" style="margin-top:10px;"></div>
+        </div>
+        <div class="form-group">
+          <label>Couleur du titre <span style="font-size:.72rem;color:var(--muted);font-weight:400;">(optionnel — rend ton titre unique)</span></label>
+          <div id="mnColorRow" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <input type="color" id="mnColorInput" value="#ffffff" oninput="_mnOnColorChange()" style="width:52px;height:38px;border:1px solid var(--border);border-radius:8px;padding:2px;background:var(--surface2);cursor:pointer;" />
+            <div id="mnColorPresets" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+            <button type="button" id="mnColorReset" onclick="_mnResetColor()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:6px;font-family:'Syne',sans-serif;font-size:.75rem;cursor:pointer;">Couleur par défaut</button>
+          </div>
         </div>
         <div class="form-group">
           <label>Prix de vente (Pomels)</label>
@@ -5357,7 +5365,7 @@ async function renderLeaderboard(mode) {
     }).filter(Boolean);
     const visibleTitles = allTitlesForLb.slice(0, 7);
     const extraCount = allTitlesForLb.length - 7;
-    const titlesHTML = visibleTitles.map(t => `<span class="title-badge">${t.name}</span>`).join('')
+    const titlesHTML = visibleTitles.map(t => `<span class="title-badge" style="${titleBadgeStyle(t)}">${t.name}</span>`).join('')
       + (extraCount > 0 ? `<span class="title-badge" style="background:var(--surface2);color:var(--muted);border-color:var(--border);">+${extraCount}</span>` : '');
     // Rainbow effect
     const nameClass = 'lb-name ' + getNameColorClass(acc.activeColor);
@@ -5401,7 +5409,7 @@ async function openProfileModal(code) {
 
   const titlesHTML = (migrated.activeTitles || []).map(tid => {
     const t = resolveAnyTitleDef(tid, migrated);
-    return t ? `<span class="title-badge">${t.name}</span>` : '';
+    return t ? `<span class="title-badge" style="${titleBadgeStyle(t)}">${t.name}</span>` : '';
   }).join('') || '<span style="color:var(--muted);font-size:.82rem;">Aucun titre actif</span>';
 
   const nameClass  = getNameColorClass(migrated.activeColor);
@@ -5968,11 +5976,14 @@ async function checkGroupWeeklyReward() {
 
 // ── BOUTIQUE + BOUTIQUE GROUPE — code extrait dans boutique.js ──
 // ── TITLES SETTINGS ─────────────────────────────
-// Resolve a title definition from shop OR custom hotel purchases
+// Resolve a title definition from shop OR custom hotel purchases.
+// Si un titre shop a une surcharge dans customTitles (ex: customColor du Marché Noir),
+// la surcharge se merge par-dessus la def shop.
 function resolveTitleDef(tid) {
   const shopTitle = SHOP_TITLES.find(x => x.id === tid);
-  if (shopTitle) return shopTitle;
   const custom = (state.customTitles || {})[tid];
+  if (shopTitle && custom) return { ...shopTitle, ...custom };
+  if (shopTitle) return shopTitle;
   if (custom) return custom;
   return null;
 }
@@ -5980,10 +5991,27 @@ function resolveTitleDef(tid) {
 // Same but for any account (for leaderboard / profile modal)
 function resolveAnyTitleDef(tid, acc) {
   const shopTitle = SHOP_TITLES.find(x => x.id === tid);
-  if (shopTitle) return shopTitle;
   const custom = ((acc && acc.customTitles) || {})[tid];
+  if (shopTitle && custom) return { ...shopTitle, ...custom };
+  if (shopTitle) return shopTitle;
   if (custom) return custom;
   return null;
+}
+
+// Applique une couleur custom à un badge de titre (utilisé via le Marché Noir).
+// Calcule automatiquement un texte contrasté (noir/blanc) selon la luminance.
+function titleBadgeStyle(def) {
+  if (!def || !def.customColor) return '';
+  const hex = def.customColor;
+  if (!hex.startsWith('#')) return '';
+  const h = hex.slice(1);
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const r = parseInt(full.slice(0,2), 16);
+  const g = parseInt(full.slice(2,4), 16);
+  const b = parseInt(full.slice(4,6), 16);
+  const lum = (r * 299 + g * 587 + b * 114) / 1000;
+  const fg = lum > 150 ? '#111' : '#fff';
+  return `background:${hex};color:${fg};border-color:${hex};`;
 }
 
 
@@ -8733,7 +8761,7 @@ async function renderMonProfil() {
   const badgeHTMLMP = badgeEmojiMP ? ` <span class="user-badge-emoji" title="${badgeNameMP.replace(/"/g, '&quot;')}" style="cursor:help;">${badgeEmojiMP}</span>` : '';
   const titlesHTML = (me.activeTitles || []).map(tid => {
     const t = resolveTitleDef(tid);
-    return t ? `<span class="title-badge">${t.name}</span>` : '';
+    return t ? `<span class="title-badge" style="${titleBadgeStyle(t)}">${t.name}</span>` : '';
   }).join('') || '<span style="color:var(--muted);font-size:.82rem;">Aucun titre actif</span>';
   // Résolution immédiate du nom de groupe via groups membership
   const allGroupsMP = await getGroupsCache();
@@ -8959,7 +8987,7 @@ async function renderProfils() {
     const earned = (migrated.history || []).filter(h => h.amount > 0).reduce((s, h) => s + h.amount, 0);
     const titlesHTML = (migrated.activeTitles || []).map(tid => {
       const t = resolveAnyTitleDef(tid, migrated);
-      return t ? `<span class="title-badge" style="font-size:.6rem;">${t.name}</span>` : '';
+      return t ? `<span class="title-badge" style="font-size:.6rem;${titleBadgeStyle(t)}">${t.name}</span>` : '';
     }).join('');
     // Résolution immédiate du groupe grâce au map pré-chargé
     const groupName = codeToGroupName[acc.code] || null;
@@ -10907,7 +10935,7 @@ init();
 <script src="boutique_profil.js"></script>
 <script src="boutique.js?v=3"></script>
 <script src="hotel.js"></script>
-<script src="marche_noir.js?v=2"></script>
+<script src="marche_noir.js"></script>
 <!-- <script src="clicker_jardin.js"></script> -->
 <script src="dino.js"></script> -->
 <script src="tetris.js"></script> -->
