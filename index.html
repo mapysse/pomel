@@ -3399,7 +3399,7 @@
           </div>
           <div class="form-group">
             <label>Cote initiale</label>
-            <input type="number" id="betOdds1Input" placeholder="ex: 1.5" min="1.01" max="3" step="0.01" value="1.50" style="font-family:'Space Mono',monospace;" />
+            <input type="number" id="betOdds1Input" placeholder="ex: 1.5" min="1.20" max="3" step="0.01" value="1.50" style="font-family:'Space Mono',monospace;" />
           </div>
         </div>
         <div class="bet-options-row">
@@ -3409,7 +3409,7 @@
           </div>
           <div class="form-group">
             <label>Cote initiale</label>
-            <input type="number" id="betOdds2Input" placeholder="ex: 2.0" min="1.01" max="3" step="0.01" value="2.00" style="font-family:'Space Mono',monospace;" />
+            <input type="number" id="betOdds2Input" placeholder="ex: 2.0" min="1.20" max="3" step="0.01" value="2.00" style="font-family:'Space Mono',monospace;" />
           </div>
         </div>
         <div style="font-size:.78rem;color:var(--muted);background:var(--surface2);border-radius:8px;padding:10px 14px;line-height:1.6;">
@@ -4313,7 +4313,7 @@
           <div class="info-body">
             <p>Crée un pari à 2 choix avec des <strong>cotes dynamiques</strong> — plus une option est populaire, plus sa cote baisse.</p>
             <ul>
-              <li>Cote initiale fixée entre 1.01 et 3.00 à la création</li>
+              <li>Cote initiale fixée entre 1.20 et 3.00 à la création</li>
               <li>Les gains = mise × cote au moment de la fermeture</li>
               <li>L'argent des gains vient du système — tu ne prends pas celui des perdants</li>
               <li>Le créateur empoche <strong>20% du pot</strong> à la fermeture</li>
@@ -6299,8 +6299,8 @@ async function handleCreateBet() {
 
   if (!desc)              { setAlert('betCreateAlert', 'Écris la question du pari !', 'error'); return; }
   if (!option1 || !option2) { setAlert('betCreateAlert', 'Remplis les deux choix !', 'error'); return; }
-  if (isNaN(odds1) || odds1 < 1.01 || odds1 > 3) { setAlert('betCreateAlert', 'Cote 1 invalide (entre 1.01 et 3.00) !', 'error'); return; }
-  if (isNaN(odds2) || odds2 < 1.01 || odds2 > 3) { setAlert('betCreateAlert', 'Cote 2 invalide (entre 1.01 et 3.00) !', 'error'); return; }
+  if (isNaN(odds1) || odds1 < 1.20 || odds1 > 3) { setAlert('betCreateAlert', 'Cote 1 invalide (entre 1.20 et 3.00) !', 'error'); return; }
+  if (isNaN(odds2) || odds2 < 1.20 || odds2 > 3) { setAlert('betCreateAlert', 'Cote 2 invalide (entre 1.20 et 3.00) !', 'error'); return; }
 
   const bet = {
     id: generateBetId(),
@@ -11417,7 +11417,7 @@ init();
 <script src="pommon.js"></script>
 <script src="boutique_profil.js"></script>
 <script src="boutique.js?v=3"></script>
-<!-- <script src="hotel.js"></script> -->
+<script src="hotel.js"></script>
 <script src="marche_noir.js"></script>
 <!-- <script src="clicker_jardin.js"></script> -->
 <script src="dino.js"></script>
