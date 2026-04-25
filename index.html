@@ -4079,7 +4079,7 @@
             </div>
             <div class="form-group">
               <label>Récompense (Pomels offerts par le système)</label>
-              <input type="number" id="missionRewardInput" placeholder="ex: 200" min="1" max="5000" />
+              <input type="number" id="missionRewardInput" placeholder="ex: 200" min="1" />
             </div>
             <div id="missionCreateAlert" class="alert"></div>
             <div id="missionLimitInfo" class="mission-limit-info" style="display:none;"></div>
@@ -4340,6 +4340,24 @@
           </div>
         </div>
 
+        <div class="info-item" id="info-missions">
+          <button class="info-trigger" onclick="toggleInfo('missions')">
+            <span class="info-trigger-icon">🎯</span>
+            <span class="info-trigger-label">Missions</span>
+            <span class="info-trigger-arrow">▼</span>
+          </button>
+          <div class="info-body">
+            <p>Comme les Quêtes, mais <strong>ouvertes à tous</strong> : tu lances une mission et le premier joueur qui l'accepte a 24h pour la réaliser.</p>
+            <ul>
+              <li><strong>1 mission par jour</strong> que tu peux créer</li>
+              <li>Récompense libre — fixe ce que tu veux (versée par le système)</li>
+              <li>Quand tu valides l'accomplissement : le joueur reçoit la récompense complète, et toi un <strong>bonus créateur de 75%</strong></li>
+              <li>Si l'accepteur ne tient pas les 24h, la mission redevient libre — il ne pourra pas la reprendre</li>
+              <li>Expire après <strong>3 jours</strong> si personne ne l'accepte ; les missions terminées sont supprimées 24h après</li>
+            </ul>
+          </div>
+        </div>
+
       </div>
 
       <!-- JEUX -->
@@ -4385,8 +4403,18 @@
             <span class="info-trigger-arrow">▼</span>
           </button>
           <div class="info-body">
-            <p>Un mode à part, plus complexe que les autres jeux — explore, collectionne et progresse à ton rythme.</p>
-            <p style="margin-top:10px;color:var(--muted);font-size:.82rem;">Les règles complètes sont détaillées directement dans le jeu.</p>
+            <p>Un mode à part avec exploration, capture et combats au tour par tour. Tu te déplaces avec <strong>flèches / ZQSD</strong> (ou le d-pad sur mobile).</p>
+            <p><strong>🗺️ Le monde</strong> — 4 zones d'herbes hautes, chacune avec ses PokePoms :</p>
+            <ul>
+              <li><strong>Prairie Élémentaire</strong> — Feu, Plante, Eau, Électrique (idéal pour débuter)</li>
+              <li><strong>Mont des Vents</strong> — type Air uniquement, légendaires rares</li>
+              <li><strong>Plaine Lumineuse</strong> — type Lumière uniquement, légendaires rares</li>
+              <li><strong>Grotte du Crépuscule</strong> — type Ombre uniquement, légendaires rares</li>
+            </ul>
+            <p><strong>🎯 Objectif</strong> — choisir un starter, capturer une équipe de 3, battre les <strong>7 champions d'arène</strong> pour décrocher tous les badges, puis débloquer la <strong>Ligue PokePom</strong> et viser le meilleur score.</p>
+            <p><strong>⚔️ Combats</strong> — 4 stats (HP, ATK, DEF, VIT), 7 types avec faiblesses/résistances (×1.4 / ×0.6), et un bonus <strong>STAB ×1.5</strong> quand l'attaque est du même type que le PokePom. Le switch en cours de combat coûte un tour mais peut sauver une partie.</p>
+            <p><strong>📈 Limites quotidiennes</strong> — un nombre fixe de combats sauvages, victoires d'arène et runs de Ligue par jour. Les PokePoms gagnent de l'XP pour monter jusqu'au niveau 10.</p>
+            <p style="margin-top:10px;color:var(--muted);font-size:.82rem;">Le guide complet (table des types, paliers, conseils) est consultable dans le jeu via <strong>Centre PokePom → 📖 Infos & Guide</strong>.</p>
           </div>
         </div>
 
@@ -4550,18 +4578,21 @@
           </div>
         </div>
 
-        <div class="info-item" id="info-hotel">
-          <button class="info-trigger" onclick="toggleInfo('hotel')">
-            <span class="info-trigger-icon">🏨</span>
-            <span class="info-trigger-label">Hôtel des Ventes</span>
+        <div class="info-item" id="info-marche-noir">
+          <button class="info-trigger" onclick="toggleInfo('marche-noir')">
+            <span class="info-trigger-icon">🕶️</span>
+            <span class="info-trigger-label">Marché Noir</span>
             <span class="info-trigger-arrow">▼</span>
           </button>
           <div class="info-body">
-            <p>Crée et vends tes propres titres personnalisés à la communauté.</p>
+            <p>Revends les titres que tu possèdes (boutique <em>ou</em> custom) à d'autres joueurs. Contrairement à un commerce classique, <strong>c'est toi qui choisis à qui vendre</strong>.</p>
             <ul>
-              <li>1 titre en vente par jour, au prix de ton choix</li>
-              <li>Expire après <strong>24h</strong> — les Pomels te sont versés à l'achat</li>
-              <li>Les titres achetés restent dans ton inventaire sans limite</li>
+              <li>Mets en vente n'importe quel titre que tu possèdes, au prix de ton choix (max <strong>999 999 🪙</strong>)</li>
+              <li>Tu peux personnaliser la <strong>couleur du titre</strong> avant de le vendre — c'est un nouveau titre unique</li>
+              <li>Quand un acheteur clique sur "Je veux !", ses Pomels sont <strong>réservés en escrow</strong> et tu reçois une demande</li>
+              <li>Tu peux <strong>accepter</strong> (la vente est conclue, tu reçois les Pomels) ou <strong>refuser</strong> (l'acheteur est remboursé intégralement)</li>
+              <li>Tant qu'aucune demande n'est active, tu peux retirer ton annonce librement</li>
+              <li>Les annonces vendues ou annulées restent visibles <strong>24h</strong> avant d'être archivées</li>
             </ul>
           </div>
         </div>
@@ -7464,7 +7495,7 @@ async function cancelQuete(queteId) {
 const MISSION_EXPIRE_MS        = 3 * 24 * 3600 * 1000;  // 3 jours avant suppression
 const MISSION_DONE_EXPIRE_MS   = 24 * 3600 * 1000;      // 24h après done → suppression
 const MISSION_ACCEPT_DURATION  = 24 * 3600 * 1000;      // 24h pour accomplir
-const MISSION_MAX_REWARD       = 5000;
+const MISSION_MAX_REWARD       = Infinity;
 
 function _missionDayKey(iso) {
   const d = new Date(iso);
@@ -7726,7 +7757,6 @@ async function handleCreateMission() {
 
   if (!desc)                 { setAlert('missionCreateAlert', 'Décris la mission !', 'error'); return; }
   if (!reward || reward < 1) { setAlert('missionCreateAlert', 'Entre une récompense valide !', 'error'); return; }
-  if (reward > MISSION_MAX_REWARD) { setAlert('missionCreateAlert', `La récompense maximum est de ${MISSION_MAX_REWARD.toLocaleString('fr-FR')} Pomels !`, 'error'); return; }
 
   // Check : 1 mission par jour
   const alreadyCreated = await _hasCreatedMissionToday(state.code);
