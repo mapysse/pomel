@@ -22,47 +22,67 @@
    1. CONSTANTES
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const PM_TYPES = ['plante', 'feu', 'eau', 'electrique', 'air', 'ombre', 'lumiere'];
+const PM_TYPES = ['plante', 'feu', 'eau', 'electrique', 'air', 'ombre', 'lumiere', 'glace', 'metal'];
 
 const PM_TYPE_EMOJI = {
   plante: '🌿', feu: '🔥', eau: '💧', electrique: '⚡',
-  air: '🌀', ombre: '🌑', lumiere: '✨'
+  air: '🌀', ombre: '🌑', lumiere: '✨',
+  glace: '❄️', metal: '⚙️'
 };
 
 const PM_TYPE_COLOR = {
   plante: '#4a8c3f', feu: '#d4553a', eau: '#3a7bd4', electrique: '#f0c040',
-  air: '#a8c8e8', ombre: '#8855aa', lumiere: '#f5d540'
+  air: '#a8c8e8', ombre: '#8855aa', lumiere: '#f5d540',
+  glace: '#8acce0', metal: '#9098a8'
 };
 
 const PM_TYPE_LABEL = {
   plante: 'Plante', feu: 'Feu', eau: 'Eau', electrique: 'Électrique',
-  air: 'Air', ombre: 'Ombre', lumiere: 'Lumière'
+  air: 'Air', ombre: 'Ombre', lumiere: 'Lumière',
+  glace: 'Glace', metal: 'Métal'
 };
 
 // Table faiblesses/résistances : PM_WEAK[defenderType] = { moveType: multiplicateur }
 // Lecture : « Le défenseur (clé extérieure) subit X multiplicateur quand il est attaqué par moveType (clé intérieure) »
-// Ex : PM_WEAK['feu']['eau'] = 1.5  → un Feu attaqué par une attaque Eau prend 1.5× les dégâts
-// Ex : PM_WEAK['plante']['eau'] = 0.5 → une Plante attaquée par une attaque Eau prend 0.5× les dégâts
+// Ex : PM_WEAK['feu']['eau'] = 1.4  → un Feu attaqué par une attaque Eau prend 1.4× les dégâts
+// Ex : PM_WEAK['plante']['eau'] = 0.6 → une Plante attaquée par une attaque Eau prend 0.6× les dégâts
 const PM_WEAK = {
-  plante:     { eau: 0.6, electrique: 0.6, feu: 1.4, air: 1.4 },
-  feu:        { plante: 0.6, lumiere: 0.6, eau: 1.4, ombre: 1.4 },
+  plante:     { eau: 0.6, electrique: 0.6, feu: 1.4, air: 1.4, glace: 1.4 },
+  feu:        { plante: 0.6, lumiere: 0.6, glace: 0.6, eau: 1.4, ombre: 1.4 },
   eau:        { feu: 0.6, air: 0.6, electrique: 1.4, plante: 1.4 },
-  electrique: { eau: 0.6, lumiere: 0.6, ombre: 1.4, plante: 1.4 },
-  air:        { plante: 0.6, ombre: 0.6, electrique: 1.4, lumiere: 1.4 },
+  electrique: { eau: 0.6, lumiere: 0.6, metal: 0.6, ombre: 1.4, plante: 1.4 },
+  air:        { plante: 0.6, ombre: 0.6, lumiere: 0.6, electrique: 1.4, glace: 1.4 },
   ombre:      { feu: 0.6, electrique: 0.6, lumiere: 1.4, air: 1.4 },
-  lumiere:    { air: 0.6, feu: 0.6, ombre: 1.4, eau: 1.4 }
+  lumiere:    { air: 0.6, feu: 0.6, ombre: 1.4, eau: 1.4 },
+  glace:      { air: 0.6, feu: 1.4, metal: 1.4, lumiere: 1.4 },
+  metal:      { lumiere: 0.6, glace: 0.6, feu: 1.4, electrique: 1.4 }
 };
 
-// Rareté d'apparition en combat sauvage (pourcentage)
+// Rareté d'apparition en combat sauvage R1 (pourcentage)
+// Glace et Métal n'apparaissent qu'en R2 (cf. PM_R2_ENCOUNTER_RATES dans la section R2)
 const PM_ENCOUNTER_RATES = {
   plante: 15, feu: 15, eau: 15, electrique: 15, air: 15,
   ombre: 8, lumiere: 8
   // Le reste (9%) est réparti en légendaires
 };
 
-// XP nécessaire pour passer au niveau suivant (index = niveau actuel)
-const PM_XP_TABLE = [0, 15, 25, 35, 50, 65, 80, 100, 120, 150];
-// Ex: PM_XP_TABLE[1] = 15 XP pour passer de niv 1 à niv 2
+// Niveau maximum d'un PokePom
+const PM_LEVEL_MAX = 30;
+
+// XP nécessaire pour passer au niveau suivant
+// Formule : floor(15 + level*8 + level² * 1.5)
+// Donne : 15 → 25 → 38 → 56 → 80 → 109 → 145 → 187 → 235 → 290 → ...
+//        ... → ~1660 pour passer de 29 à 30
+function pmXpToNext(level) {
+  return Math.floor(15 + level * 8 + level * level * 1.5);
+}
+
+// Tableau pré-calculé pour accès rapide (index = niveau actuel, valeur = XP requis pour next)
+const PM_XP_TABLE = (() => {
+  const arr = [0]; // niv 0 inutilisé
+  for (let lvl = 1; lvl < PM_LEVEL_MAX; lvl++) arr.push(pmXpToNext(lvl));
+  return arr;
+})();
 
 // Gains d'XP
 const PM_XP_GAIN = {
@@ -77,6 +97,49 @@ const PM_WILD_NERF = 0.65;      // sauvages à 65% de leurs stats
 const PM_GYM_BOOST = 1.20;      // champions d'arène à 120%
 const PM_CAPTURE_RATE = 0.15;   // 15% de chance de capture
 const PM_LEVEL_BONUS = 0.05;    // +5% par niveau
+
+// ── Région 2 — Terres de PomStud ──
+const PM_R1_WILD_LEVEL_CAP = 12;        // sauvages R1 plafonnés à niv 12
+const PM_R2_WILD_LEVEL_MIN = 6;         // plancher minimum en R2
+const PM_R2_UNLOCK_BADGES = 7;          // 7 badges R1 nécessaires pour débloquer R2
+
+// ── Évolution ──
+const PM_EVOLUTION_LEVEL = 20;          // niveau de déclenchement
+const PM_EVOLUTION_STAT_MULT = 1.5;     // stats × 1.5 à l'évolution
+
+// Table d'évolution : base id → évolution id
+// Seuls les PokePoms listés ici peuvent évoluer. Les autres restent dans leur forme.
+const PM_EVOLUTIONS = {
+  // Évolutions R1 (10)
+  pomalis:    'pomalor',
+  thornet:    'thornogor',
+  flameche:   'brasileon',
+  viperod:    'viperiphon',
+  goutapom:   'goutaragon',
+  carapulse:  'carapharos',
+  volture:    'volterion',
+  fulguron:   'fulgurion',
+  zephibri:   'zephirion',
+  spectrelis: 'spectreval',
+
+  // Évolutions R2 (10)
+  cristellis:   'cristelune',
+  frimadon:     'glacedrak',
+  forgemin:     'forgehammer',
+  acierus:      'acierox',
+  mousseron:    'mousseroi',
+  vrillemousse: 'vrillarcane',
+  braslune:     'braslunaire',
+  pyrecate:     'pyrecarde',
+  voilombre:    'voilarchive',
+  brumelope:    'brumelord'
+};
+
+// ── Dojo ──
+const PM_DOJO_MIN_LEVEL = 10;           // PokePom doit être niv 10+ pour apprendre au Dojo
+const PM_DOJO_COST_BASIC = 400;         // moves basiques (power 50-60 ou utilitaires simples)
+const PM_DOJO_COST_STANDARD = 1000;     // moves standards (power 70-80, ou buffs +2 crans)
+const PM_DOJO_COST_SIGNATURE = 2500;    // moves signature (power 85+ ou effets uniques)
 
 // Crans de stats (index = cran + 3, donc [-3 à +3])
 const PM_STAGE_MULT = [0.35, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75];
@@ -162,7 +225,114 @@ const PM_DEX = {
   solarion:   { id:'solarion',   name:'Solarion',   type:'lumiere',    hp:65, atk:75, def:50, vit:70,
                 lore:'Lion-soleil, gardien des aubes. Sa crinière flamboyante brûle sans consumer et illumine les vallées au lever du jour.' },
   astraflore: { id:'astraflore', name:'Astraflore', type:'lumiere',    hp:70, atk:85, def:55, vit:80, legendary:true,
-                lore:'Déesse florale des cieux étoilés. Sa fleur frontale contient, dit-on, un fragment de constellation vivante.' }
+                lore:'Déesse florale des cieux étoilés. Sa fleur frontale contient, dit-on, un fragment de constellation vivante.' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RÉGION 2 — TERRES DE POMSTUD
+  // 18 nouveaux PokePoms (région 2 uniquement, flag region:2)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ❄️ GLACE (5) — glass cannon (+VIT +ATK, -DEF -HP)
+  cristellis:  { id:'cristellis',  name:'Cristellis',  type:'glace',      hp:50, atk:55, def:40, vit:70, region:2,
+                 lore:'Petite biche aux bois de cristal. Ses sabots gravent des runes glacées sur le sol qu\'elle foule.' },
+  frimadon:    { id:'frimadon',    name:'Frimadon',    type:'glace',      hp:55, atk:65, def:45, vit:75, region:2,
+                 lore:'Dragon des congères. Son souffle fige l\'air en sculptures fugaces que seul un œil pur peut voir.' },
+  glacelune:   { id:'glacelune',   name:'Glacelune',   type:'glace',      hp:60, atk:55, def:55, vit:70, region:2,
+                 lore:'Renarde des aurores polaires. Sa fourrure capture la lumière des étoiles et la rend, transformée.' },
+  cryomorphe:  { id:'cryomorphe',  name:'Cryomorphe',  type:'glace',      hp:55, atk:70, def:50, vit:80, region:2,
+                 lore:'Esprit des tempêtes blanches. On dit qu\'il fut jadis un voyageur qui n\'a jamais voulu rentrer chez lui.' },
+  hivernel:    { id:'hivernel',    name:'Hivernel',    type:'glace',      hp:80, atk:85, def:65, vit:90, region:2, legendary:true,
+                 lore:'Cervidé royal des glaces éternelles. Ses bois portent la mémoire de tous les hivers du monde.' },
+
+  // ⚙️ MÉTAL (5) — tank lourd (+HP +DEF, -VIT)
+  forgemin:    { id:'forgemin',    name:'Forgemin',    type:'metal',      hp:70, atk:55, def:75, vit:30, region:2,
+                 lore:'Petite enclume vivante. Elle chante quand on la frappe, et ne chante que pour les forgerons honnêtes.' },
+  acierus:     { id:'acierus',     name:'Aciérus',     type:'metal',      hp:80, atk:65, def:85, vit:35, region:2,
+                 lore:'Chevalier sans visage, armure animée par un serment oublié. Il garde encore quelque chose, mais quoi ?' },
+  orichale:    { id:'orichale',    name:'Orichale',    type:'metal',      hp:85, atk:60, def:95, vit:40, region:2,
+                 lore:'Golem de minerai pur. Plus on le travaille, plus il devient beau, et plus il devient vieux.' },
+  sentinhelm:  { id:'sentinhelm',  name:'Sentinhelm',  type:'metal',      hp:75, atk:75, def:80, vit:45, region:2,
+                 lore:'Heaume hanté errant dans les ruines. Son cri est celui d\'une bataille qui ne s\'est jamais arrêtée.' },
+  rouilleron:  { id:'rouilleron',  name:'Rouilleron',  type:'metal',      hp:95, atk:80, def:100, vit:35, region:2, legendary:true,
+                 lore:'Titan de fer corrodé. Chaque éclat de rouille qui tombe de lui a la valeur d\'un siècle.' },
+
+  // 🌿 PLANTE (2) — natifs R2
+  mousseron:   { id:'mousseron',   name:'Mousseron',   type:'plante',     hp:75, atk:55, def:65, vit:40, region:2,
+                 lore:'Sage des sous-bois, couvert de lichens rares. Ses pas font pousser des fleurs là où il a marché.' },
+  vrillemousse:{ id:'vrillemousse',name:'Vrillemousse',type:'plante',     hp:80, atk:60, def:70, vit:45, region:2,
+                 lore:'Liane épineuse aux yeux multiples. Elle chasse en silence ce que les jardiniers oublient.' },
+
+  // 🔥 FEU (2) — natifs R2
+  braslune:    { id:'braslune',    name:'Braslune',    type:'feu',        hp:55, atk:65, def:45, vit:75, region:2,
+                 lore:'Loup des cendres, pelage incandescent. Il hurle aux nuits sans étoiles pour les rappeler à l\'ordre.' },
+  pyrecate:    { id:'pyrecate',    name:'Pyrécate',    type:'feu',        hp:60, atk:70, def:50, vit:65, region:2,
+                 lore:'Mante religieuse de braise. Ses lames trancheraient l\'aube si elle l\'osait.' },
+
+  // 💧 EAU (1) — natif R2
+  profondine:  { id:'profondine',  name:'Profondine',  type:'eau',        hp:70, atk:65, def:65, vit:65, region:2,
+                 lore:'Anguille des fosses oubliées. Sa lumière interne attire ceux qui cherchent ce qu\'ils ne devraient pas trouver.' },
+
+  // ⚡ ÉLECTRIQUE (1) — natif R2
+  voltaigle:   { id:'voltaigle',   name:'Voltaigle',   type:'electrique', hp:60, atk:75, def:45, vit:85, region:2,
+                 lore:'Aigle des hauteurs orageuses. Sa serre saisit la foudre comme d\'autres saisissent une plume.' },
+
+  // 🌀 AIR (1) — natif R2
+  brumelope:   { id:'brumelope',   name:'Brumélope',   type:'air',        hp:55, atk:60, def:55, vit:85, region:2,
+                 lore:'Antilope des nuées. On ne la voit qu\'à l\'aube, quand le ciel hésite encore.' },
+
+  // 🌑 OMBRE (1) — natif R2
+  voilombre:   { id:'voilombre',   name:'Voilombre',   type:'ombre',      hp:80, atk:55, def:75, vit:55, region:2,
+                 lore:'Manteau abandonné par un voyageur d\'autrefois. Il cherche encore quelqu\'un à protéger.' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ÉVOLUTIONS (20) — obtenues uniquement par évolution au niveau 20
+  // Stats = base × 1.5 (arrondi à l'entier le plus proche)
+  // Flag isEvolution:true → exclues des spawns sauvages et choix de starter
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Évolutions R1 (10)
+  pomalor:     { id:'pomalor',     name:'Pomalor',     type:'plante',     hp:113, atk:75, def:83, vit:60, isEvolution:true,
+                 lore:'Le bulbe a fleuri en couronne végétale. Son parfum apaise désormais des cités entières.' },
+  thornogor:   { id:'thornogor',   name:'Thornogor',   type:'plante',     hp:120, atk:83, def:90, vit:68, isEvolution:true,
+                 lore:'Ses élytres se sont fondus en armure de chitine. Il ne tend plus d\'embuscades : il livre bataille.' },
+  brasileon:   { id:'brasileon',   name:'Brasileon',   type:'feu',        hp:83, atk:83, def:68, vit:98, isEvolution:true,
+                 lore:'Lézard royal au poitrail incandescent. Sa flamme guide les voyageurs perdus dans les nuits froides.' },
+  viperiphon:  { id:'viperiphon',  name:'Vipériphon',  type:'feu',        hp:75, atk:90, def:68, vit:128, isEvolution:true,
+                 lore:'Serpent ailé de braise. Sa morsure scelle des pactes dont nul ne connaît plus les termes.' },
+  goutaragon:  { id:'goutaragon',  name:'Goutaragon',  type:'eau',        hp:90, atk:75, def:83, vit:83, isEvolution:true,
+                 lore:'Le têtard est devenu seigneur des torrents. Ses bulbes-gemmes chantent sous les cascades.' },
+  carapharos:  { id:'carapharos',  name:'Carapharos',  type:'eau',        hp:98, atk:83, def:90, vit:90, isEvolution:true,
+                 lore:'Crabe-phare aux pinces titanesques. Les marins lui doivent plus qu\'ils ne le sauront jamais.' },
+  volterion:   { id:'volterion',   name:'Voltérion',   type:'electrique', hp:83, atk:90, def:68, vit:120, isEvolution:true,
+                 lore:'Écureuil-éclair aux moustaches conductrices. Il garde l\'énergie d\'une tempête entière dans sa queue.' },
+  fulgurion:   { id:'fulgurion',   name:'Fulgurion',   type:'electrique', hp:75, atk:105, def:60, vit:120, isEvolution:true,
+                 lore:'Sphère devenue tempête en miniature. Ceux qui la touchent ne s\'en souviennent jamais clairement.' },
+  zephirion:   { id:'zephirion',   name:'Zéphirion',   type:'air',        hp:75, atk:83, def:75, vit:128, isEvolution:true,
+                 lore:'Colibri-prince aux ailes d\'arc-en-ciel. Sa danse au matin est dit-on un rituel ancien.' },
+  spectreval:  { id:'spectreval',  name:'Spectreval',  type:'ombre',      hp:113, atk:68, def:105, vit:75, isEvolution:true,
+                 lore:'La graine fantôme a poussé en arbuste hanté. Ses fruits ne tombent que pour les âmes apaisées.' },
+
+  // Évolutions R2 (10)
+  cristelune:  { id:'cristelune',  name:'Cristelune',  type:'glace',      hp:75, atk:83, def:60, vit:105, isEvolution:true,
+                 lore:'Biche-prêtresse, bois fait de constellations gelées. Elle marche entre les rêves des dormeurs.' },
+  glacedrak:   { id:'glacedrak',   name:'Glacedrak',   type:'glace',      hp:83, atk:98, def:68, vit:113, isEvolution:true,
+                 lore:'Dragon des hivers anciens. Son souffle a un jour gelé une mer entière, dit la légende.' },
+  forgehammer: { id:'forgehammer', name:'Forgehammer', type:'metal',      hp:105, atk:83, def:113, vit:45, isEvolution:true,
+                 lore:'Enclume animée portant le marteau de son défunt maître. Elle frappe encore selon le rythme appris.' },
+  acierox:     { id:'acierox',     name:'Aciérox',     type:'metal',      hp:120, atk:98, def:128, vit:53, isEvolution:true,
+                 lore:'Chevalier-roi sans royaume. L\'éclat de son armure révèle la vérité des cœurs.' },
+  mousseroi:   { id:'mousseroi',   name:'Mousseroi',   type:'plante',     hp:113, atk:83, def:98, vit:60, isEvolution:true,
+                 lore:'Sage millénaire des forêts profondes. Ses paroles font germer les pierres.' },
+  vrillarcane: { id:'vrillarcane', name:'Vrillarcane', type:'plante',     hp:120, atk:90, def:105, vit:68, isEvolution:true,
+                 lore:'Liane-archiviste aux yeux d\'ambre. Elle a vu pousser et mourir des civilisations.' },
+  braslunaire: { id:'braslunaire', name:'Braslunaire', type:'feu',        hp:83, atk:98, def:68, vit:113, isEvolution:true,
+                 lore:'Loup-roi aux flammes argentées. Il ne hurle plus : il décide, et la nuit obéit.' },
+  pyrecarde:   { id:'pyrecarde',   name:'Pyrécarde',   type:'feu',        hp:90, atk:105, def:75, vit:98, isEvolution:true,
+                 lore:'Mante-générale aux lames doubles. Elle tranche désormais ce qu\'elle voulait jadis seulement effleurer.' },
+  voilarchive: { id:'voilarchive', name:'Voilarchive', type:'ombre',      hp:120, atk:83, def:113, vit:83, isEvolution:true,
+                 lore:'Manteau ancien qui contient mille mémoires. Il cherche maintenant à les transmettre.' },
+  brumelord:   { id:'brumelord',   name:'Brumélord',   type:'air',        hp:83, atk:90, def:83, vit:128, isEvolution:true,
+                 lore:'Antilope-souverain des nuées. Ceux qui le suivent au crépuscule ne reviennent jamais tout à fait pareils.' }
 };
 
 // Liste ordonnée pour itération
@@ -216,6 +386,38 @@ const PM_MOVES = {
   aura_radieuse:   { id:'aura_radieuse',   name:'Aura Radieuse',    type:'lumiere',    power:0,  accuracy:100, pp:3, category:'buff', stat:'atk', stages:1, desc:'Augmente ta propre Attaque d\'un cran.' },
   ombre_inversee:  { id:'ombre_inversee',  name:'Ombre Inversée',   type:'ombre',      power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Ombre (couvre les Lumière).' },
 
+  // Glace
+  blizzard:        { id:'blizzard',        name:'Blizzard',         type:'glace',      power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Glace puissante.' },
+  cristal_eclat:   { id:'cristal_eclat',   name:'Éclat de Cristal', type:'glace',      power:50, accuracy:95,  pp:5, category:'attack', sideEffect:'debuff_def', chance:0.25, desc:'Attaque Glace, 25% de baisser la Défense adverse.' },
+  vent_polaire:    { id:'vent_polaire',    name:'Vent Polaire',     type:'air',        power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Air (couvre les Plante).' },
+  givre_acere:     { id:'givre_acere',     name:'Givre Acéré',      type:'glace',      power:0,  accuracy:90,  pp:3, category:'debuff', stat:'vit', stages:-1, desc:'Baisse la Vitesse adverse d\'un cran.' },
+
+  // Métal
+  charge_lourde:   { id:'charge_lourde',   name:'Charge Lourde',    type:'metal',      power:80, accuracy:85,  pp:3, category:'attack', desc:'Attaque Métal puissante.' },
+  lame_acier:      { id:'lame_acier',      name:'Lame d\'Acier',    type:'metal',      power:50, accuracy:95,  pp:5, category:'attack', sideEffect:'buff_atk', chance:0.25, desc:'Attaque Métal, 25% d\'augmenter ta propre Attaque.' },
+  poing_brulant:   { id:'poing_brulant',   name:'Poing Brûlant',    type:'feu',        power:50, accuracy:95,  pp:5, category:'attack', desc:'Attaque Feu (couvre les Glace).' },
+  forteresse:      { id:'forteresse',      name:'Forteresse',       type:'metal',      power:0,  accuracy:100, pp:3, category:'buff', stat:'def', stages:1, desc:'Augmente ta propre Défense d\'un cran.' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MOVES SIGNATURE DOJO — exclusivement appris au Dojo (R2)
+  // 7 moves de type signature (power 85+, effets uniques) + 3 moves universels
+  // Tous ont dojoOnly:true pour qu'on puisse les filtrer si besoin
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Signatures de type (1 par type, power 85-90)
+  lame_seve:       { id:'lame_seve',       name:'Lame Sève',        type:'plante',     power:85, accuracy:90,  pp:3, category:'attack', dojoOnly:true, desc:'Attaque Plante puissante.' },
+  volcan_sacre:    { id:'volcan_sacre',    name:'Volcan Sacré',     type:'feu',        power:90, accuracy:85,  pp:3, category:'attack', burnChance:0.35, dojoOnly:true, desc:'Attaque Feu, 35% de brûler.' },
+  raz_de_maree:    { id:'raz_de_maree',    name:'Raz-de-Marée',     type:'eau',        power:85, accuracy:90,  pp:3, category:'attack', sideEffect:'debuff_vit', chance:0.25, dojoOnly:true, desc:'Attaque Eau, 25% de baisser la Vitesse.' },
+  foudre_pure:     { id:'foudre_pure',     name:'Foudre Pure',      type:'electrique', power:90, accuracy:85,  pp:3, category:'attack', sideEffect:'debuff_def', chance:0.30, dojoOnly:true, desc:'Attaque Électrique, 30% de baisser la Défense.' },
+  souffle_aurore:  { id:'souffle_aurore',  name:'Souffle Aurore',   type:'air',        power:80, accuracy:95,  pp:3, category:'attack', healFraction:0.25, dojoOnly:true, desc:'Attaque Air, soigne 25% des dégâts infligés.' },
+  cristal_brise:   { id:'cristal_brise',   name:'Cristal Brisé',    type:'glace',      power:90, accuracy:85,  pp:3, category:'attack', sideEffect:'debuff_def', chance:0.30, dojoOnly:true, desc:'Attaque Glace, 30% de baisser la Défense.' },
+  lame_orichal:    { id:'lame_orichal',    name:'Lame d\'Orichal',  type:'metal',      power:85, accuracy:90,  pp:3, category:'attack', ignoreDefBuffs:true, dojoOnly:true, desc:'Attaque Métal, ignore les buffs de Défense adverses.' },
+
+  // Universels utilitaires (n'importe quel type peut les apprendre)
+  aura_de_fer:     { id:'aura_de_fer',     name:'Aura de Fer',      type:'neutre',     power:0, accuracy:100, pp:3, category:'buff',   stat:'def', stages:2, dojoOnly:true, desc:'Augmente sa propre Défense de 2 crans.' },
+  hate_ancienne:   { id:'hate_ancienne',   name:'Hâte Ancienne',    type:'neutre',     power:0, accuracy:100, pp:3, category:'buff',   stat:'vit', stages:2, dojoOnly:true, desc:'Augmente sa propre Vitesse de 2 crans.' },
+  malediction:     { id:'malediction',     name:'Malédiction',      type:'ombre',      power:0, accuracy:90,  pp:3, category:'debuff', multiStat:['atk','def'], stages:-1, dojoOnly:true, desc:'Baisse l\'Attaque ET la Défense adverses d\'un cran.' },
+
   // Universel (backup quand plus de PP)
   lutte:           { id:'lutte',           name:'Lutte',            type:'neutre',     power:30, accuracy:100, pp:99, category:'attack', recoilPct:0.15, desc:'Attaque désespérée, inflige 15% de recul à l\'utilisateur.' }
 };
@@ -228,11 +430,131 @@ const PM_MOVES_BY_TYPE = {
   electrique: ['arc_voltaique', 'surcharge', 'galvanisation', 'racine_choc'],
   air:        ['cyclone', 'brise_vitale', 'eclat_celeste', 'vent_curatif'],
   ombre:      ['nuit_noire', 'griffure_spec', 'voile_obscur', 'flamme_maudite'],
-  lumiere:    ['rayon_sacre', 'eclat_dore', 'aura_radieuse', 'ombre_inversee']
+  lumiere:    ['rayon_sacre', 'eclat_dore', 'aura_radieuse', 'ombre_inversee'],
+  glace:      ['blizzard', 'cristal_eclat', 'vent_polaire', 'givre_acere'],
+  metal:      ['charge_lourde', 'lame_acier', 'poing_brulant', 'forteresse']
 };
 
-function getMoveset(pokepomId) {
+// ═══════════════════════════════════════════════════════════════════════════
+// CATALOGUE DOJO
+// ═══════════════════════════════════════════════════════════════════════════
+// Pour chaque type, liste des moves apprenables au Dojo.
+// Composition (8 moves par type) :
+//   - 4 moves natifs du type (utiles pour ré-apprendre si oubliés)
+//   - 1 move signature exclusif du type (power 85+)
+//   - 2-3 moves de couverture (autres types, choisis par cohérence)
+//
+// Les 3 moves universels (aura_de_fer, hate_ancienne, malediction) sont
+// accessibles à tous les types via PM_DOJO_UNIVERSAL.
+const PM_DOJO_CATALOG = {
+  plante: [
+    // Natifs (rachetables)
+    'fouet_roncier', 'photosynthese', 'lancer_seve', 'pollen_lourd',
+    // Signature
+    'lame_seve',
+    // Couverture : Plante peut taper Eau et Roche-équivalent → Tranchant Feu, Charge Lourde Métal
+    'tranchant', 'charge_lourde'
+  ],
+  feu: [
+    'brasier', 'flamme_vive', 'tranchant', 'surchauffe',
+    'volcan_sacre',
+    // Couverture : Feu peut taper Glace et Plante → Cristal Brisé Glace, Lame d'Orichal Métal
+    'cristal_eclat', 'lame_orichal'
+  ],
+  eau: [
+    'torrent', 'aqua_jet', 'eclair_marin', 'corrosion',
+    'raz_de_maree',
+    // Couverture : Eau peut taper Feu et Roche-équivalent → Givre Acéré Glace, Vent Polaire Air
+    'givre_acere', 'vent_polaire'
+  ],
+  electrique: [
+    'arc_voltaique', 'surcharge', 'galvanisation', 'racine_choc',
+    'foudre_pure',
+    // Couverture : Élec peut taper Eau et Air → Aqua Jet Eau, Cyclone Air
+    'aqua_jet', 'cyclone'
+  ],
+  air: [
+    'cyclone', 'brise_vitale', 'eclat_celeste', 'vent_curatif',
+    'souffle_aurore',
+    // Couverture : Air peut taper Plante et Glace → Lancer Sève Plante, Blizzard Glace
+    'lancer_seve', 'blizzard'
+  ],
+  ombre: [
+    'nuit_noire', 'griffure_spec', 'voile_obscur', 'flamme_maudite',
+    // Pas de move signature de type "ombre" stricto sensu — Malédiction (universel) est leur signature
+    'malediction',
+    // Couverture : Ombre peut taper Lumière et Air → Eclat Doré Lumière, Cyclone Air
+    'eclat_dore', 'cyclone'
+  ],
+  lumiere: [
+    'rayon_sacre', 'eclat_dore', 'aura_radieuse', 'ombre_inversee',
+    // Pas de signature lumière stricto — utilisons le move air signature, vu Hauteurs de Solenne (lumière + air)
+    'souffle_aurore',
+    // Couverture : Lumière peut taper Glace et Ombre → Cristal Brisé Glace, Voile Obscur Ombre
+    'cristal_brise', 'voile_obscur'
+  ],
+  glace: [
+    'blizzard', 'cristal_eclat', 'vent_polaire', 'givre_acere',
+    'cristal_brise',
+    // Couverture : Glace peut taper Plante et Air → Lancer Sève, Cyclone
+    'lancer_seve', 'cyclone'
+  ],
+  metal: [
+    'charge_lourde', 'lame_acier', 'poing_brulant', 'forteresse',
+    'lame_orichal',
+    // Couverture : Métal peut taper Glace et Lumière → Givre Acéré, Eclat Doré
+    'givre_acere', 'eclat_dore'
+  ],
+};
+
+// Moves universels accessibles à TOUS les PokePoms via le Dojo
+const PM_DOJO_UNIVERSAL = ['aura_de_fer', 'hate_ancienne', 'malediction'];
+
+// Détermine le coût d'un move au Dojo selon ses caractéristiques
+function pmDojoMoveCost(moveId) {
+  const m = PM_MOVES[moveId];
+  if (!m) return PM_DOJO_COST_BASIC;
+  // Move signature exclusif (dojoOnly = true) : signature ou universel
+  if (m.dojoOnly) {
+    if (m.power >= 85 || m.healFraction || m.ignoreDefBuffs) return PM_DOJO_COST_SIGNATURE;
+    if (m.stages === 2 || m.stages === -1 && m.multiStat) return PM_DOJO_COST_STANDARD;
+    return PM_DOJO_COST_STANDARD;
+  }
+  // Move standard de type : power 70+ → standard, sinon basic
+  if (m.power >= 70) return PM_DOJO_COST_STANDARD;
+  return PM_DOJO_COST_BASIC;
+}
+
+// Liste l'ensemble des moves apprenables au Dojo pour un PokePom donné
+// Retourne un array d'ids (tous valides dans PM_MOVES)
+function pmDojoMovesFor(pokepomId) {
   const poke = PM_DEX[pokepomId];
+  if (!poke) return [];
+  const typeMoves = PM_DOJO_CATALOG[poke.type] || [];
+  // Concat avec les universels, dédoublonner
+  const all = [...new Set([...typeMoves, ...PM_DOJO_UNIVERSAL])];
+  return all;
+}
+
+// Retourne le moveset (4 moves) d'un PokePom.
+// Comportement :
+//   - Si appelé avec un id (string) : moves natifs du type (compat existante, ex: pour
+//     les sauvages, champions, ligue qui n'ont pas d'instance persistée)
+//   - Si appelé avec une instance ayant customMoves : moves persos (déterminés au Dojo)
+//   - Si appelé avec une instance sans customMoves : moves natifs du type
+function getMoveset(pokepomIdOrInstance) {
+  // Cas 1 : appelé avec une instance (objet)
+  if (typeof pokepomIdOrInstance === 'object' && pokepomIdOrInstance !== null) {
+    const inst = pokepomIdOrInstance;
+    if (Array.isArray(inst.customMoves) && inst.customMoves.length === 4) {
+      return inst.customMoves.map(mid => PM_MOVES[mid]).filter(Boolean);
+    }
+    // Fallback sur les natifs du type
+    const poke = PM_DEX[inst.pokepomId];
+    return PM_MOVES_BY_TYPE[poke.type].map(mid => PM_MOVES[mid]);
+  }
+  // Cas 2 : appelé avec un id (string)
+  const poke = PM_DEX[pokepomIdOrInstance];
   return PM_MOVES_BY_TYPE[poke.type].map(mid => PM_MOVES[mid]);
 }
 
@@ -875,12 +1197,2404 @@ PM_SPRITES.astraflore = function(ctx) {
   ctx.globalAlpha=1;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SPRITES RÉGION 2 — Terres de PomStud (18 PokePoms)
+// Palette type Glace : cyan/blanc/lavande (#a8dcff, #d8f0ff, #ccccee, #b0bcd0)
+// Palette type Métal : acier/cuivre/rouille (#7080a0, #b0b8c8, #d0d4e0, #b87040)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ❄️ GLACE — 5 PokePoms
+
+PM_SPRITES.cristellis = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Bois de cristal sur la tête
+  px(18,2,2,8,'#88ccee'); px(20,4,2,4,'#aaddff'); px(16,4,2,2,'#aaddff'); px(14,6,2,2,'#cceeff');
+  px(44,2,2,8,'#88ccee'); px(42,4,2,4,'#aaddff'); px(46,4,2,2,'#aaddff'); px(48,6,2,2,'#cceeff');
+  px(20,0,2,2,'#ffffff'); px(44,0,2,2,'#ffffff');
+  // Tête
+  px(20,10,24,8,'#d8f0ff'); px(18,12,28,8,'#c0e0f0'); px(20,18,24,4,'#a8d0e8');
+  // Joues bleutées
+  px(22,16,4,3,'#88c0e0'); px(38,16,4,3,'#88c0e0');
+  // Yeux
+  px(24,13,4,4,'#1a2a44'); px(25,14,2,2,'#aaeeff'); px(36,13,4,4,'#1a2a44'); px(37,14,2,2,'#aaeeff');
+  px(24,13,1,1,'#ffffff'); px(36,13,1,1,'#ffffff');
+  // Petit museau
+  px(30,18,4,3,'#ffffff'); px(31,19,2,1,'#dde6ff');
+  // Corps
+  px(18,22,28,12,'#d8f0ff'); px(16,24,32,10,'#c0e0f0'); px(18,32,28,4,'#a8d0e8');
+  // Marques cristal sur le flanc
+  ctx.globalAlpha=0.6;
+  px(22,26,3,3,'#aaddff'); px(38,28,3,3,'#aaddff'); px(28,24,2,2,'#cceeff');
+  ctx.globalAlpha=1;
+  // Pattes arrière
+  px(18,36,6,10,'#a8d0e8'); px(16,40,6,8,'#90b8d0'); px(40,36,6,10,'#a8d0e8'); px(42,40,6,8,'#90b8d0');
+  // Pattes avant
+  px(22,38,5,8,'#a8d0e8'); px(20,44,5,6,'#90b8d0'); px(37,38,5,8,'#a8d0e8'); px(39,44,5,6,'#90b8d0');
+  // Sabots cristallins
+  px(15,46,6,3,'#88ccee'); px(43,46,6,3,'#88ccee'); px(19,48,5,2,'#88ccee'); px(40,48,5,2,'#88ccee');
+  // Petite queue
+  px(46,24,4,4,'#aaddff'); px(50,22,3,3,'#cceeff'); px(52,20,2,2,'#ffffff');
+  // Particules de givre
+  ctx.globalAlpha=0.5;
+  px(8,16,2,2,'#ffffff'); px(54,18,2,2,'#ffffff'); px(6,38,2,2,'#cceeff'); px(56,40,2,2,'#cceeff');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.frimadon = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Tête de dragon
+  px(8,8,18,8,'#a0c8e0'); px(6,12,22,8,'#88b8d4'); px(8,18,18,4,'#7098b8');
+  // Cornes
+  px(10,4,3,5,'#ccddee'); px(11,2,2,3,'#ffffff'); px(20,4,3,5,'#ccddee'); px(21,2,2,3,'#ffffff');
+  // Yeux
+  px(10,13,4,3,'#1a2a44'); px(11,14,2,1,'#88ddff');
+  px(18,13,4,3,'#1a2a44'); px(19,14,2,1,'#88ddff');
+  // Dents
+  px(8,18,2,3,'#ffffff'); px(22,18,2,3,'#ffffff');
+  // Souffle givré
+  ctx.globalAlpha=0.7;
+  px(0,12,8,4,'#cceeff'); px(0,14,6,2,'#ffffff');
+  ctx.globalAlpha=0.4;
+  px(0,10,4,2,'#cceeff'); px(0,18,4,2,'#cceeff');
+  ctx.globalAlpha=1;
+  // Cou
+  px(20,20,10,4,'#88b8d4'); px(22,24,12,4,'#7098b8');
+  // Corps long et serpentin
+  px(26,22,18,8,'#a0c8e0'); px(30,28,16,8,'#88b8d4'); px(34,34,16,6,'#7098b8');
+  px(38,38,16,6,'#88b8d4'); px(42,42,14,4,'#a0c8e0'); px(46,44,12,4,'#88b8d4');
+  // Pics de glace sur le dos
+  px(28,18,3,5,'#ddeeff'); px(34,16,3,7,'#cceeff'); px(40,18,3,5,'#ddeeff');
+  px(46,22,3,5,'#cceeff'); px(52,28,3,5,'#ddeeff');
+  // Ailes glacées
+  ctx.globalAlpha=0.6;
+  px(20,4,16,8,'#ddeeff'); px(24,2,12,4,'#ffffff'); px(26,12,12,4,'#cceeff');
+  ctx.globalAlpha=1;
+  px(22,8,2,3,'#88ccee'); px(28,6,2,4,'#88ccee'); px(34,8,2,3,'#88ccee');
+  // Queue avec pic
+  px(54,46,4,4,'#a0c8e0'); px(56,42,4,5,'#cceeff'); px(60,40,3,4,'#ffffff');
+  // Ventre
+  px(30,32,14,4,'#cceeff');
+  // Particules
+  ctx.globalAlpha=0.4;
+  px(2,28,2,2,'#ffffff'); px(4,40,1,1,'#ffffff'); px(60,16,1,1,'#cceeff'); px(58,52,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.glacelune = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aurore de fond
+  ctx.globalAlpha=0.25;
+  px(0,4,64,6,'#ccaaff'); px(0,8,64,6,'#aaccff'); px(0,12,64,4,'#ccffee');
+  ctx.globalAlpha=1;
+  // Oreilles pointues
+  px(14,4,4,8,'#e8f0ff'); px(16,2,3,5,'#ffffff'); px(15,8,3,3,'#aac0d8');
+  px(46,4,4,8,'#e8f0ff'); px(45,2,3,5,'#ffffff'); px(46,8,3,3,'#aac0d8');
+  // Tête
+  px(18,10,28,8,'#e8f0ff'); px(16,14,32,8,'#d0d8ee'); px(18,20,28,4,'#b0bcd8');
+  // Marques d'aurore sur le front
+  ctx.globalAlpha=0.5;
+  px(26,12,12,3,'#ccaaff'); px(28,14,8,2,'#aaccff');
+  ctx.globalAlpha=1;
+  // Yeux étoilés
+  px(22,15,4,4,'#2a2a44'); px(23,16,2,2,'#aaccff'); px(24,17,1,1,'#ffffff');
+  px(38,15,4,4,'#2a2a44'); px(39,16,2,2,'#aaccff'); px(40,17,1,1,'#ffffff');
+  // Museau
+  px(30,20,4,3,'#1a1a22'); px(31,21,2,1,'#ffffff');
+  // Corps
+  px(18,24,28,10,'#e8f0ff'); px(16,28,32,10,'#d0d8ee'); px(18,36,28,4,'#b0bcd8');
+  // Marques aurore sur le flanc
+  ctx.globalAlpha=0.5;
+  px(20,28,8,3,'#ccaaff'); px(36,30,8,3,'#aaccff');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(18,40,6,10,'#b0bcd8'); px(16,46,6,6,'#90a0c0');
+  px(40,40,6,10,'#b0bcd8'); px(42,46,6,6,'#90a0c0');
+  px(24,42,5,8,'#b0bcd8'); px(35,42,5,8,'#b0bcd8');
+  // 9 queues stylisées (3 visibles + suggestions)
+  px(46,28,6,4,'#e8f0ff'); px(50,26,5,5,'#ffffff'); px(54,28,4,4,'#ccaaff');
+  px(48,32,6,4,'#d0d8ee'); px(52,34,5,3,'#aaccff');
+  px(50,36,5,5,'#ccffee'); px(54,38,4,4,'#ffffff');
+  // Étoiles
+  ctx.globalAlpha=0.8;
+  px(4,4,1,1,'#ffffff'); px(58,2,1,1,'#ffffff'); px(2,30,1,1,'#ffccff'); px(60,30,1,1,'#ccffee');
+  px(8,52,1,1,'#ffffff'); px(56,52,1,1,'#aaccff');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.cryomorphe = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Tempête tourbillonnante en arrière-plan
+  ctx.globalAlpha=0.3;
+  px(8,12,48,40,'#cceeff'); px(12,16,40,32,'#ddf4ff'); px(16,20,32,24,'#ffffff');
+  ctx.globalAlpha=1;
+  // Corps spectral central
+  px(22,14,20,8,'#aaccee'); px(20,18,24,10,'#88b8dd'); px(22,26,20,8,'#aaccee');
+  px(24,32,16,8,'#88b8dd'); px(26,38,12,8,'#aaccee');
+  // Forme nuageuse qui se dissout en bas
+  ctx.globalAlpha=0.7;
+  px(20,44,24,4,'#cceeff'); px(22,48,20,4,'#ddf4ff'); px(26,52,12,4,'#ffffff');
+  ctx.globalAlpha=0.4;
+  px(18,52,8,3,'#cceeff'); px(40,52,8,3,'#cceeff'); px(20,56,4,2,'#ffffff'); px(42,56,4,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Yeux brillants
+  px(26,18,4,4,'#1a2a44'); px(27,19,2,2,'#88ccff'); px(28,20,1,1,'#ffffff');
+  px(34,18,4,4,'#1a2a44'); px(35,19,2,2,'#88ccff'); px(36,20,1,1,'#ffffff');
+  // Lueur autour des yeux
+  ctx.globalAlpha=0.5;
+  px(24,16,8,8,'#aaeeff'); px(32,16,8,8,'#aaeeff');
+  ctx.globalAlpha=1;
+  // Bouche fantomatique
+  px(28,26,8,2,'#1a2a44'); px(30,27,4,1,'#000000');
+  // Bras de tempête
+  px(10,22,12,6,'#aaccee'); px(6,26,10,6,'#88b8dd'); px(2,30,8,5,'#aaccee');
+  px(42,22,12,6,'#aaccee'); px(48,26,10,6,'#88b8dd'); px(54,30,8,5,'#aaccee');
+  // Cristaux flottants
+  ctx.globalAlpha=0.8;
+  px(4,8,2,2,'#ffffff'); px(58,10,2,2,'#ffffff'); px(2,42,2,2,'#cceeff'); px(60,40,2,2,'#cceeff');
+  px(10,4,1,1,'#ffffff'); px(54,4,1,1,'#ffffff'); px(8,58,1,1,'#cceeff'); px(56,58,1,1,'#cceeff');
+  ctx.globalAlpha=1;
+  // Tourbillons
+  ctx.globalAlpha=0.4;
+  px(14,32,4,2,'#ffffff'); px(46,32,4,2,'#ffffff'); px(28,46,8,2,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.hivernel = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Halo royal
+  ctx.globalAlpha=0.3;
+  px(8,8,48,12,'#ddf4ff'); px(4,12,56,8,'#cceeff');
+  ctx.globalAlpha=1;
+  // Bois royaux majestueux (plus grands)
+  px(12,2,3,12,'#cceeff'); px(8,4,3,8,'#aaddff'); px(4,6,3,5,'#88ccee'); px(2,2,2,4,'#ffffff');
+  px(10,8,2,3,'#ddf4ff'); px(14,4,2,4,'#ffffff');
+  px(49,2,3,12,'#cceeff'); px(53,4,3,8,'#aaddff'); px(57,6,3,5,'#88ccee'); px(60,2,2,4,'#ffffff');
+  px(52,8,2,3,'#ddf4ff'); px(48,4,2,4,'#ffffff');
+  // Couronne de glace
+  px(22,8,4,4,'#ffffff'); px(30,6,4,5,'#ffffff'); px(38,8,4,4,'#ffffff');
+  px(20,12,24,2,'#cceeff');
+  // Tête noble
+  px(18,14,28,8,'#e0eef8'); px(16,18,32,8,'#c0d8ec'); px(18,24,28,4,'#a0c0d8');
+  // Yeux royaux
+  px(22,18,4,5,'#2a2a44'); px(23,19,2,3,'#aaddff'); px(24,20,1,1,'#ffffff');
+  px(38,18,4,5,'#2a2a44'); px(39,19,2,3,'#aaddff'); px(40,20,1,1,'#ffffff');
+  // Marques royales
+  ctx.globalAlpha=0.6;
+  px(28,22,8,2,'#88ccee');
+  ctx.globalAlpha=1;
+  // Museau
+  px(28,24,8,4,'#ffffff'); px(30,26,4,2,'#ddf4ff');
+  px(30,27,4,2,'#1a1a22');
+  // Corps puissant
+  px(16,28,32,12,'#e0eef8'); px(14,32,36,12,'#c0d8ec'); px(16,40,32,6,'#a0c0d8');
+  // Détails givrés sur le pelage
+  ctx.globalAlpha=0.5;
+  px(20,32,4,3,'#ffffff'); px(40,34,4,3,'#ffffff'); px(28,38,8,2,'#cceeff');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(14,44,8,12,'#a0c0d8'); px(12,50,8,8,'#88a8c0');
+  px(42,44,8,12,'#a0c0d8'); px(42,50,8,8,'#88a8c0');
+  px(22,46,6,10,'#a0c0d8'); px(36,46,6,10,'#a0c0d8');
+  // Sabots cristallins
+  px(11,56,8,4,'#88ccee'); px(13,58,6,2,'#aaddff');
+  px(43,56,8,4,'#88ccee'); px(45,58,6,2,'#aaddff');
+  px(20,56,6,3,'#88ccee'); px(36,56,6,3,'#88ccee');
+  // Particules sacrées
+  ctx.globalAlpha=0.7;
+  px(4,18,1,1,'#ffffff'); px(60,20,1,1,'#ffffff'); px(2,38,2,2,'#ddf4ff'); px(60,42,2,2,'#ddf4ff');
+  px(8,52,1,1,'#ffffff'); px(56,54,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+// ⚙️ MÉTAL — 5 PokePoms
+
+PM_SPRITES.forgemin = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Forme d'enclume
+  // Plateau supérieur étroit
+  px(20,10,24,5,'#909cb0'); px(18,12,28,4,'#7080a0'); px(20,15,24,2,'#5e6e8a');
+  // Cou rétréci
+  px(26,15,12,4,'#7080a0'); px(28,18,8,3,'#5e6e8a');
+  // Corne traditionnelle d'enclume (droite)
+  px(44,11,8,3,'#909cb0'); px(50,12,4,2,'#7080a0'); px(53,12,3,2,'#5e6e8a');
+  // Visage sur le plateau
+  px(24,12,3,3,'#1a1a22'); px(25,13,1,1,'#ffaa44');
+  px(37,12,3,3,'#1a1a22'); px(38,13,1,1,'#ffaa44');
+  // Petite bouche tendre
+  px(30,14,4,1,'#1a1a22');
+  // Base de l'enclume large et lourde
+  px(14,21,36,12,'#909cb0'); px(12,24,40,12,'#7080a0'); px(14,33,36,5,'#5e6e8a');
+  // Hauts-reliefs de la base (pieds traditionnels)
+  px(10,28,8,8,'#909cb0'); px(8,32,8,6,'#7080a0'); px(8,36,10,4,'#5e6e8a');
+  px(46,28,8,8,'#909cb0'); px(48,32,8,6,'#7080a0'); px(46,36,10,4,'#5e6e8a');
+  // Marque de coups de marteau
+  px(22,26,4,2,'#5e6e8a'); px(36,28,4,2,'#5e6e8a'); px(28,30,5,2,'#5e6e8a');
+  // Reflets brillants
+  ctx.globalAlpha=0.5;
+  px(20,11,8,2,'#d0d8e8'); px(16,22,12,2,'#b8c4d4');
+  ctx.globalAlpha=1;
+  // Petits pieds en bas
+  px(16,40,6,8,'#5e6e8a'); px(14,46,8,6,'#4a5870');
+  px(42,40,6,8,'#5e6e8a'); px(46,46,8,6,'#4a5870');
+  px(22,42,8,6,'#5e6e8a'); px(34,42,8,6,'#5e6e8a');
+  // Étincelles
+  ctx.globalAlpha=0.8;
+  px(54,18,2,2,'#ffaa44'); px(56,16,1,1,'#ffcc66'); px(58,20,1,1,'#ff8800');
+  px(4,18,1,1,'#ffaa44'); px(2,22,1,1,'#ffcc66');
+  ctx.globalAlpha=1;
+  // Texture
+  px(20,32,2,1,'#4a5870'); px(40,34,2,1,'#4a5870');
+};
+
+PM_SPRITES.acierus = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Heaume de chevalier
+  px(20,4,24,6,'#aab4c4'); px(18,6,28,8,'#8898ac'); px(20,12,24,4,'#6a7a90');
+  // Plumet (panache du heaume)
+  px(28,0,8,4,'#5060a0'); px(30,2,4,2,'#7080c0');
+  // Visière sombre avec fente lumineuse
+  px(20,14,24,5,'#3a4458'); px(22,16,8,1,'#ffaa00'); px(34,16,8,1,'#ffaa00');
+  // Cou en mailles
+  px(26,19,12,4,'#7080a0'); px(28,21,8,2,'#5e6e8a');
+  // Plastron et armure
+  px(14,22,36,16,'#aab4c4'); px(12,26,40,16,'#8898ac'); px(14,38,36,6,'#6a7a90');
+  // Croix gravée centrale
+  px(31,24,2,12,'#5060a0'); px(26,30,12,2,'#5060a0');
+  // Épaulières
+  px(8,22,10,8,'#909cb0'); px(6,26,10,6,'#7080a0'); px(6,30,12,4,'#5e6e8a');
+  px(46,22,10,8,'#909cb0'); px(48,26,10,6,'#7080a0'); px(46,30,12,4,'#5e6e8a');
+  // Bras armurés
+  px(8,32,8,12,'#7080a0'); px(6,38,8,8,'#5e6e8a');
+  px(48,32,8,12,'#7080a0'); px(50,38,8,8,'#5e6e8a');
+  // Gantelets
+  px(6,42,10,5,'#909cb0'); px(48,42,10,5,'#909cb0');
+  // Reflets brillants
+  ctx.globalAlpha=0.5;
+  px(22,8,8,2,'#d0d8e8'); px(18,24,8,2,'#c0c8d8'); px(40,28,6,2,'#c0c8d8');
+  ctx.globalAlpha=1;
+  // Jambes/jupe d'armure
+  px(18,44,12,12,'#7080a0'); px(34,44,12,12,'#7080a0');
+  px(16,50,14,8,'#5e6e8a'); px(34,50,14,8,'#5e6e8a');
+  // Sole metallique
+  px(14,58,18,4,'#4a5870'); px(32,58,18,4,'#4a5870');
+  // Aura mystique (faible)
+  ctx.globalAlpha=0.25;
+  px(2,16,4,30,'#7080c0'); px(58,16,4,30,'#7080c0');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.orichale = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Tête massive de golem
+  px(16,4,32,8,'#a08858'); px(14,8,36,8,'#886a40'); px(16,14,32,4,'#6a5230');
+  // Yeux luisants (orichalque vert-doré)
+  px(22,8,5,5,'#222822'); px(23,9,3,3,'#aaff88'); px(24,10,1,1,'#ffffff');
+  px(37,8,5,5,'#222822'); px(38,9,3,3,'#aaff88'); px(39,10,1,1,'#ffffff');
+  // Mâchoire carrée
+  px(22,14,20,4,'#5e4828'); px(24,16,16,2,'#3e3018');
+  // Dents
+  px(26,16,2,2,'#ddc888'); px(30,16,2,2,'#ddc888'); px(34,16,2,2,'#ddc888'); px(38,16,2,2,'#ddc888');
+  // Cou
+  px(24,18,16,4,'#886a40');
+  // Filons d'orichalque sur le visage
+  ctx.globalAlpha=0.7;
+  px(18,7,2,5,'#aaff88'); px(44,9,2,4,'#aaff88');
+  ctx.globalAlpha=1;
+  // Corps massif
+  px(8,22,48,18,'#a08858'); px(6,26,52,18,'#886a40'); px(8,40,48,6,'#6a5230');
+  // Filons d'orichalque sur le torse (pulsation lumineuse)
+  px(20,28,3,8,'#aaff88'); px(40,30,3,7,'#aaff88'); px(28,34,8,2,'#aaff88');
+  ctx.globalAlpha=0.7;
+  px(19,28,5,2,'#ccffaa'); px(39,30,5,2,'#ccffaa'); px(28,34,8,1,'#ccffaa');
+  ctx.globalAlpha=1;
+  // Bras puissants
+  px(2,24,8,16,'#886a40'); px(0,28,6,12,'#6a5230');
+  px(54,24,10,16,'#886a40'); px(58,28,6,12,'#6a5230');
+  // Poings
+  px(0,38,10,8,'#a08858'); px(54,38,10,8,'#a08858');
+  px(2,42,6,4,'#5e4828'); px(56,42,6,4,'#5e4828');
+  // Filon dans les bras
+  ctx.globalAlpha=0.7;
+  px(4,30,1,8,'#aaff88'); px(58,30,1,8,'#aaff88');
+  ctx.globalAlpha=1;
+  // Jambes trapues
+  px(14,46,12,14,'#886a40'); px(38,46,12,14,'#886a40');
+  px(12,52,14,10,'#6a5230'); px(38,52,14,10,'#6a5230');
+  // Pieds
+  px(10,58,18,4,'#3e3018'); px(36,58,18,4,'#3e3018');
+  // Filons partout sur la peau
+  ctx.globalAlpha=0.4;
+  px(46,32,2,4,'#aaff88'); px(12,34,2,3,'#aaff88'); px(20,40,3,2,'#aaff88');
+  ctx.globalAlpha=1;
+  // Halo sacré
+  ctx.globalAlpha=0.2;
+  px(0,0,64,64,'#aaff88');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.sentinhelm = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura spectrale autour du heaume
+  ctx.globalAlpha=0.3;
+  px(10,4,44,40,'#5060a0'); px(14,8,36,32,'#7080c0');
+  ctx.globalAlpha=1;
+  // Heaume forme classique
+  // Casque haut arrondi
+  px(22,6,20,4,'#909cb0'); px(20,8,24,4,'#7080a0');
+  // Visière partie supérieure
+  px(18,12,28,8,'#aab4c4'); px(16,14,32,8,'#8898ac'); px(18,20,28,4,'#6a7a90');
+  // Fente de visière + lueurs surnaturelles
+  px(20,16,24,3,'#1a1a22');
+  ctx.globalAlpha=0.9;
+  px(22,17,8,1,'#aaccff'); px(34,17,8,1,'#aaccff');
+  ctx.globalAlpha=1;
+  // Mentonnière
+  px(20,22,24,6,'#7080a0'); px(22,26,20,4,'#5e6e8a');
+  // Petits reliefs pointus
+  px(20,28,3,4,'#5e6e8a'); px(30,30,4,2,'#5e6e8a'); px(41,28,3,4,'#5e6e8a');
+  // Plumet noir effiloché
+  px(28,2,8,5,'#1a1a22'); px(30,0,4,3,'#3a3a44');
+  px(26,6,2,2,'#1a1a22'); px(36,6,2,2,'#1a1a22');
+  // Reflets sur le casque
+  ctx.globalAlpha=0.5;
+  px(24,8,8,2,'#d0d8e8'); px(20,16,4,1,'#c0c8d8');
+  ctx.globalAlpha=1;
+  // Pas de corps — il flotte. Juste l'âme spectrale en dessous
+  ctx.globalAlpha=0.7;
+  px(22,32,20,8,'#5060a0'); px(24,38,16,8,'#404870');
+  ctx.globalAlpha=0.5;
+  px(18,42,28,6,'#5060a0'); px(20,46,24,6,'#404870');
+  ctx.globalAlpha=0.3;
+  px(14,50,36,5,'#5060a0'); px(18,54,28,4,'#404870');
+  ctx.globalAlpha=0.15;
+  px(10,58,44,4,'#5060a0');
+  ctx.globalAlpha=1;
+  // Yeux lumineux dans les ténèbres (sous le heaume)
+  px(28,36,3,3,'#aaccff'); px(33,36,3,3,'#aaccff');
+  ctx.globalAlpha=0.5;
+  px(27,35,5,5,'#ddeeff'); px(32,35,5,5,'#ddeeff');
+  ctx.globalAlpha=1;
+  // Particules d'âme
+  ctx.globalAlpha=0.7;
+  px(8,30,1,1,'#aaccff'); px(56,32,1,1,'#aaccff'); px(4,46,2,2,'#7080c0'); px(58,46,2,2,'#7080c0');
+  px(12,58,1,1,'#aaccff'); px(52,58,1,1,'#aaccff');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.rouilleron = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura ancestrale ferreuse
+  ctx.globalAlpha=0.25;
+  px(2,2,60,60,'#b87040'); px(6,6,52,52,'#a05030');
+  ctx.globalAlpha=1;
+  // Tête massive corrodée
+  px(14,2,36,8,'#7a5040'); px(12,6,40,8,'#5e3e30'); px(14,12,36,4,'#3e2820');
+  // Cornes de fer rouillées
+  px(8,2,4,8,'#3e2820'); px(6,4,3,5,'#251610');
+  px(52,2,4,8,'#3e2820'); px(55,4,3,5,'#251610');
+  // Yeux rougeoyants brûlants
+  px(20,7,6,5,'#1a0a0a'); px(21,8,4,3,'#ff6600'); px(22,9,2,1,'#ffaa44');
+  px(38,7,6,5,'#1a0a0a'); px(39,8,4,3,'#ff6600'); px(40,9,2,1,'#ffaa44');
+  // Plaques de rouille sur la tête
+  ctx.globalAlpha=0.6;
+  px(16,4,4,4,'#b87040'); px(44,6,4,4,'#b87040'); px(28,12,8,2,'#b87040');
+  ctx.globalAlpha=1;
+  // Mâchoire
+  px(20,14,24,6,'#3e2820'); px(22,18,20,4,'#251610');
+  // Dents inégales
+  px(22,18,2,4,'#aa9888'); px(28,18,2,3,'#aa9888'); px(34,18,2,4,'#aa9888'); px(40,18,2,3,'#aa9888');
+  // Cou massif
+  px(22,20,20,4,'#5e3e30');
+  // Corps colossal
+  px(8,24,48,20,'#7a5040'); px(6,28,52,20,'#5e3e30'); px(8,46,48,4,'#3e2820');
+  // Plaques de rouille géantes sur le torse
+  ctx.globalAlpha=0.7;
+  px(14,28,8,8,'#b87040'); px(38,30,10,8,'#b87040'); px(22,38,12,5,'#b87040');
+  ctx.globalAlpha=1;
+  px(14,28,8,1,'#3e2820'); px(38,30,10,1,'#3e2820');
+  // Bras gigantesques
+  px(0,26,10,18,'#5e3e30'); px(0,30,8,14,'#3e2820');
+  px(54,26,10,18,'#5e3e30'); px(56,30,8,14,'#3e2820');
+  // Poings écraseurs
+  px(0,40,12,10,'#7a5040'); px(52,40,12,10,'#7a5040');
+  px(2,44,8,6,'#3e2820'); px(54,44,8,6,'#3e2820');
+  // Rouille sur les bras (qui tombe)
+  ctx.globalAlpha=0.6;
+  px(2,34,4,4,'#b87040'); px(58,36,4,3,'#b87040');
+  ctx.globalAlpha=1;
+  // Flocons de rouille qui tombent
+  ctx.globalAlpha=0.7;
+  px(8,52,1,1,'#b87040'); px(20,54,2,1,'#a05030'); px(34,56,1,1,'#b87040'); px(50,52,1,1,'#a05030');
+  ctx.globalAlpha=1;
+  // Jambes énormes
+  px(12,50,14,12,'#5e3e30'); px(38,50,14,12,'#5e3e30');
+  px(10,56,16,6,'#3e2820'); px(38,56,16,6,'#3e2820');
+  // Vapeur de rouille
+  ctx.globalAlpha=0.4;
+  px(24,2,2,2,'#b87040'); px(36,4,2,2,'#b87040');
+  ctx.globalAlpha=1;
+};
+
+// 🌿 PLANTE — 2 PokePoms R2
+
+PM_SPRITES.mousseron = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Chapeau de champignon couvert de mousse
+  px(18,4,28,4,'#5a8830'); px(14,6,36,8,'#4a7028'); px(12,12,40,6,'#3a5820');
+  // Lichens dorés sur le chapeau
+  px(20,6,4,3,'#a8d048'); px(34,8,5,3,'#a8d048'); px(28,4,4,3,'#c0e060');
+  px(40,8,4,3,'#a8d048'); px(22,12,3,2,'#a8d048');
+  // Petites fleurs rares
+  ctx.globalAlpha=0.9;
+  px(18,8,2,2,'#f0c8a0'); px(44,6,2,2,'#f0c8a0'); px(30,10,2,2,'#ffe080');
+  ctx.globalAlpha=1;
+  // Bord du chapeau
+  px(10,16,44,4,'#2a4818'); px(8,18,48,3,'#1e3812');
+  // Tête / corps en colonne (pied du champignon)
+  px(20,20,24,8,'#d8c898'); px(18,24,28,6,'#c0b078'); px(20,28,24,4,'#a89060');
+  // Yeux sages
+  px(24,22,4,4,'#1a1a22'); px(25,23,2,2,'#88a868'); px(26,24,1,1,'#ffffff');
+  px(36,22,4,4,'#1a1a22'); px(37,23,2,2,'#88a868'); px(38,24,1,1,'#ffffff');
+  // Sourires bienveillant
+  px(28,26,8,2,'#1a1a22'); px(30,27,4,1,'#5a3018');
+  // Marques de mousse sur le pied
+  ctx.globalAlpha=0.7;
+  px(20,26,4,3,'#5a8830'); px(40,28,4,3,'#5a8830'); px(28,30,8,2,'#5a8830');
+  ctx.globalAlpha=1;
+  // Base / bras-racines
+  px(14,32,36,8,'#a89060'); px(12,36,40,8,'#88784a');
+  // Petits bras de racines
+  px(8,34,8,6,'#a89060'); px(48,34,8,6,'#a89060'); px(6,38,8,4,'#88784a'); px(50,38,8,4,'#88784a');
+  // Pieds-racines
+  px(14,42,10,12,'#88784a'); px(40,42,10,12,'#88784a');
+  px(12,50,14,8,'#5a4830'); px(38,50,14,8,'#5a4830');
+  // Petites racines secondaires
+  px(8,54,4,6,'#5a4830'); px(52,54,4,6,'#5a4830'); px(24,54,4,6,'#5a4830'); px(36,54,4,6,'#5a4830');
+  // Fleurs poussent dans les pas (au sol)
+  ctx.globalAlpha=0.8;
+  px(2,60,2,2,'#f0c8a0'); px(60,60,2,2,'#f0c8a0'); px(28,60,2,2,'#ffe080'); px(34,60,2,2,'#ffe080');
+  ctx.globalAlpha=1;
+  // Spore particles
+  ctx.globalAlpha=0.5;
+  px(4,8,1,1,'#a8d048'); px(58,10,1,1,'#a8d048'); px(2,30,1,1,'#c0e060');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.vrillemousse = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Liane principale qui s'enroule
+  px(28,2,8,4,'#3e6020'); px(24,6,16,4,'#4a7028'); px(20,10,8,4,'#3e6020'); px(36,10,8,4,'#3e6020');
+  px(16,14,12,4,'#4a7028'); px(36,14,12,4,'#4a7028');
+  // Corps central enroulé
+  px(20,18,24,10,'#5a8830'); px(18,22,28,10,'#4a7028'); px(20,30,24,6,'#3a5820');
+  // Plusieurs yeux multiples (caractéristique principale)
+  px(22,20,3,3,'#1a2a14'); px(23,21,1,1,'#ffaa00');
+  px(28,20,3,3,'#1a2a14'); px(29,21,1,1,'#ffaa00');
+  px(34,20,3,3,'#1a2a14'); px(35,21,1,1,'#ffaa00');
+  px(40,20,3,3,'#1a2a14'); px(41,21,1,1,'#ffaa00');
+  // Petits yeux secondaires
+  px(25,25,2,2,'#1a2a14'); px(31,25,2,2,'#1a2a14'); px(37,25,2,2,'#1a2a14');
+  // Bouche dentée (crocs cachés dans la liane)
+  px(26,29,12,3,'#1a1a14'); px(28,30,2,2,'#ddccaa'); px(31,30,2,2,'#ddccaa'); px(34,30,2,2,'#ddccaa');
+  // Épines dorsales
+  px(22,16,2,4,'#a8c048'); px(28,14,2,4,'#a8c048'); px(34,14,2,4,'#a8c048'); px(40,16,2,4,'#a8c048');
+  // Lianes-bras qui s'étendent
+  px(8,22,12,4,'#4a7028'); px(4,26,10,4,'#3e6020'); px(0,30,8,3,'#3e6020');
+  px(44,22,12,4,'#4a7028'); px(50,26,10,4,'#3e6020'); px(56,30,8,3,'#3e6020');
+  // Épines sur les bras
+  px(10,21,2,2,'#a8c048'); px(54,21,2,2,'#a8c048'); px(6,25,2,2,'#a8c048'); px(58,25,2,2,'#a8c048');
+  // Bourgeons piquants au bout
+  px(0,28,4,4,'#a8c048'); px(60,28,4,4,'#a8c048');
+  px(0,30,2,2,'#5a3018'); px(62,30,2,2,'#5a3018');
+  // Corps inférieur
+  px(18,36,28,12,'#3a5820'); px(16,40,32,10,'#2a4418'); px(20,48,24,4,'#1e3210');
+  // Pattes-lianes qui s'enroulent au sol
+  px(14,48,8,12,'#3a5820'); px(42,48,8,12,'#3a5820');
+  px(10,54,12,8,'#2a4418'); px(42,54,12,8,'#2a4418');
+  // Épines aux pieds
+  px(12,58,2,4,'#a8c048'); px(50,58,2,4,'#a8c048'); px(20,58,2,4,'#a8c048'); px(42,58,2,4,'#a8c048');
+  // Marbrures jaunes/dorées
+  ctx.globalAlpha=0.6;
+  px(24,32,8,2,'#a8c048'); px(38,40,4,3,'#a8c048');
+  ctx.globalAlpha=1;
+};
+
+// 🔥 FEU — 2 PokePoms R2
+
+PM_SPRITES.braslune = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Lune en arrière-plan (petite)
+  ctx.globalAlpha=0.3;
+  px(50,4,10,10,'#ffeebb'); px(52,6,8,8,'#ffe888');
+  ctx.globalAlpha=1;
+  // Tête de loup
+  px(16,8,28,8,'#3a2418'); px(14,12,32,8,'#2a1812'); px(16,18,28,4,'#1e1008');
+  // Oreilles pointues
+  px(14,4,6,8,'#3a2418'); px(16,2,4,4,'#4a3020');
+  px(40,4,6,8,'#3a2418'); px(42,2,4,4,'#4a3020');
+  // Pelage incandescent (touches de braise)
+  ctx.globalAlpha=0.7;
+  px(18,10,4,3,'#aa3818'); px(38,10,4,3,'#aa3818'); px(24,8,3,2,'#cc4820');
+  ctx.globalAlpha=1;
+  // Yeux jaunes brûlants
+  px(20,13,4,4,'#1a0a08'); px(21,14,2,2,'#ffcc00'); px(22,15,1,1,'#ffffff');
+  px(36,13,4,4,'#1a0a08'); px(37,14,2,2,'#ffcc00'); px(38,15,1,1,'#ffffff');
+  // Museau étroit
+  px(26,18,8,5,'#2a1812'); px(28,21,4,2,'#1e1008');
+  px(28,22,4,1,'#3e2818');
+  // Crocs visibles
+  px(24,22,2,4,'#ffeebb'); px(34,22,2,4,'#ffeebb');
+  // Corps
+  px(14,22,32,12,'#3a2418'); px(12,26,36,12,'#2a1812'); px(14,36,32,4,'#1e1008');
+  // Crinière de feu sur le dos
+  px(20,18,4,4,'#cc4820'); px(28,16,4,5,'#dd6028'); px(36,18,4,4,'#cc4820');
+  ctx.globalAlpha=0.8;
+  px(22,20,2,3,'#ff7030'); px(30,18,2,4,'#ff8838'); px(38,20,2,3,'#ff7030');
+  ctx.globalAlpha=1;
+  // Marques de feu sur les flancs
+  ctx.globalAlpha=0.6;
+  px(18,30,5,4,'#aa3818'); px(38,32,5,4,'#aa3818'); px(28,34,4,2,'#cc4820');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(14,38,8,12,'#2a1812'); px(12,44,8,8,'#1e1008');
+  px(40,38,8,12,'#2a1812'); px(42,44,8,8,'#1e1008');
+  px(22,40,6,10,'#2a1812'); px(34,40,6,10,'#2a1812');
+  // Pattes avec lueur de braise
+  ctx.globalAlpha=0.6;
+  px(14,46,2,4,'#ff6020'); px(46,46,2,4,'#ff6020');
+  ctx.globalAlpha=1;
+  // Griffes
+  px(12,50,8,3,'#5a3a28'); px(40,50,8,3,'#5a3a28');
+  px(20,50,6,2,'#5a3a28'); px(34,50,6,2,'#5a3a28');
+  // Queue avec flammes
+  px(46,28,4,8,'#3a2418'); px(48,24,5,6,'#cc4820'); px(52,20,3,6,'#dd6028'); px(54,16,2,4,'#ff8838');
+  ctx.globalAlpha=0.7;
+  px(50,18,2,3,'#ffcc00');
+  ctx.globalAlpha=1;
+  // Étincelles autour
+  ctx.globalAlpha=0.8;
+  px(4,12,1,1,'#ff8838'); px(60,30,1,1,'#ff8838'); px(2,40,2,1,'#ffcc00'); px(58,42,1,1,'#ffcc00');
+  ctx.globalAlpha=1;
+};
+
+PM_SPRITES.pyrecate = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Antennes
+  px(22,2,2,6,'#b8401a'); px(40,2,2,6,'#b8401a');
+  px(20,0,2,3,'#dd6028'); px(42,0,2,3,'#dd6028');
+  // Tête triangulaire de mante
+  px(20,6,24,6,'#cc4820'); px(18,10,28,6,'#a8381a'); px(20,16,24,4,'#7a2810');
+  // Yeux composés énormes
+  px(18,8,8,8,'#1a0808'); px(19,9,6,6,'#ffaa44');
+  px(38,8,8,8,'#1a0808'); px(39,9,6,6,'#ffaa44');
+  // Reflets dans les yeux
+  px(20,9,2,2,'#ffeebb'); px(40,9,2,2,'#ffeebb');
+  px(22,12,1,1,'#ff6020'); px(42,12,1,1,'#ff6020');
+  // Mandibules
+  px(28,18,8,3,'#1a0808'); px(26,20,3,2,'#3a1810'); px(35,20,3,2,'#3a1810');
+  // Cou fin
+  px(28,20,8,4,'#a8381a'); px(30,22,4,3,'#7a2810');
+  // Thorax (corps insectoïde)
+  px(20,24,24,10,'#cc4820'); px(18,28,28,10,'#a8381a'); px(20,36,24,4,'#7a2810');
+  // Marques flamboyantes sur le thorax
+  ctx.globalAlpha=0.8;
+  px(22,28,4,4,'#ff7030'); px(38,30,4,4,'#ff7030'); px(28,32,8,2,'#ff8838');
+  ctx.globalAlpha=1;
+  // LAMES (les avant-bras de mante)
+  // Bras gauche
+  px(8,20,12,4,'#a8381a'); px(4,16,10,4,'#7a2810');
+  // Lame gauche
+  px(2,8,6,12,'#cc4820'); px(0,10,4,10,'#a8381a'); px(0,4,3,8,'#dd6028');
+  // Tranchant éclatant gauche
+  ctx.globalAlpha=0.9;
+  px(0,8,2,12,'#ffaa44'); px(0,4,2,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Bras droit
+  px(44,20,12,4,'#a8381a'); px(50,16,10,4,'#7a2810');
+  // Lame droite
+  px(56,8,6,12,'#cc4820'); px(60,10,4,10,'#a8381a'); px(61,4,3,8,'#dd6028');
+  ctx.globalAlpha=0.9;
+  px(62,8,2,12,'#ffaa44'); px(62,4,2,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Ailes repliées arrière
+  ctx.globalAlpha=0.7;
+  px(12,28,8,16,'#a8381a'); px(44,28,8,16,'#a8381a');
+  ctx.globalAlpha=0.5;
+  px(10,32,8,12,'#cc4820'); px(46,32,8,12,'#cc4820');
+  ctx.globalAlpha=1;
+  // Veines des ailes
+  px(14,32,1,8,'#3a1810'); px(49,32,1,8,'#3a1810');
+  // Abdomen segmenté
+  px(20,40,24,16,'#7a2810'); px(22,44,20,12,'#5e1c08');
+  // Segments de l'abdomen
+  px(20,44,24,1,'#3a1810'); px(20,48,24,1,'#3a1810'); px(20,52,24,1,'#3a1810');
+  // Marques de braise sur l'abdomen
+  ctx.globalAlpha=0.7;
+  px(28,42,8,2,'#ff7030'); px(28,46,8,2,'#ff7030'); px(28,50,8,2,'#ff7030');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(20,46,4,8,'#3a1810'); px(40,46,4,8,'#3a1810');
+  px(18,52,4,8,'#3a1810'); px(42,52,4,8,'#3a1810');
+  // Étincelles
+  ctx.globalAlpha=0.7;
+  px(8,4,1,1,'#ff8838'); px(56,4,1,1,'#ff8838'); px(28,4,1,1,'#ffeebb');
+  ctx.globalAlpha=1;
+};
+
+// 💧 EAU — 1 PokePom R2
+
+PM_SPRITES.profondine = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Eaux profondes en arrière-plan
+  ctx.globalAlpha=0.5;
+  px(0,0,64,64,'#0a1830');
+  ctx.globalAlpha=1;
+  // Tête d'anguille
+  px(8,12,16,8,'#1a3a5a'); px(6,14,18,8,'#0e2a48'); px(8,20,16,4,'#081a30');
+  // Yeux luisants vert phosphorescent
+  px(10,15,4,4,'#0a0a1a'); px(11,16,2,2,'#88ff88'); px(12,17,1,1,'#ffffff');
+  px(18,15,4,4,'#0a0a1a'); px(19,16,2,2,'#88ff88'); px(20,17,1,1,'#ffffff');
+  // Lueur autour des yeux
+  ctx.globalAlpha=0.5;
+  px(8,13,8,8,'#88ff88'); px(16,13,8,8,'#88ff88');
+  ctx.globalAlpha=1;
+  // Mâchoire entrouverte avec dents
+  px(8,21,16,3,'#000810'); px(10,22,2,2,'#ddffdd'); px(14,22,2,2,'#ddffdd'); px(18,22,2,2,'#ddffdd');
+  // Antennes lumineuses (lampes)
+  px(12,4,2,8,'#1a3a5a'); px(20,4,2,8,'#1a3a5a');
+  // Bulbes lumineux
+  px(11,2,4,4,'#88ff88'); px(19,2,4,4,'#88ff88');
+  ctx.globalAlpha=0.7;
+  px(10,1,6,6,'#ccffcc'); px(18,1,6,6,'#ccffcc');
+  ctx.globalAlpha=1;
+  px(12,3,2,2,'#ffffff'); px(20,3,2,2,'#ffffff');
+  // Corps long et serpentin
+  px(20,18,16,10,'#1a3a5a'); px(28,22,18,10,'#0e2a48'); px(38,28,16,8,'#1a3a5a');
+  px(46,32,12,8,'#0e2a48'); px(50,36,10,6,'#1a3a5a');
+  // Ventre clair
+  px(20,24,12,4,'#3a6a8a'); px(32,28,12,4,'#3a6a8a'); px(42,34,8,3,'#3a6a8a');
+  // Marbrures bioluminescentes
+  ctx.globalAlpha=0.7;
+  px(24,20,4,3,'#88ffaa'); px(38,24,4,3,'#88ffaa'); px(48,30,4,3,'#88ffaa');
+  ctx.globalAlpha=1;
+  // Nageoires dorsales
+  ctx.globalAlpha=0.7;
+  px(18,12,4,8,'#3a6a8a'); px(28,16,4,7,'#3a6a8a'); px(40,22,4,6,'#3a6a8a'); px(50,28,4,4,'#3a6a8a');
+  ctx.globalAlpha=1;
+  // Continuation du corps qui s'enroule
+  px(46,38,10,8,'#0e2a48'); px(40,42,12,8,'#1a3a5a'); px(30,46,14,8,'#0e2a48');
+  px(18,50,16,8,'#1a3a5a'); px(8,54,12,6,'#0e2a48');
+  // Queue en pointe
+  px(2,54,8,5,'#1a3a5a'); px(0,56,4,3,'#3a6a8a');
+  // Petite nageoire de queue
+  ctx.globalAlpha=0.8;
+  px(0,52,4,3,'#3a6a8a'); px(0,58,4,3,'#3a6a8a');
+  ctx.globalAlpha=1;
+  // Bulles
+  ctx.globalAlpha=0.6;
+  px(28,8,2,2,'#aaccff'); px(48,12,2,2,'#aaccff'); px(58,40,2,2,'#aaccff'); px(40,4,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+// ⚡ ÉLECTRIQUE — 1 PokePom R2
+
+PM_SPRITES.voltaigle = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Éclairs en arrière-plan
+  ctx.globalAlpha=0.3;
+  px(2,2,4,2,'#ffeb44'); px(4,4,3,4,'#ffeb44'); px(2,8,2,2,'#ffeb44');
+  px(58,16,4,2,'#ffeb44'); px(56,18,3,3,'#ffeb44');
+  ctx.globalAlpha=1;
+  // Tête noble d'aigle
+  px(20,6,20,6,'#5a3a20'); px(18,10,24,6,'#4a2818'); px(20,14,20,4,'#3a1c10');
+  // Bec recourbé puissant
+  px(22,12,4,8,'#ffcc44'); px(20,14,4,6,'#ddaa30'); px(22,18,2,3,'#ddaa30');
+  px(18,16,3,3,'#3a1c10');
+  // Yeux perçants jaunes
+  px(28,10,4,5,'#1a1a08'); px(29,11,2,3,'#ffeb44'); px(30,12,1,1,'#ffffff');
+  px(36,10,4,5,'#1a1a08'); px(37,11,2,3,'#ffeb44'); px(38,12,1,1,'#ffffff');
+  // Plumes de tête (crête)
+  px(24,4,4,5,'#3a1c10'); px(36,4,4,5,'#3a1c10'); px(30,2,4,4,'#5a3a20');
+  // Étincelles électriques sur la crête
+  ctx.globalAlpha=0.9;
+  px(26,2,2,2,'#ffeb44'); px(38,3,2,2,'#ffeb44'); px(32,0,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Cou
+  px(26,18,12,4,'#4a2818'); px(28,20,8,2,'#3a1c10');
+  // Corps
+  px(20,22,24,12,'#5a3a20'); px(18,26,28,12,'#4a2818'); px(20,36,24,4,'#3a1c10');
+  // Plastron clair
+  px(26,26,12,8,'#a87850'); px(28,28,8,6,'#c08858');
+  // Plumes texturées
+  ctx.globalAlpha=0.5;
+  px(22,28,4,2,'#3a1c10'); px(40,30,4,2,'#3a1c10'); px(24,32,3,2,'#3a1c10'); px(38,34,3,2,'#3a1c10');
+  ctx.globalAlpha=1;
+  // GRANDES AILES déployées
+  // Aile gauche
+  px(0,18,18,8,'#4a2818'); px(2,14,16,6,'#5a3a20');
+  px(0,26,16,6,'#3a1c10'); px(2,30,14,4,'#2a1208');
+  // Plumes pointes aile gauche
+  px(0,16,4,2,'#3a1c10'); px(0,22,3,2,'#3a1c10'); px(0,28,4,2,'#3a1c10');
+  // Aile droite
+  px(46,18,18,8,'#4a2818'); px(46,14,16,6,'#5a3a20');
+  px(48,26,16,6,'#3a1c10'); px(48,30,14,4,'#2a1208');
+  px(60,16,4,2,'#3a1c10'); px(61,22,3,2,'#3a1c10'); px(60,28,4,2,'#3a1c10');
+  // Étincelles électriques sur les ailes
+  ctx.globalAlpha=0.9;
+  px(8,18,2,2,'#ffeb44'); px(54,20,2,2,'#ffeb44'); px(4,28,2,2,'#ffffff'); px(58,28,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Serres
+  px(22,40,6,10,'#ffcc44'); px(36,40,6,10,'#ffcc44');
+  px(20,48,8,4,'#ddaa30'); px(36,48,8,4,'#ddaa30');
+  // Griffes
+  px(20,52,2,6,'#1a1a08'); px(24,52,2,6,'#1a1a08'); px(28,52,2,6,'#1a1a08');
+  px(36,52,2,6,'#1a1a08'); px(40,52,2,6,'#1a1a08'); px(44,52,2,6,'#1a1a08');
+  // Foudre dans la serre droite
+  ctx.globalAlpha=0.9;
+  px(46,42,2,8,'#ffeb44'); px(48,46,3,6,'#ffeb44'); px(50,50,2,5,'#ffffff');
+  px(48,52,4,3,'#ffeb44');
+  ctx.globalAlpha=1;
+  px(48,42,1,4,'#ffffff'); px(50,48,1,3,'#ffffff');
+  // Queue
+  px(28,38,8,12,'#4a2818'); px(30,46,4,8,'#3a1c10');
+  // Petites étincelles
+  ctx.globalAlpha=0.7;
+  px(12,4,1,1,'#ffeb44'); px(50,4,1,1,'#ffeb44'); px(2,40,1,1,'#ffffff'); px(60,40,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+// 🌀 AIR — 1 PokePom R2
+
+PM_SPRITES.brumelope = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Brume aurorale
+  ctx.globalAlpha=0.3;
+  px(0,4,64,12,'#ffccaa'); px(0,12,64,8,'#ffaa88'); px(0,18,64,6,'#ddccff');
+  ctx.globalAlpha=1;
+  // Cornes longues élégantes
+  px(18,4,2,12,'#ddccaa'); px(16,2,2,8,'#eedccc'); px(14,0,2,4,'#ffffff');
+  px(44,4,2,12,'#ddccaa'); px(46,2,2,8,'#eedccc'); px(48,0,2,4,'#ffffff');
+  // Stries sur les cornes
+  px(18,8,2,1,'#aa9988'); px(18,12,2,1,'#aa9988'); px(44,8,2,1,'#aa9988'); px(44,12,2,1,'#aa9988');
+  // Tête fine
+  px(20,10,24,8,'#f0d8b8'); px(18,14,28,6,'#dcc098'); px(20,18,24,4,'#bca680');
+  // Yeux doux
+  px(22,15,4,4,'#1a1a22'); px(23,16,2,2,'#ffccaa'); px(24,17,1,1,'#ffffff');
+  px(38,15,4,4,'#1a1a22'); px(39,16,2,2,'#ffccaa'); px(40,17,1,1,'#ffffff');
+  // Marques d'aurore sur le visage
+  ctx.globalAlpha=0.5;
+  px(28,12,8,2,'#ddccff'); px(30,14,4,2,'#ffccaa');
+  ctx.globalAlpha=1;
+  // Petit museau
+  px(30,18,4,3,'#ffffff'); px(31,19,2,1,'#1a1a22');
+  // Cou élancé
+  px(28,20,8,6,'#dcc098'); px(30,24,4,4,'#bca680');
+  // Corps fin et long
+  px(18,26,28,10,'#f0d8b8'); px(16,30,32,10,'#dcc098'); px(18,38,28,4,'#bca680');
+  // Marques aurorales sur le flanc
+  ctx.globalAlpha=0.5;
+  px(22,30,8,3,'#ddccff'); px(36,32,8,3,'#ffccaa');
+  ctx.globalAlpha=1;
+  // Pattes longues et fines (hautes)
+  // Avant
+  px(20,42,4,14,'#bca680'); px(18,52,4,8,'#9c8460');
+  px(38,42,4,14,'#bca680'); px(40,52,4,8,'#9c8460');
+  // Arrière (plus courtes)
+  px(28,42,4,14,'#bca680'); px(30,54,4,6,'#9c8460');
+  px(36,42,4,14,'#bca680'); px(34,54,4,6,'#9c8460');
+  // Sabots fins
+  px(16,58,8,4,'#5a4830'); px(38,58,8,4,'#5a4830');
+  px(28,58,5,4,'#5a4830'); px(34,58,5,4,'#5a4830');
+  // Petite queue
+  px(46,28,4,6,'#dcc098'); px(48,32,3,4,'#bca680');
+  px(48,36,2,5,'#ffffff'); px(48,40,2,3,'#dcc098');
+  // Particules de brume
+  ctx.globalAlpha=0.5;
+  px(2,30,2,2,'#ffffff'); px(60,32,2,2,'#ffffff'); px(4,48,2,2,'#ddccff'); px(58,50,2,2,'#ddccff');
+  px(8,20,1,1,'#ffccaa'); px(54,22,1,1,'#ffccaa');
+  ctx.globalAlpha=1;
+};
+
+// 🌑 OMBRE — 1 PokePom R2
+
+PM_SPRITES.voilombre = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura sombre
+  ctx.globalAlpha=0.3;
+  px(8,12,48,48,'#3a2a4a'); px(12,16,40,40,'#2a1a3a');
+  ctx.globalAlpha=1;
+  // Capuche du manteau
+  px(20,4,24,8,'#3a2a4a'); px(16,8,32,8,'#2a1a3a'); px(18,14,28,6,'#1a0a28');
+  // Bords de la capuche pointus
+  px(14,10,4,6,'#1a0a28'); px(46,10,4,6,'#1a0a28');
+  px(16,6,4,4,'#3a2a4a'); px(44,6,4,4,'#3a2a4a');
+  // Intérieur sombre de la capuche (vide)
+  px(22,14,20,8,'#000008');
+  // Yeux flottants dans l'obscurité
+  px(26,16,4,4,'#aabbff'); px(34,16,4,4,'#aabbff');
+  ctx.globalAlpha=0.8;
+  px(25,15,6,6,'#ddeeff'); px(33,15,6,6,'#ddeeff');
+  ctx.globalAlpha=1;
+  px(27,17,2,2,'#ffffff'); px(35,17,2,2,'#ffffff');
+  // Manteau qui tombe (corps)
+  px(14,20,36,16,'#3a2a4a'); px(12,24,40,16,'#2a1a3a'); px(14,36,36,8,'#1a0a28');
+  // Plis du tissu
+  ctx.globalAlpha=0.6;
+  px(20,26,2,12,'#1a0a28'); px(30,28,2,10,'#1a0a28'); px(40,26,2,12,'#1a0a28');
+  ctx.globalAlpha=1;
+  // Bordures dorées (vestige du voyageur)
+  ctx.globalAlpha=0.7;
+  px(14,20,36,1,'#aa8844'); px(14,38,36,1,'#aa8844');
+  ctx.globalAlpha=1;
+  // Manches déchirées
+  px(8,22,8,12,'#3a2a4a'); px(6,28,8,8,'#2a1a3a'); px(4,32,6,6,'#1a0a28');
+  px(48,22,8,12,'#3a2a4a'); px(50,28,8,8,'#2a1a3a'); px(54,32,6,6,'#1a0a28');
+  // Mains spectrales (à peine visibles)
+  ctx.globalAlpha=0.6;
+  px(2,34,6,6,'#5060a0'); px(56,34,6,6,'#5060a0');
+  ctx.globalAlpha=1;
+  // Bas du manteau qui se dissout
+  ctx.globalAlpha=0.8;
+  px(12,42,40,8,'#2a1a3a'); px(14,46,36,6,'#1a0a28');
+  ctx.globalAlpha=0.6;
+  px(14,50,36,6,'#3a2a4a'); px(18,54,28,4,'#2a1a3a');
+  ctx.globalAlpha=0.4;
+  px(18,56,28,4,'#3a2a4a'); px(22,58,20,4,'#2a1a3a');
+  ctx.globalAlpha=0.2;
+  px(24,60,16,3,'#3a2a4a');
+  ctx.globalAlpha=1;
+  // Broche centrale (l'âme du voyageur)
+  px(30,28,4,4,'#aa8844'); px(31,29,2,2,'#ffeebb'); px(32,30,1,1,'#ffffff');
+  ctx.globalAlpha=0.5;
+  px(28,26,8,8,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Particules d'âme
+  ctx.globalAlpha=0.7;
+  px(4,16,1,1,'#aabbff'); px(60,18,1,1,'#aabbff');
+  px(2,42,2,2,'#5060a0'); px(60,44,2,2,'#5060a0');
+  px(8,56,1,1,'#aabbff'); px(56,58,1,1,'#aabbff');
+  ctx.globalAlpha=1;
+};
+
+
+// SPRITES ÉVOLUTIONS — Premier batch test (5 sprites pour validation)
+
+// 🌿 Pomalor — évolution de Pomalis (couronne végétale + parfum)
+PM_SPRITES.pomalor = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Couronne de fleurs au-dessus de la tête
+  px(20,2,6,4,'#ff8888'); px(28,0,8,5,'#ff6666'); px(38,2,6,4,'#ff8888');
+  px(22,3,2,2,'#ffaaaa'); px(30,1,4,2,'#ffcccc'); px(40,3,2,2,'#ffaaaa');
+  px(22,5,20,2,'#aa3030'); // tige de couronne
+  // Bulbe en couronne (plus grand que Pomalis)
+  px(18,7,28,8,'#88c850'); px(16,11,32,8,'#5a9830'); px(18,17,28,4,'#3e7020');
+  // Pétales sur le bulbe
+  ctx.globalAlpha=0.7;
+  px(20,9,4,3,'#ff6666'); px(40,11,4,3,'#ffcc66'); px(28,8,4,3,'#ffaaff');
+  ctx.globalAlpha=1;
+  // Tête (verte)
+  px(18,20,28,12,'#88c850'); px(16,24,32,10,'#6aa040'); px(18,32,28,4,'#3e7020');
+  // Yeux (plus grands, royaux)
+  px(22,24,5,6,'#1a2a14'); px(23,25,3,4,'#88dd44'); px(24,26,1,2,'#ffffff');
+  px(37,24,5,6,'#1a2a14'); px(38,25,3,4,'#88dd44'); px(39,26,1,2,'#ffffff');
+  // Joues fleuries
+  px(20,30,3,3,'#ffaacc'); px(41,30,3,3,'#ffaacc');
+  // Sourire serein
+  px(28,32,8,2,'#1a1a14'); px(30,33,4,1,'#5a3018');
+  // Corps
+  px(14,34,36,12,'#88c850'); px(12,38,40,12,'#6aa040'); px(14,46,36,4,'#3e7020');
+  // Vrilles parfumées s'échappant
+  ctx.globalAlpha=0.6;
+  px(8,36,4,3,'#88c850'); px(4,38,4,4,'#88c850'); px(2,42,3,3,'#88c850');
+  px(52,36,4,3,'#88c850'); px(56,38,4,4,'#88c850'); px(59,42,3,3,'#88c850');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(16,50,10,12,'#3e7020'); px(38,50,10,12,'#3e7020');
+  px(14,56,12,8,'#2a4818'); px(38,56,12,8,'#2a4818');
+  // Pétales qui flottent autour
+  ctx.globalAlpha=0.8;
+  px(2,18,2,2,'#ff8888'); px(60,22,2,2,'#ffaaff'); px(4,52,2,2,'#ffcc66'); px(58,54,2,2,'#ff8888');
+  px(8,8,1,1,'#ffaaff'); px(54,12,1,1,'#ffcc66');
+  ctx.globalAlpha=1;
+};
+
+// 🔥 Brasileon — évolution de Flamèche (lézard royal)
+PM_SPRITES.brasileon = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura ardente
+  ctx.globalAlpha=0.3;
+  px(0,4,64,56,'#ff6020');
+  ctx.globalAlpha=1;
+  // Cornes royales
+  px(14,4,3,8,'#5a2010'); px(12,6,3,5,'#3e1408'); px(13,2,3,3,'#7a3018');
+  px(47,4,3,8,'#5a2010'); px(48,6,3,5,'#3e1408'); px(48,2,3,3,'#7a3018');
+  // Tête de lézard royal
+  px(18,8,28,8,'#ff6020'); px(16,12,32,8,'#cc4818'); px(18,18,28,4,'#9a3010');
+  // Crête de feu sur la tête
+  px(24,4,4,6,'#ffaa20'); px(30,2,4,8,'#ffcc40'); px(36,4,4,6,'#ffaa20');
+  ctx.globalAlpha=0.8;
+  px(26,2,2,4,'#ffee88'); px(32,0,2,4,'#ffffff'); px(38,2,2,4,'#ffee88');
+  ctx.globalAlpha=1;
+  // Yeux royaux
+  px(22,14,4,5,'#1a0a08'); px(23,15,2,3,'#ffeb44'); px(24,16,1,1,'#ffffff');
+  px(38,14,4,5,'#1a0a08'); px(39,15,2,3,'#ffeb44'); px(40,16,1,1,'#ffffff');
+  // Museau royal
+  px(28,20,8,4,'#cc4818'); px(30,22,4,2,'#9a3010');
+  // Crocs
+  px(26,22,2,4,'#ffeebb'); px(36,22,2,4,'#ffeebb');
+  // Cou
+  px(24,24,16,4,'#cc4818');
+  // Poitrail incandescent (caractéristique principale)
+  px(22,28,20,12,'#ffaa20'); px(26,30,12,8,'#ffcc40'); px(28,32,8,4,'#ffee88');
+  ctx.globalAlpha=0.8;
+  px(30,33,4,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Corps autour du poitrail
+  px(14,28,8,16,'#cc4818'); px(42,28,8,16,'#cc4818');
+  px(12,32,8,12,'#9a3010'); px(44,32,8,12,'#9a3010');
+  px(14,40,36,6,'#9a3010');
+  // Bras avec griffes
+  px(8,32,8,12,'#cc4818'); px(48,32,8,12,'#cc4818');
+  px(6,40,8,6,'#9a3010'); px(50,40,8,6,'#9a3010');
+  // Griffes ardentes
+  px(4,42,4,6,'#ffaa20'); px(56,42,4,6,'#ffaa20');
+  px(4,46,2,3,'#ffeebb'); px(58,46,2,3,'#ffeebb');
+  // Pattes
+  px(16,46,10,14,'#9a3010'); px(38,46,10,14,'#9a3010');
+  px(14,54,12,8,'#5a2010'); px(38,54,12,8,'#5a2010');
+  // Queue royale avec flamme
+  px(46,38,8,8,'#cc4818'); px(50,42,8,6,'#ffaa20'); px(54,38,6,8,'#ffcc40');
+  px(58,34,4,8,'#ffee88'); px(60,30,3,6,'#ffffff');
+  ctx.globalAlpha=0.8;
+  px(56,40,2,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Étincelles royales
+  ctx.globalAlpha=0.9;
+  px(2,16,1,1,'#ffeb44'); px(62,18,1,1,'#ffeb44'); px(4,52,2,1,'#ffaa20'); px(58,52,2,1,'#ffaa20');
+  ctx.globalAlpha=1;
+};
+
+// 💧 Goutaragon — évolution de Goutapom (seigneur des torrents)
+PM_SPRITES.goutaragon = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura aquatique
+  ctx.globalAlpha=0.3;
+  px(0,8,64,52,'#3a7bd4');
+  ctx.globalAlpha=1;
+  // Antennes-bulbes (gemmes-cascade)
+  px(20,2,4,8,'#1a3a5a'); px(40,2,4,8,'#1a3a5a');
+  px(18,0,4,4,'#88ddff'); px(40,0,4,4,'#88ddff');
+  ctx.globalAlpha=0.8;
+  px(19,1,2,2,'#ffffff'); px(41,1,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Tête seigneuriale
+  px(16,8,32,8,'#3a7bd4'); px(14,12,36,8,'#2a5a9a'); px(16,18,32,4,'#1a3a5a');
+  // Couronne d'eau
+  px(22,6,20,2,'#88ddff'); px(26,4,4,2,'#aaeeff'); px(34,4,4,2,'#aaeeff');
+  ctx.globalAlpha=0.8;
+  px(24,5,2,3,'#ffffff'); px(36,5,2,3,'#ffffff');
+  ctx.globalAlpha=1;
+  // Yeux royaux turquoise
+  px(20,14,5,5,'#0a1830'); px(21,15,3,3,'#88ddff'); px(22,16,1,1,'#ffffff');
+  px(39,14,5,5,'#0a1830'); px(40,15,3,3,'#88ddff'); px(41,16,1,1,'#ffffff');
+  // Bouche
+  px(28,20,8,3,'#1a3a5a'); px(30,21,4,1,'#000810');
+  // Cou avec branchies
+  px(22,22,20,4,'#2a5a9a'); px(20,24,4,3,'#88ddff'); px(40,24,4,3,'#88ddff');
+  // Corps massif
+  px(12,26,40,16,'#3a7bd4'); px(10,30,44,16,'#2a5a9a'); px(12,42,40,4,'#1a3a5a');
+  // Ventre clair
+  px(20,32,24,8,'#88ddff'); px(22,34,20,4,'#aaeeff');
+  // Marques d'écailles brillantes
+  ctx.globalAlpha=0.7;
+  px(16,30,4,3,'#88ddff'); px(46,32,4,3,'#88ddff'); px(28,42,8,2,'#88ddff');
+  ctx.globalAlpha=1;
+  // Bras puissants avec palmes
+  px(4,28,10,14,'#2a5a9a'); px(2,32,10,10,'#1a3a5a');
+  px(50,28,10,14,'#2a5a9a'); px(52,32,10,10,'#1a3a5a');
+  // Palmes
+  px(0,38,8,8,'#3a7bd4'); px(56,38,8,8,'#3a7bd4');
+  ctx.globalAlpha=0.7;
+  px(1,40,5,5,'#88ddff'); px(58,40,5,5,'#88ddff');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(14,46,12,12,'#2a5a9a'); px(38,46,12,12,'#2a5a9a');
+  px(12,54,14,6,'#1a3a5a'); px(38,54,14,6,'#1a3a5a');
+  // Pieds palmés
+  px(10,58,18,4,'#3a7bd4'); px(36,58,18,4,'#3a7bd4');
+  // Queue avec nageoire
+  px(46,40,8,10,'#2a5a9a'); px(48,46,10,8,'#1a3a5a');
+  ctx.globalAlpha=0.8;
+  px(54,44,8,8,'#88ddff'); px(56,48,6,6,'#aaeeff');
+  ctx.globalAlpha=1;
+  // Bulles
+  ctx.globalAlpha=0.7;
+  px(4,12,2,2,'#aaeeff'); px(58,16,2,2,'#aaeeff'); px(2,52,1,1,'#ffffff'); px(60,54,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+// ❄️ Cristelune — évolution de Cristellis (biche-prêtresse)
+PM_SPRITES.cristelune = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Halo lunaire constellation
+  ctx.globalAlpha=0.4;
+  px(8,4,48,16,'#ddccff'); px(12,8,40,8,'#aaccff');
+  ctx.globalAlpha=1;
+  // Étoiles dans le halo
+  ctx.globalAlpha=0.9;
+  px(14,6,1,1,'#ffffff'); px(50,8,1,1,'#ffffff'); px(20,10,1,1,'#ffeeff');
+  px(44,4,1,1,'#ffeeff'); px(30,12,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Bois cristallins constellés (plus majestueux)
+  px(14,2,3,12,'#aaccff'); px(10,4,3,8,'#88aaee'); px(8,8,2,4,'#ddeeff');
+  px(12,8,2,3,'#ffffff'); px(16,4,2,4,'#ffffff');
+  px(47,2,3,12,'#aaccff'); px(51,4,3,8,'#88aaee'); px(54,8,2,4,'#ddeeff');
+  px(50,8,2,3,'#ffffff'); px(46,4,2,4,'#ffffff');
+  // Étoile au sommet des bois
+  ctx.globalAlpha=0.9;
+  px(14,1,2,2,'#ffffff'); px(48,1,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Diadème lumineux
+  px(22,10,20,2,'#ddeeff'); px(28,8,8,2,'#ffffff');
+  ctx.globalAlpha=0.8;
+  px(30,7,4,2,'#ddccff');
+  ctx.globalAlpha=1;
+  // Tête (forme allongée plus mature)
+  px(20,12,24,8,'#ddeeff'); px(18,16,28,8,'#bcd0ee'); px(20,22,24,4,'#9cb0d8');
+  // Marques sacrées sur le visage
+  ctx.globalAlpha=0.6;
+  px(28,14,8,2,'#ddccff');
+  ctx.globalAlpha=1;
+  // Yeux profonds (plus grands, royaux)
+  px(22,15,5,6,'#1a2a44'); px(23,16,3,4,'#aaeeff'); px(24,17,1,2,'#ffffff');
+  px(37,15,5,6,'#1a2a44'); px(38,16,3,4,'#aaeeff'); px(39,17,1,2,'#ffffff');
+  // Museau délicat
+  px(30,22,4,3,'#ffffff'); px(31,23,2,1,'#ddeeff');
+  // Corps élancé
+  px(16,26,32,12,'#ddeeff'); px(14,30,36,10,'#bcd0ee'); px(16,38,32,4,'#9cb0d8');
+  // Robe constellation
+  ctx.globalAlpha=0.7;
+  px(20,30,4,4,'#ddccff'); px(26,32,4,4,'#aaccff'); px(34,30,4,4,'#ddccff'); px(40,32,4,4,'#aaccff');
+  ctx.globalAlpha=1;
+  // Étoiles brillantes sur la robe
+  ctx.globalAlpha=0.9;
+  px(22,32,1,1,'#ffffff'); px(28,34,1,1,'#ffffff'); px(36,32,1,1,'#ffffff'); px(42,34,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Pattes longues
+  px(16,40,5,14,'#9cb0d8'); px(14,48,5,10,'#7c90b8');
+  px(43,40,5,14,'#9cb0d8'); px(45,48,5,10,'#7c90b8');
+  px(22,42,5,12,'#9cb0d8'); px(37,42,5,12,'#9cb0d8');
+  // Sabots étoilés
+  px(13,58,8,4,'#aaccff'); px(43,58,8,4,'#aaccff');
+  px(20,56,7,4,'#aaccff'); px(37,56,7,4,'#aaccff');
+  ctx.globalAlpha=0.8;
+  px(15,60,4,1,'#ffffff'); px(45,60,4,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Queue stellaire
+  px(46,30,4,4,'#ddeeff'); px(50,32,3,4,'#ffffff');
+  ctx.globalAlpha=0.7;
+  px(52,30,3,3,'#ddccff');
+  ctx.globalAlpha=1;
+  // Particules constellées
+  ctx.globalAlpha=0.7;
+  px(2,28,1,1,'#ffffff'); px(60,30,1,1,'#ffffff'); px(4,46,2,2,'#ddccff'); px(58,48,2,2,'#aaccff');
+  ctx.globalAlpha=1;
+};
+
+// ⚙️ Aciérox — évolution d'Aciérus (chevalier-roi)
+PM_SPRITES.acierox = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura royale
+  ctx.globalAlpha=0.3;
+  px(2,2,60,60,'#5060a0');
+  ctx.globalAlpha=1;
+  // Heaume royal (plus haut, plus orné)
+  px(20,2,24,4,'#ccd4e4'); px(18,4,28,8,'#aab4c4'); px(20,10,24,4,'#8898ac');
+  // Plumet doré royal (plus grand)
+  px(26,0,12,3,'#ddaa30'); px(28,0,8,2,'#ffcc44'); px(30,0,4,2,'#ffeebb');
+  // Couronne sur le heaume
+  px(22,3,20,2,'#ffcc44'); px(26,1,4,3,'#ffeebb'); px(34,1,4,3,'#ffeebb');
+  // Visière sombre avec lueur dorée perçante
+  px(20,12,24,5,'#3a4458'); px(22,14,8,2,'#ffcc44'); px(34,14,8,2,'#ffcc44');
+  ctx.globalAlpha=0.9;
+  px(23,15,6,1,'#ffeebb'); px(35,15,6,1,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Cou armoré
+  px(24,17,16,4,'#8898ac'); px(26,19,12,2,'#6a7a90');
+  // Plastron royal massif
+  px(12,21,40,18,'#ccd4e4'); px(10,25,44,16,'#aab4c4'); px(12,39,40,4,'#8898ac');
+  // Croix royale dorée
+  px(31,23,2,14,'#ffcc44'); px(24,29,16,2,'#ffcc44');
+  ctx.globalAlpha=0.8;
+  px(31,23,2,1,'#ffeebb'); px(24,29,16,1,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Joyaux sur le plastron
+  px(20,32,3,3,'#ff4444'); px(41,32,3,3,'#4488ff');
+  ctx.globalAlpha=0.9;
+  px(21,33,1,1,'#ffaaaa'); px(42,33,1,1,'#aaccff');
+  ctx.globalAlpha=1;
+  // Épaulières royales
+  px(4,21,12,10,'#ccd4e4'); px(2,25,12,8,'#aab4c4'); px(2,29,14,6,'#8898ac');
+  px(48,21,12,10,'#ccd4e4'); px(50,25,12,8,'#aab4c4'); px(48,29,14,6,'#8898ac');
+  // Pointes sur épaulières
+  px(0,24,4,4,'#6a7a90'); px(60,24,4,4,'#6a7a90');
+  // Bras armurés
+  px(4,33,10,12,'#8898ac'); px(2,39,10,8,'#6a7a90');
+  px(50,33,10,12,'#8898ac'); px(52,39,10,8,'#6a7a90');
+  // Gantelets dorés
+  px(2,43,12,5,'#ffcc44'); px(50,43,12,5,'#ffcc44');
+  ctx.globalAlpha=0.8;
+  px(4,43,8,2,'#ffeebb'); px(52,43,8,2,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Reflets divins
+  ctx.globalAlpha=0.6;
+  px(20,7,8,2,'#ffffff'); px(16,23,8,2,'#ddeeff'); px(40,27,6,2,'#ddeeff');
+  ctx.globalAlpha=1;
+  // Jupe d'armure (jambes)
+  px(16,45,14,12,'#aab4c4'); px(34,45,14,12,'#aab4c4');
+  px(14,51,16,8,'#8898ac'); px(34,51,16,8,'#8898ac');
+  // Bordure dorée jupe
+  ctx.globalAlpha=0.8;
+  px(14,55,16,1,'#ffcc44'); px(34,55,16,1,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Bottes
+  px(12,58,18,4,'#6a7a90'); px(34,58,18,4,'#6a7a90');
+  px(14,60,14,2,'#3a4458'); px(36,60,14,2,'#3a4458');
+  // Aura mystique plus forte
+  ctx.globalAlpha=0.4;
+  px(0,12,3,40,'#ffcc44'); px(61,12,3,40,'#ffcc44');
+  ctx.globalAlpha=1;
+};
+
+
+// SPRITES ÉVOLUTIONS — 15 restants
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R1 — 7 évolutions restantes
+// ═══════════════════════════════════════════════════════════════════════════
+
+// 🌿 Thornogor — évolution de Thornet (armure de chitine, scarabée guerrier)
+PM_SPRITES.thornogor = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura verte
+  ctx.globalAlpha=0.3;
+  px(4,4,56,56,'#3a7028');
+  ctx.globalAlpha=1;
+  // Cornes / mandibules de scarabée géant
+  px(12,4,4,10,'#1e3812'); px(8,8,4,6,'#0a2008'); px(10,2,4,4,'#3e6020');
+  px(48,4,4,10,'#1e3812'); px(52,8,4,6,'#0a2008'); px(50,2,4,4,'#3e6020');
+  // Pinces extérieures
+  px(6,12,4,3,'#0a2008'); px(54,12,4,3,'#0a2008');
+  // Tête
+  px(18,8,28,8,'#3a7028'); px(16,12,32,8,'#2a5418'); px(18,18,28,4,'#1e3812');
+  // Yeux composés rouges (guerrier)
+  px(22,12,5,5,'#1a0a0a'); px(23,13,3,3,'#aa3030'); px(24,14,1,1,'#ff8888');
+  px(37,12,5,5,'#1a0a0a'); px(38,13,3,3,'#aa3030'); px(39,14,1,1,'#ff8888');
+  // Marque de guerre sur le front
+  ctx.globalAlpha=0.7;
+  px(28,11,8,2,'#aa3030');
+  ctx.globalAlpha=1;
+  // Mandibules inférieures
+  px(24,18,16,3,'#1e3812'); px(26,20,2,3,'#0a2008'); px(36,20,2,3,'#0a2008');
+  // Cou
+  px(26,21,12,4,'#2a5418');
+  // Carapace dorsale (chitine renforcée)
+  px(10,25,44,18,'#3a7028'); px(8,29,48,16,'#2a5418'); px(10,43,44,4,'#1e3812');
+  // Plaques de chitine en lignes
+  ctx.globalAlpha=0.7;
+  px(12,30,40,1,'#1e3812'); px(12,35,40,1,'#1e3812'); px(12,40,40,1,'#1e3812');
+  ctx.globalAlpha=1;
+  // Pics dorsaux
+  px(20,23,3,4,'#1e3812'); px(30,21,4,5,'#1e3812'); px(41,23,3,4,'#1e3812');
+  ctx.globalAlpha=0.8;
+  px(21,23,1,2,'#88aa44'); px(31,21,2,2,'#88aa44'); px(42,23,1,2,'#88aa44');
+  ctx.globalAlpha=1;
+  // Marques rouges (signes de guerre)
+  ctx.globalAlpha=0.6;
+  px(20,32,3,4,'#aa3030'); px(41,34,3,4,'#aa3030');
+  ctx.globalAlpha=1;
+  // Pattes (6, comme un insecte)
+  // Avant
+  px(2,30,8,4,'#1e3812'); px(0,33,6,4,'#0a2008');
+  px(54,30,8,4,'#1e3812'); px(58,33,6,4,'#0a2008');
+  // Milieu
+  px(2,38,8,4,'#1e3812'); px(0,41,6,4,'#0a2008');
+  px(54,38,8,4,'#1e3812'); px(58,41,6,4,'#0a2008');
+  // Pattes principales
+  px(14,46,10,12,'#2a5418'); px(40,46,10,12,'#2a5418');
+  px(12,52,12,8,'#1e3812'); px(40,52,12,8,'#1e3812');
+  // Griffes finales
+  px(10,58,6,4,'#0a2008'); px(48,58,6,4,'#0a2008');
+  // Élytres lisibles sur les côtés
+  ctx.globalAlpha=0.6;
+  px(10,28,8,12,'#3e6020'); px(46,28,8,12,'#3e6020');
+  ctx.globalAlpha=1;
+};
+
+// 🔥 Vipériphon — évolution de Vipérod (serpent ailé de braise)
+PM_SPRITES.viperiphon = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura ardente
+  ctx.globalAlpha=0.3;
+  px(0,0,64,64,'#ff4020');
+  ctx.globalAlpha=1;
+  // Tête de serpent dragon
+  px(8,16,18,8,'#cc3818'); px(6,20,22,8,'#9a2810'); px(8,26,18,4,'#7a1808');
+  // Cornes effilées
+  px(10,12,3,6,'#3e1408'); px(11,8,2,5,'#1e0408');
+  px(20,12,3,6,'#3e1408'); px(21,8,2,5,'#1e0408');
+  // Yeux royaux dorés
+  px(10,20,4,4,'#1a0a08'); px(11,21,2,2,'#ffcc44'); px(12,22,1,1,'#ffeebb');
+  px(18,20,4,4,'#1a0a08'); px(19,21,2,2,'#ffcc44'); px(20,22,1,1,'#ffeebb');
+  // Crocs venimeux longs
+  px(10,26,2,5,'#ffeebb'); px(20,26,2,5,'#ffeebb');
+  // Langue fendue
+  px(0,22,10,2,'#ff4020');
+  px(0,21,3,1,'#ff8844'); px(0,24,3,1,'#ff8844');
+  // Cou serpentin
+  px(22,22,10,4,'#9a2810'); px(26,26,12,4,'#cc3818');
+  // GRANDES AILES enflammées
+  // Aile gauche
+  px(20,4,16,12,'#cc3818'); px(24,2,12,8,'#ff6020');
+  px(28,0,8,4,'#ffaa20');
+  // Membranes brûlantes
+  ctx.globalAlpha=0.8;
+  px(26,4,8,8,'#ffcc44'); px(28,2,4,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  px(22,8,2,5,'#3e1408'); px(28,6,2,7,'#3e1408');
+  // Aile droite
+  px(40,8,18,10,'#cc3818'); px(44,4,14,8,'#ff6020');
+  px(48,2,8,4,'#ffaa20');
+  ctx.globalAlpha=0.8;
+  px(46,6,8,8,'#ffcc44'); px(48,4,4,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  px(42,10,2,7,'#3e1408'); px(48,8,2,7,'#3e1408');
+  // Corps long et serpentin (s'enroule)
+  px(28,28,16,8,'#cc3818'); px(32,30,16,8,'#9a2810');
+  px(38,34,18,8,'#cc3818'); px(42,38,16,8,'#9a2810');
+  // Marques de braise sur le corps
+  ctx.globalAlpha=0.7;
+  px(32,30,4,4,'#ffaa20'); px(46,36,4,4,'#ffaa20'); px(40,44,4,4,'#ffaa20');
+  ctx.globalAlpha=1;
+  // Continuation du corps
+  px(48,42,12,8,'#cc3818'); px(46,46,14,8,'#9a2810');
+  px(40,50,16,8,'#cc3818'); px(34,54,14,8,'#9a2810');
+  px(24,56,16,6,'#cc3818'); px(14,58,14,4,'#9a2810');
+  // Queue avec flamme
+  px(8,58,8,4,'#cc3818'); px(2,56,8,5,'#ffaa20'); px(0,54,4,5,'#ffcc44');
+  ctx.globalAlpha=0.8;
+  px(0,52,3,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Étincelles royales
+  ctx.globalAlpha=0.9;
+  px(58,4,1,1,'#ffeb44'); px(2,12,1,1,'#ffeb44'); px(60,28,2,1,'#ffaa20');
+  ctx.globalAlpha=1;
+};
+
+// 💧 Carapharos — évolution de Carapulse (crabe-phare titanesque)
+PM_SPRITES.carapharos = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura aquatique
+  ctx.globalAlpha=0.25;
+  px(0,8,64,52,'#3a7bd4');
+  ctx.globalAlpha=1;
+  // Carapace géante (massive)
+  px(8,12,48,24,'#5a8cdc'); px(6,16,52,22,'#3a6cb4'); px(8,32,48,8,'#1a4488');
+  // Phare central (caractéristique principale du lore)
+  px(28,4,8,12,'#2a4878'); px(26,8,12,8,'#1a3858');
+  // Bulbe lumineux du phare
+  px(28,4,8,5,'#ffeebb'); px(30,2,4,4,'#ffffff');
+  ctx.globalAlpha=0.8;
+  px(29,3,6,3,'#fff8cc');
+  ctx.globalAlpha=1;
+  // Faisceaux lumineux
+  ctx.globalAlpha=0.4;
+  px(20,2,4,8,'#ffffff'); px(40,2,4,8,'#ffffff');
+  px(16,4,2,6,'#ffffff'); px(46,4,2,6,'#ffffff');
+  ctx.globalAlpha=1;
+  // Yeux pédonculés (sur la carapace)
+  px(16,18,5,7,'#1a1a22'); px(17,19,3,5,'#88ddff'); px(18,20,1,2,'#ffffff');
+  px(43,18,5,7,'#1a1a22'); px(44,19,3,5,'#88ddff'); px(45,20,1,2,'#ffffff');
+  // Reliefs de la carapace
+  ctx.globalAlpha=0.6;
+  px(12,22,40,2,'#88ddff'); px(14,28,36,2,'#88ddff');
+  ctx.globalAlpha=1;
+  // Marques d'écailles
+  px(20,26,3,2,'#1a4488'); px(40,26,3,2,'#1a4488'); px(28,30,8,2,'#1a4488');
+  // PINCES TITANESQUES (énormes, caractéristique principale)
+  // Pince gauche
+  px(0,24,12,16,'#5a8cdc'); px(0,28,8,12,'#3a6cb4');
+  // Bout de pince
+  px(0,22,4,8,'#3a6cb4'); px(0,18,3,4,'#1a4488');
+  px(0,40,4,8,'#3a6cb4'); px(0,44,3,4,'#1a4488');
+  // Reflets sur pinces
+  ctx.globalAlpha=0.7;
+  px(2,26,4,3,'#88ddff'); px(2,38,4,3,'#88ddff');
+  ctx.globalAlpha=1;
+  // Pince droite
+  px(52,24,12,16,'#5a8cdc'); px(56,28,8,12,'#3a6cb4');
+  px(60,22,4,8,'#3a6cb4'); px(61,18,3,4,'#1a4488');
+  px(60,40,4,8,'#3a6cb4'); px(61,44,3,4,'#1a4488');
+  ctx.globalAlpha=0.7;
+  px(58,26,4,3,'#88ddff'); px(58,38,4,3,'#88ddff');
+  ctx.globalAlpha=1;
+  // Pattes (4 paires)
+  px(10,40,8,8,'#3a6cb4'); px(46,40,8,8,'#3a6cb4');
+  px(14,42,4,10,'#1a4488'); px(46,42,4,10,'#1a4488');
+  // Pattes médianes
+  px(20,42,4,12,'#3a6cb4'); px(40,42,4,12,'#3a6cb4');
+  px(20,52,4,8,'#1a4488'); px(40,52,4,8,'#1a4488');
+  // Pattes centrales
+  px(28,46,8,16,'#3a6cb4'); px(28,56,8,6,'#1a4488');
+  // Bulles
+  ctx.globalAlpha=0.7;
+  px(12,8,2,2,'#aaeeff'); px(50,10,2,2,'#aaeeff'); px(4,52,1,1,'#ffffff'); px(58,54,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+// ⚡ Voltérion — évolution de Volture (écureuil-éclair royal)
+PM_SPRITES.volterion = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Éclairs en arrière-plan
+  ctx.globalAlpha=0.4;
+  px(2,2,3,4,'#ffeb44'); px(58,4,3,4,'#ffeb44'); px(4,58,3,4,'#ffeb44'); px(58,58,3,4,'#ffeb44');
+  ctx.globalAlpha=1;
+  // Oreilles longues avec glands électriques
+  px(14,2,5,12,'#5a3a20'); px(12,8,4,8,'#3a1c10');
+  px(45,2,5,12,'#5a3a20'); px(48,8,4,8,'#3a1c10');
+  // Glands électriques au bout des oreilles
+  ctx.globalAlpha=0.9;
+  px(13,2,4,3,'#ffeb44'); px(46,2,4,3,'#ffeb44');
+  px(14,1,2,2,'#ffffff'); px(47,1,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Tête
+  px(18,8,28,10,'#5a3a20'); px(16,12,32,10,'#4a2818'); px(18,20,28,4,'#3a1c10');
+  // Moustaches conductrices (caractéristique principale)
+  ctx.globalAlpha=0.9;
+  px(2,16,16,1,'#ffeb44'); px(46,16,16,1,'#ffeb44');
+  px(0,18,12,1,'#ffaa20'); px(52,18,12,1,'#ffaa20');
+  ctx.globalAlpha=1;
+  // Yeux jaunes électriques
+  px(22,14,4,5,'#1a1a08'); px(23,15,2,3,'#ffeb44'); px(24,16,1,1,'#ffffff');
+  px(38,14,4,5,'#1a1a08'); px(39,15,2,3,'#ffeb44'); px(40,16,1,1,'#ffffff');
+  // Marque éclair sur le front
+  ctx.globalAlpha=0.9;
+  px(31,11,2,2,'#ffeb44'); px(30,13,3,1,'#ffeb44'); px(32,12,2,1,'#ffaa20');
+  ctx.globalAlpha=1;
+  // Petit nez et bouche
+  px(30,20,4,2,'#1a1a08'); px(28,22,8,2,'#1a1a08');
+  px(30,21,1,1,'#ff6020');
+  // Cou avec collier d'éclairs
+  px(24,24,16,4,'#4a2818');
+  ctx.globalAlpha=0.8;
+  px(24,24,16,1,'#ffeb44');
+  ctx.globalAlpha=1;
+  // Corps
+  px(18,28,28,14,'#5a3a20'); px(16,32,32,14,'#4a2818'); px(18,42,28,4,'#3a1c10');
+  // Plastron clair
+  px(24,32,16,10,'#a87850'); px(26,34,12,6,'#c08858');
+  // Pattes avant
+  px(16,42,8,10,'#4a2818'); px(40,42,8,10,'#4a2818');
+  px(14,48,8,8,'#3a1c10'); px(40,48,8,8,'#3a1c10');
+  // Petites mains
+  px(13,52,8,4,'#a87850'); px(43,52,8,4,'#a87850');
+  // Pattes arrière repliées
+  px(20,46,8,12,'#3a1c10'); px(36,46,8,12,'#3a1c10');
+  // Pieds
+  px(18,56,12,5,'#1a1208'); px(34,56,12,5,'#1a1208');
+  // Énorme queue chargée d'électricité (caractéristique principale)
+  px(48,28,8,10,'#5a3a20'); px(52,32,8,12,'#4a2818');
+  px(52,38,12,12,'#5a3a20'); px(50,42,12,16,'#4a2818');
+  // Touffe au bout
+  px(46,52,16,10,'#5a3a20');
+  // Éclairs dans la queue
+  ctx.globalAlpha=0.9;
+  px(54,30,2,4,'#ffeb44'); px(58,38,2,5,'#ffeb44'); px(50,46,3,4,'#ffeb44');
+  px(56,52,3,5,'#ffaa20'); px(48,56,4,4,'#ffeb44');
+  ctx.globalAlpha=1;
+  px(55,32,1,1,'#ffffff'); px(59,40,1,1,'#ffffff'); px(51,48,1,1,'#ffffff');
+  // Étincelles flottantes
+  ctx.globalAlpha=0.9;
+  px(8,28,1,1,'#ffeb44'); px(56,16,1,1,'#ffeb44'); px(2,46,2,1,'#ffaa20'); px(60,46,2,1,'#ffaa20');
+  ctx.globalAlpha=1;
+};
+
+// ⚡ Fulgurion — évolution de Fulguron (tempête en miniature)
+PM_SPRITES.fulgurion = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Tempête tournoyante (couches d'éclairs)
+  ctx.globalAlpha=0.3;
+  px(4,4,56,56,'#aacc88'); px(8,8,48,48,'#88aa66');
+  ctx.globalAlpha=1;
+  // Sphère noyau (centre)
+  px(20,20,24,24,'#ffeb44'); px(18,24,28,16,'#f0c040'); px(22,28,20,8,'#ffaa20');
+  ctx.globalAlpha=0.9;
+  px(24,28,16,8,'#ffffff'); px(28,30,8,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Yeux dans la sphère (intenses, terrifiants)
+  px(24,28,4,5,'#1a1a08'); px(25,29,2,3,'#ffffff'); px(26,30,1,1,'#ffaa44');
+  px(36,28,4,5,'#1a1a08'); px(37,29,2,3,'#ffffff'); px(38,30,1,1,'#ffaa44');
+  // Bouche fendue d'éclairs
+  px(28,36,8,3,'#1a1a08');
+  ctx.globalAlpha=0.9;
+  px(30,37,4,1,'#ffeb44');
+  ctx.globalAlpha=1;
+  // Anneaux d'éclairs autour de la sphère
+  px(8,12,8,3,'#ffeb44'); px(48,12,8,3,'#ffeb44');
+  px(4,28,4,4,'#ffeb44'); px(56,28,4,4,'#ffeb44');
+  px(8,48,8,3,'#ffeb44'); px(48,48,8,3,'#ffeb44');
+  // Reliefs des éclairs (zigzag)
+  px(10,15,2,3,'#ffaa20'); px(50,10,2,3,'#ffaa20');
+  px(2,32,3,2,'#ffaa20'); px(58,32,3,2,'#ffaa20');
+  px(10,46,2,3,'#ffaa20'); px(48,52,2,3,'#ffaa20');
+  // Reflets brillants
+  ctx.globalAlpha=0.9;
+  px(10,12,4,1,'#ffffff'); px(52,12,4,1,'#ffffff'); px(10,50,4,1,'#ffffff'); px(50,50,4,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Particules électriques tournoyantes
+  ctx.globalAlpha=0.8;
+  px(2,2,2,2,'#ffeb44'); px(58,2,2,2,'#ffeb44');
+  px(28,4,2,2,'#ffaa20'); px(34,4,2,2,'#ffaa20');
+  px(2,28,2,2,'#ffeb44'); px(60,30,2,2,'#ffeb44');
+  px(2,58,2,2,'#ffeb44'); px(58,58,2,2,'#ffeb44');
+  px(28,60,2,2,'#ffaa20'); px(34,60,2,2,'#ffaa20');
+  ctx.globalAlpha=1;
+  // Petits éclairs minces autour
+  ctx.globalAlpha=0.9;
+  px(15,3,1,2,'#ffffff'); px(48,3,1,2,'#ffffff');
+  px(3,15,2,1,'#ffffff'); px(60,18,2,1,'#ffffff');
+  px(15,60,1,2,'#ffffff'); px(50,60,1,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Frange floue (la sphère semble pulser)
+  ctx.globalAlpha=0.5;
+  px(18,18,28,4,'#ffeb44'); px(18,42,28,4,'#ffeb44');
+  px(18,22,4,20,'#ffeb44'); px(42,22,4,20,'#ffeb44');
+  ctx.globalAlpha=1;
+};
+
+// 🌀 Zéphirion — évolution de Zéphibri (colibri-prince arc-en-ciel)
+PM_SPRITES.zephirion = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Halo arc-en-ciel
+  ctx.globalAlpha=0.3;
+  px(4,4,56,8,'#ff8888'); px(4,12,56,8,'#ffcc88'); px(4,20,56,8,'#88ccff'); px(4,28,56,8,'#ccffaa');
+  ctx.globalAlpha=1;
+  // Tête fine
+  px(20,12,16,6,'#aac8e8'); px(18,16,20,6,'#88a8c8'); px(20,20,16,4,'#688088');
+  // Couronne d'arc-en-ciel
+  px(22,8,12,4,'#ff6688'); px(24,6,8,5,'#ffaa66'); px(26,5,4,3,'#ffee66');
+  ctx.globalAlpha=0.9;
+  px(26,4,4,2,'#88ffaa'); px(27,3,2,2,'#88ccff');
+  ctx.globalAlpha=1;
+  // Long bec fin et royal
+  px(36,16,12,4,'#ffcc44'); px(44,16,8,3,'#ddaa30');
+  px(46,14,4,2,'#ffeebb');
+  // Yeux brillants
+  px(22,16,3,4,'#1a1a22'); px(23,17,1,2,'#88ddff');
+  px(31,16,3,4,'#1a1a22'); px(32,17,1,2,'#88ddff');
+  // Cou fin
+  px(24,22,10,4,'#88a8c8'); px(26,24,6,3,'#688088');
+  // Corps petit
+  px(20,26,16,8,'#aac8e8'); px(18,30,20,8,'#88a8c8'); px(20,36,16,4,'#688088');
+  // Marques arc-en-ciel sur le ventre
+  ctx.globalAlpha=0.7;
+  px(22,28,12,2,'#ff8888'); px(22,30,12,2,'#ffcc88'); px(22,32,12,2,'#88ccff'); px(22,34,12,2,'#ccffaa');
+  ctx.globalAlpha=1;
+  // GRANDES AILES déployées arc-en-ciel
+  // Aile gauche
+  px(0,16,18,12,'#ff8888'); px(2,12,16,8,'#ffcc88');
+  px(0,28,18,8,'#88ccff'); px(2,32,14,6,'#ccffaa');
+  ctx.globalAlpha=0.8;
+  px(4,18,12,3,'#ffeebb'); px(4,30,12,3,'#ddffee');
+  ctx.globalAlpha=1;
+  // Bordures plumes aile gauche
+  px(0,14,3,2,'#ff6688'); px(0,24,3,2,'#88aaff'); px(0,36,3,2,'#88cc66');
+  // Aile droite (asymétrique pour donner mouvement)
+  px(38,12,20,16,'#ff8888'); px(40,8,18,12,'#ffcc88');
+  px(40,28,20,8,'#88ccff'); px(42,32,16,6,'#ccffaa');
+  ctx.globalAlpha=0.8;
+  px(42,14,12,3,'#ffeebb'); px(44,30,12,3,'#ddffee');
+  ctx.globalAlpha=1;
+  px(58,10,3,2,'#ff6688'); px(60,22,3,2,'#88aaff'); px(58,36,3,2,'#88cc66');
+  // Pattes fines
+  px(24,40,3,8,'#ffcc44'); px(33,40,3,8,'#ffcc44');
+  px(22,46,4,4,'#ddaa30'); px(34,46,4,4,'#ddaa30');
+  // Griffes
+  px(20,50,2,3,'#1a1a22'); px(24,50,2,3,'#1a1a22');
+  px(34,50,2,3,'#1a1a22'); px(38,50,2,3,'#1a1a22');
+  // Longue queue arc-en-ciel
+  px(28,42,4,8,'#ff8888'); px(26,48,8,6,'#ffcc88');
+  px(24,52,12,6,'#88ccff'); px(22,56,16,6,'#ccffaa');
+  ctx.globalAlpha=0.8;
+  px(28,52,4,2,'#ffeebb'); px(28,58,4,3,'#ddffee');
+  ctx.globalAlpha=1;
+  // Plumes éparses arc-en-ciel
+  ctx.globalAlpha=0.8;
+  px(2,4,2,2,'#ff8888'); px(58,4,2,2,'#88ccff');
+  px(2,46,1,1,'#ffcc66'); px(60,48,1,1,'#88ffaa');
+  ctx.globalAlpha=1;
+};
+
+// 🌑 Spectreval — évolution de Spectrelis (arbuste hanté)
+PM_SPRITES.spectreval = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura spectrale
+  ctx.globalAlpha=0.3;
+  px(0,8,64,52,'#5060a0');
+  ctx.globalAlpha=1;
+  // Couronne de feuilles fantomatiques (en haut)
+  px(20,2,24,4,'#3a2a4a'); px(16,4,32,6,'#2a1a3a'); px(20,8,24,4,'#1a0a28');
+  // Feuilles individuelles
+  ctx.globalAlpha=0.9;
+  px(22,3,4,3,'#5060a0'); px(28,1,4,4,'#5060a0'); px(34,2,4,3,'#5060a0'); px(40,3,4,3,'#5060a0');
+  ctx.globalAlpha=1;
+  // Fruits (les "fruits qui ne tombent que pour les âmes apaisées")
+  px(18,6,3,3,'#7080c0'); px(28,4,3,3,'#7080c0'); px(38,4,3,3,'#7080c0'); px(43,6,3,3,'#7080c0');
+  ctx.globalAlpha=0.8;
+  px(19,7,1,1,'#aabbff'); px(29,5,1,1,'#aabbff'); px(39,5,1,1,'#aabbff'); px(44,7,1,1,'#aabbff');
+  ctx.globalAlpha=1;
+  // Tronc/visage central (l'arbuste a un visage)
+  px(22,12,20,12,'#3a2a4a'); px(20,16,24,10,'#2a1a3a'); px(22,24,20,4,'#1a0a28');
+  // Yeux fantomatiques
+  px(24,18,4,5,'#aabbff'); px(36,18,4,5,'#aabbff');
+  ctx.globalAlpha=0.7;
+  px(23,17,6,7,'#ddeeff'); px(35,17,6,7,'#ddeeff');
+  ctx.globalAlpha=1;
+  px(25,19,2,3,'#ffffff'); px(37,19,2,3,'#ffffff');
+  // Bouche de l'arbre
+  px(28,24,8,3,'#1a0a28'); px(30,25,4,2,'#000010');
+  // Branches-bras qui s'étendent
+  px(8,18,16,4,'#3a2a4a'); px(4,22,12,4,'#2a1a3a');
+  px(40,18,16,4,'#3a2a4a'); px(48,22,12,4,'#2a1a3a');
+  // Petites feuilles aux bouts
+  px(0,20,4,4,'#3a2a4a'); px(60,20,4,4,'#3a2a4a');
+  ctx.globalAlpha=0.8;
+  px(1,21,2,2,'#5060a0'); px(61,21,2,2,'#5060a0');
+  ctx.globalAlpha=1;
+  // Tronc central plus large
+  px(18,28,28,14,'#3a2a4a'); px(16,32,32,12,'#2a1a3a'); px(18,42,28,4,'#1a0a28');
+  // Reliefs de l'écorce
+  ctx.globalAlpha=0.6;
+  px(22,30,2,12,'#1a0a28'); px(30,30,2,12,'#1a0a28'); px(38,30,2,12,'#1a0a28');
+  ctx.globalAlpha=1;
+  // Visage secondaire sur le tronc
+  px(26,34,3,3,'#aabbff'); px(34,34,3,3,'#aabbff');
+  ctx.globalAlpha=0.8;
+  px(28,38,8,2,'#1a0a28');
+  ctx.globalAlpha=1;
+  // Racines fantomatiques
+  px(14,42,8,12,'#2a1a3a'); px(42,42,8,12,'#2a1a3a');
+  px(12,48,8,8,'#1a0a28'); px(44,48,8,8,'#1a0a28');
+  // Racines secondaires
+  ctx.globalAlpha=0.7;
+  px(8,52,6,6,'#2a1a3a'); px(50,52,6,6,'#2a1a3a');
+  ctx.globalAlpha=1;
+  // Base
+  px(22,46,20,12,'#2a1a3a'); px(24,52,16,8,'#1a0a28');
+  // Bas qui se dissout en brume
+  ctx.globalAlpha=0.6;
+  px(18,58,28,4,'#3a2a4a'); px(20,60,24,3,'#2a1a3a');
+  ctx.globalAlpha=0.4;
+  px(14,60,36,3,'#3a2a4a');
+  ctx.globalAlpha=1;
+  // Particules d'âme
+  ctx.globalAlpha=0.7;
+  px(4,12,1,1,'#aabbff'); px(60,14,1,1,'#aabbff');
+  px(2,40,2,2,'#5060a0'); px(58,42,2,2,'#5060a0');
+  px(8,56,1,1,'#aabbff'); px(54,56,1,1,'#aabbff');
+  ctx.globalAlpha=1;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R2 — 8 évolutions restantes
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ❄️ Glacedrak — évolution de Frimadon (dragon des hivers anciens)
+PM_SPRITES.glacedrak = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura glaciale ancienne
+  ctx.globalAlpha=0.3;
+  px(0,0,64,64,'#88ccee');
+  ctx.globalAlpha=1;
+  // Tête massive de dragon
+  px(6,12,22,10,'#88b8d4'); px(4,16,26,10,'#5e8cb0'); px(6,24,22,4,'#3e6c90');
+  // Cornes glaciales énormes
+  px(8,4,4,10,'#ffffff'); px(6,2,4,5,'#ddeeff');
+  px(20,4,4,10,'#ffffff'); px(22,2,4,5,'#ddeeff');
+  // Cornes secondaires
+  px(14,6,3,7,'#cceeff'); px(15,4,2,3,'#ffffff');
+  // Yeux royaux glacés
+  px(8,18,5,5,'#1a2a44'); px(9,19,3,3,'#aaeeff'); px(10,20,1,1,'#ffffff');
+  px(18,18,5,5,'#1a2a44'); px(19,19,3,3,'#aaeeff'); px(20,20,1,1,'#ffffff');
+  // Crocs glaciaux
+  px(6,24,3,5,'#ffffff'); px(22,24,3,5,'#ffffff');
+  // Souffle gelé puissant
+  ctx.globalAlpha=0.8;
+  px(0,18,6,6,'#ddeeff'); px(0,20,4,4,'#ffffff');
+  ctx.globalAlpha=0.5;
+  px(0,14,6,4,'#cceeff'); px(0,24,6,4,'#cceeff');
+  ctx.globalAlpha=1;
+  // Cou massif
+  px(22,22,12,6,'#5e8cb0'); px(26,28,12,4,'#3e6c90');
+  // Corps long et ondulant
+  px(28,24,18,10,'#88b8d4'); px(34,30,16,10,'#5e8cb0');
+  px(38,36,18,8,'#88b8d4'); px(42,40,16,10,'#5e8cb0');
+  px(46,44,16,8,'#88b8d4');
+  // Pics de glace majestueux sur le dos
+  px(28,18,3,7,'#ddeeff'); px(36,16,3,9,'#ffffff'); px(44,18,3,7,'#ddeeff');
+  px(50,22,3,7,'#cceeff'); px(56,28,3,7,'#ddeeff');
+  // Reflets sur les pics
+  ctx.globalAlpha=0.9;
+  px(36,16,1,4,'#ffffff'); px(44,18,1,3,'#ffffff');
+  ctx.globalAlpha=1;
+  // GRANDES AILES glaciales
+  ctx.globalAlpha=0.7;
+  px(20,2,20,10,'#ddeeff'); px(24,0,16,4,'#ffffff');
+  px(22,12,16,6,'#cceeff');
+  ctx.globalAlpha=1;
+  // Membrures ailes
+  px(22,6,2,4,'#88ccee'); px(28,4,2,6,'#88ccee'); px(34,6,2,4,'#88ccee');
+  // Cristaux dans les ailes
+  ctx.globalAlpha=0.9;
+  px(26,8,2,2,'#ffffff'); px(32,6,2,2,'#ffffff'); px(38,8,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Ventre clair
+  px(34,30,12,6,'#cceeff'); px(40,38,12,4,'#cceeff');
+  // Marques runes glacées
+  ctx.globalAlpha=0.7;
+  px(36,32,3,2,'#88ccee'); px(44,40,3,2,'#88ccee');
+  ctx.globalAlpha=1;
+  // Queue se terminant en pic majeur
+  px(58,46,4,8,'#5e8cb0'); px(56,40,5,8,'#cceeff'); px(60,36,3,6,'#ffffff');
+  // Particules glacées
+  ctx.globalAlpha=0.5;
+  px(2,30,2,2,'#ffffff'); px(60,8,1,1,'#ffffff'); px(4,50,1,1,'#cceeff'); px(60,58,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+// ⚙️ Forgehammer — évolution de Forgemin (enclume avec marteau)
+PM_SPRITES.forgehammer = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura de forge
+  ctx.globalAlpha=0.3;
+  px(2,2,60,60,'#ffaa44');
+  ctx.globalAlpha=1;
+  // Plateau supérieur (plus large que Forgemin)
+  px(16,8,32,6,'#aab4c4'); px(14,12,36,5,'#909cb0'); px(16,17,32,2,'#7080a0');
+  // Cou
+  px(22,17,20,4,'#7080a0'); px(24,20,16,3,'#5e6e8a');
+  // Cornes d'enclume (deux côtés cette fois)
+  px(8,11,8,4,'#aab4c4'); px(0,12,8,3,'#7080a0'); px(0,12,4,2,'#5e6e8a');
+  px(48,11,8,4,'#aab4c4'); px(56,12,8,3,'#7080a0'); px(60,12,4,2,'#5e6e8a');
+  // Visage royal
+  px(20,12,4,4,'#1a1a22'); px(21,13,2,2,'#ffaa44'); px(22,14,1,1,'#ffeebb');
+  px(40,12,4,4,'#1a1a22'); px(41,13,2,2,'#ffaa44'); px(42,14,1,1,'#ffeebb');
+  // Sourire confiant
+  px(28,16,8,1,'#1a1a22');
+  // MARTEAU posé sur l'épaule (caractéristique principale)
+  // Manche
+  px(50,20,4,16,'#5a3018'); px(52,32,4,12,'#3e2010');
+  // Tête du marteau
+  px(46,16,16,10,'#aab4c4'); px(44,18,20,8,'#909cb0'); px(46,24,16,4,'#7080a0');
+  // Reflets
+  ctx.globalAlpha=0.7;
+  px(48,18,8,2,'#d0d8e8');
+  ctx.globalAlpha=1;
+  // Marque sur le marteau
+  px(52,20,2,2,'#ffaa44'); px(53,21,1,1,'#ffeebb');
+  // Base massive
+  px(10,22,40,16,'#aab4c4'); px(8,26,44,16,'#909cb0'); px(10,38,40,4,'#7080a0');
+  // Pieds (4)
+  px(6,30,8,8,'#909cb0'); px(4,34,8,6,'#7080a0'); px(4,38,10,3,'#5e6e8a');
+  px(50,30,8,8,'#909cb0'); px(52,34,8,6,'#7080a0'); px(50,38,10,3,'#5e6e8a');
+  // Marques de coups
+  px(20,28,5,2,'#5e6e8a'); px(36,30,5,2,'#5e6e8a'); px(28,32,7,2,'#5e6e8a');
+  px(22,36,4,2,'#5e6e8a'); px(38,36,4,2,'#5e6e8a');
+  // Filons dorés (mémoire du forgeron)
+  ctx.globalAlpha=0.8;
+  px(14,30,2,5,'#ffcc44'); px(46,32,2,5,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Bras tenant le marteau
+  px(46,28,8,8,'#7080a0'); px(48,32,8,4,'#5e6e8a');
+  // Reflets brillants
+  ctx.globalAlpha=0.6;
+  px(16,12,8,1,'#d0d8e8'); px(12,24,12,2,'#b8c4d4');
+  ctx.globalAlpha=1;
+  // Petits pieds du bas
+  px(14,42,8,12,'#7080a0'); px(12,48,10,8,'#5e6e8a');
+  px(40,42,8,12,'#7080a0'); px(40,48,10,8,'#5e6e8a');
+  px(20,46,8,10,'#7080a0'); px(34,46,8,10,'#7080a0');
+  // Sole
+  px(10,54,16,4,'#4a5870'); px(36,54,18,4,'#4a5870'); px(20,54,8,4,'#4a5870');
+  // Étincelles ardentes
+  ctx.globalAlpha=0.9;
+  px(58,8,2,2,'#ffaa44'); px(60,10,1,1,'#ffeebb'); px(2,10,1,1,'#ffaa44');
+  px(40,4,2,1,'#ffcc44'); px(2,40,1,1,'#ffaa44'); px(60,42,2,2,'#ffaa44');
+  ctx.globalAlpha=1;
+};
+
+// 🌿 Mousseroi — évolution de Mousseron (sage millénaire)
+PM_SPRITES.mousseroi = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura forestière millénaire
+  ctx.globalAlpha=0.3;
+  px(0,0,64,64,'#5a8830');
+  ctx.globalAlpha=1;
+  // Chapeau royal de champignon (plus large, plus haut)
+  px(14,2,36,4,'#3a5820'); px(10,6,44,8,'#5a8830'); px(8,12,48,6,'#4a7028');
+  // Ornements lichens dorés
+  px(16,4,4,3,'#c0e060'); px(28,2,6,3,'#ffe080'); px(40,4,4,3,'#c0e060');
+  px(20,6,3,3,'#a8d048'); px(36,8,3,3,'#a8d048'); px(46,6,3,3,'#a8d048');
+  // Couronne dorée sous le chapeau
+  px(18,12,28,2,'#ffcc44'); px(22,11,4,2,'#ffeebb'); px(38,11,4,2,'#ffeebb');
+  // Bord du chapeau
+  px(6,16,52,4,'#2a4818'); px(4,18,56,3,'#1e3812');
+  // Yeux sages anciens
+  px(20,22,5,5,'#1a1a22'); px(21,23,3,3,'#88a868'); px(22,24,1,1,'#ffffff');
+  px(39,22,5,5,'#1a1a22'); px(40,23,3,3,'#88a868'); px(41,24,1,1,'#ffffff');
+  // Sourcils blancs (de sagesse)
+  ctx.globalAlpha=0.8;
+  px(18,20,8,1,'#ffffff'); px(38,20,8,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Tête (plus pâle, plus marquée par l'âge)
+  px(18,21,28,8,'#e0d4a8'); px(16,25,32,6,'#c8b888'); px(18,29,28,4,'#a89860');
+  // Marques de mousse anciennes
+  ctx.globalAlpha=0.7;
+  px(20,25,4,3,'#5a8830'); px(40,25,4,3,'#5a8830'); px(28,28,8,2,'#5a8830');
+  ctx.globalAlpha=1;
+  // Sourire bienveillant
+  px(28,29,8,2,'#1a1a22'); px(30,30,4,1,'#5a3018');
+  // Barbe blanche (sagesse)
+  ctx.globalAlpha=0.9;
+  px(24,30,16,5,'#ffffff'); px(26,33,12,4,'#ddeeee'); px(28,36,8,3,'#ffffff');
+  ctx.globalAlpha=1;
+  // Corps (drapé)
+  px(12,32,40,12,'#a89860'); px(10,36,44,10,'#88784a'); px(12,44,40,4,'#5a4830');
+  // Bras-racines plus longs
+  px(2,34,12,8,'#88784a'); px(0,38,12,6,'#5a4830');
+  px(50,34,12,8,'#88784a'); px(52,38,12,6,'#5a4830');
+  // Bâton magique en main droite
+  px(60,28,2,16,'#5a3018'); px(58,26,3,4,'#88784a');
+  // Pommeau lumineux du bâton
+  ctx.globalAlpha=0.9;
+  px(58,24,4,4,'#ffe080'); px(60,22,2,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Pieds-racines
+  px(14,46,12,12,'#88784a'); px(38,46,12,12,'#88784a');
+  px(12,52,16,8,'#5a4830'); px(36,52,16,8,'#5a4830');
+  // Racines anciennes secondaires
+  px(8,54,4,8,'#5a4830'); px(52,54,4,8,'#5a4830');
+  px(20,56,4,6,'#3e2810'); px(40,56,4,6,'#3e2810');
+  // Fleurs qui poussent au sol (lore)
+  ctx.globalAlpha=0.9;
+  px(2,60,2,2,'#ffe080'); px(4,58,2,2,'#f0c8a0');
+  px(28,60,2,2,'#ffaaff'); px(34,60,2,2,'#ffe080'); px(40,60,2,2,'#f0c8a0');
+  px(58,60,2,2,'#ffe080'); px(60,58,2,2,'#ffaaff');
+  ctx.globalAlpha=1;
+  // Spores anciennes
+  ctx.globalAlpha=0.6;
+  px(6,8,1,1,'#c0e060'); px(54,10,1,1,'#c0e060'); px(2,28,1,1,'#a8d048'); px(60,30,1,1,'#a8d048');
+  ctx.globalAlpha=1;
+};
+
+// 🌿 Vrillarcane — évolution de Vrillemousse (liane-archiviste)
+PM_SPRITES.vrillarcane = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura ancestrale ambrée
+  ctx.globalAlpha=0.3;
+  px(0,0,64,64,'#aa8844');
+  ctx.globalAlpha=1;
+  // Lianes principales s'enroulant en spirales (plus complexe)
+  px(28,2,8,4,'#3e6020'); px(20,4,24,4,'#4a7028'); px(14,8,12,4,'#3e6020'); px(38,8,12,4,'#3e6020');
+  px(8,12,16,4,'#4a7028'); px(40,12,16,4,'#4a7028');
+  // Symboles arcanes flottants au-dessus
+  ctx.globalAlpha=0.9;
+  px(10,2,2,2,'#ffcc44'); px(30,0,4,3,'#ffcc44'); px(52,2,2,2,'#ffcc44');
+  px(11,1,1,1,'#ffffff'); px(31,1,2,1,'#ffeebb'); px(53,1,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Corps central enroulé puissant
+  px(18,16,28,12,'#5a8830'); px(16,20,32,12,'#4a7028'); px(18,30,28,6,'#3a5820');
+  // Yeux multiples ambrés (une rangée + secondaires)
+  px(20,20,3,4,'#1a2a14'); px(21,21,1,2,'#ffaa00');
+  px(26,20,3,4,'#1a2a14'); px(27,21,1,2,'#ffaa00');
+  px(32,20,3,4,'#1a2a14'); px(33,21,1,2,'#ffaa00');
+  px(38,20,3,4,'#1a2a14'); px(39,21,1,2,'#ffaa00');
+  // Yeux secondaires plus grands (sages)
+  px(22,26,4,3,'#1a2a14'); px(23,27,2,1,'#ffcc44');
+  px(28,26,4,3,'#1a2a14'); px(29,27,2,1,'#ffcc44');
+  px(36,26,4,3,'#1a2a14'); px(37,27,2,1,'#ffcc44');
+  // Bouche-trésor (où elle garde les histoires)
+  px(26,30,12,4,'#1a1a14'); px(28,31,2,3,'#ddccaa'); px(31,31,2,3,'#ddccaa'); px(34,31,2,3,'#ddccaa');
+  // Épines dorsales dorées
+  px(20,14,2,5,'#a8c048'); px(26,12,2,5,'#a8c048'); px(34,12,2,5,'#a8c048'); px(42,14,2,5,'#a8c048');
+  ctx.globalAlpha=0.9;
+  px(20,14,1,2,'#ffcc44'); px(26,12,1,2,'#ffcc44'); px(34,12,1,2,'#ffcc44'); px(42,14,1,2,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Lianes-bras puissantes qui s'étendent loin
+  px(4,20,14,4,'#4a7028'); px(0,24,12,4,'#3e6020');
+  px(46,20,14,4,'#4a7028'); px(52,24,12,4,'#3e6020');
+  // Épines sur les bras
+  px(6,19,2,2,'#a8c048'); px(56,19,2,2,'#a8c048');
+  px(8,23,2,2,'#a8c048'); px(54,23,2,2,'#a8c048');
+  // Fleurs ambrées au bout des bras (les "yeux d'ambre")
+  px(0,28,4,4,'#ffaa00'); px(60,28,4,4,'#ffaa00');
+  ctx.globalAlpha=0.9;
+  px(1,29,2,2,'#ffcc44'); px(61,29,2,2,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Corps inférieur
+  px(16,36,32,16,'#3a5820'); px(14,40,36,14,'#2a4418'); px(16,52,32,4,'#1e3210');
+  // Marques runiques sur le ventre
+  ctx.globalAlpha=0.7;
+  px(22,42,4,3,'#a8c048'); px(38,42,4,3,'#a8c048'); px(28,46,8,2,'#a8c048');
+  ctx.globalAlpha=1;
+  // Pattes-racines massives qui s'enroulent
+  px(10,52,10,12,'#3a5820'); px(44,52,10,12,'#3a5820');
+  px(8,58,14,6,'#2a4418'); px(42,58,14,6,'#2a4418');
+  // Épines aux pieds
+  px(10,60,2,4,'#a8c048'); px(52,60,2,4,'#a8c048'); px(18,60,2,4,'#a8c048'); px(44,60,2,4,'#a8c048');
+  // Vrilles fines flottantes
+  ctx.globalAlpha=0.7;
+  px(24,8,2,2,'#a8c048'); px(38,10,2,2,'#a8c048');
+  ctx.globalAlpha=1;
+};
+
+// 🔥 Braslunaire — évolution de Braslune (loup-roi argenté)
+PM_SPRITES.braslunaire = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Lune royale en arrière-plan
+  ctx.globalAlpha=0.4;
+  px(46,2,16,16,'#ffeebb'); px(48,4,12,12,'#ffe888');
+  ctx.globalAlpha=1;
+  // Tête de loup royal
+  px(14,8,28,8,'#1a1408'); px(12,12,32,8,'#0a0a04'); px(14,18,28,4,'#000000');
+  // Oreilles royales pointues
+  px(12,2,6,8,'#1a1408'); px(14,0,4,4,'#3a2418');
+  px(38,2,6,8,'#1a1408'); px(42,0,4,4,'#3a2418');
+  // Couronne d'argent
+  px(16,8,24,2,'#cccccc'); px(20,6,4,3,'#ffffff'); px(28,5,4,4,'#ffffff'); px(36,6,4,3,'#ffffff');
+  // Pelage argenté incandescent (caractéristique principale)
+  ctx.globalAlpha=0.8;
+  px(14,10,4,5,'#ddeeff'); px(38,10,4,5,'#ddeeff'); px(20,8,4,3,'#ffffff'); px(32,8,4,3,'#ffffff');
+  ctx.globalAlpha=1;
+  // Yeux argentés brûlants (différents de Braslune)
+  px(18,13,4,5,'#1a1a22'); px(19,14,2,3,'#ddeeff'); px(20,15,1,1,'#ffffff');
+  px(34,13,4,5,'#1a1a22'); px(35,14,2,3,'#ddeeff'); px(36,15,1,1,'#ffffff');
+  // Museau royal
+  px(24,18,8,5,'#0a0a04'); px(26,21,4,3,'#000000');
+  px(26,22,4,1,'#3e2818');
+  // Crocs argentés
+  px(22,22,2,5,'#ffffff'); px(32,22,2,5,'#ffffff');
+  // Crinière de feu argenté (signe royal)
+  px(16,8,4,3,'#ffffff'); px(24,4,4,4,'#ddeeff'); px(34,8,4,3,'#ffffff');
+  px(20,6,4,3,'#cccccc'); px(32,6,4,3,'#cccccc');
+  // Cou avec collier
+  px(20,22,16,4,'#1a1408');
+  ctx.globalAlpha=0.8;
+  px(20,22,16,1,'#cccccc');
+  ctx.globalAlpha=1;
+  // Corps
+  px(10,26,36,14,'#1a1408'); px(8,30,40,14,'#0a0a04'); px(10,40,36,4,'#000000');
+  // Crinière argentée sur le dos
+  px(16,22,4,5,'#ffffff'); px(24,20,4,7,'#ddeeff'); px(32,22,4,5,'#ffffff'); px(40,24,4,4,'#cccccc');
+  ctx.globalAlpha=0.8;
+  px(18,22,2,3,'#ffffff'); px(26,20,2,4,'#ffffff'); px(34,22,2,3,'#ffffff');
+  ctx.globalAlpha=1;
+  // Marques argentées sur les flancs
+  ctx.globalAlpha=0.7;
+  px(14,32,5,4,'#cccccc'); px(40,34,5,4,'#cccccc'); px(28,36,4,3,'#ddeeff');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(10,42,10,14,'#0a0a04'); px(8,48,10,10,'#000000');
+  px(40,42,10,14,'#0a0a04'); px(42,48,10,10,'#000000');
+  px(20,44,8,12,'#0a0a04'); px(34,44,8,12,'#0a0a04');
+  // Lueur argentée aux pattes
+  ctx.globalAlpha=0.6;
+  px(10,50,2,5,'#ddeeff'); px(48,50,2,5,'#ddeeff');
+  ctx.globalAlpha=1;
+  // Griffes argentées
+  px(8,56,12,4,'#cccccc'); px(40,56,12,4,'#cccccc');
+  px(20,56,8,4,'#cccccc'); px(34,56,8,4,'#cccccc');
+  // Queue royale avec flamme argentée
+  px(46,32,4,8,'#1a1408'); px(48,28,5,8,'#ddeeff'); px(52,24,4,8,'#ffffff');
+  px(56,20,3,6,'#ffffff'); px(58,16,2,4,'#ffeebb');
+  ctx.globalAlpha=0.9;
+  px(50,26,2,3,'#ffffff');
+  ctx.globalAlpha=1;
+  // Étincelles d'argent
+  ctx.globalAlpha=0.9;
+  px(2,16,1,1,'#ffffff'); px(60,38,1,1,'#ffffff'); px(2,44,1,1,'#ddeeff'); px(58,46,1,1,'#ddeeff');
+  ctx.globalAlpha=1;
+};
+
+// 🔥 Pyrécarde — évolution de Pyrécate (mante-générale)
+PM_SPRITES.pyrecarde = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura ardente
+  ctx.globalAlpha=0.3;
+  px(0,0,64,64,'#cc4818');
+  ctx.globalAlpha=1;
+  // Antennes longues royales
+  px(20,0,2,8,'#b8401a'); px(42,0,2,8,'#b8401a');
+  px(18,0,2,4,'#dd6028'); px(44,0,2,4,'#dd6028');
+  ctx.globalAlpha=0.9;
+  px(19,0,1,2,'#ffaa44'); px(45,0,1,2,'#ffaa44');
+  ctx.globalAlpha=1;
+  // Couronne de général
+  px(22,4,20,3,'#ffcc44'); px(26,2,4,3,'#ffeebb'); px(34,2,4,3,'#ffeebb');
+  // Tête triangulaire
+  px(18,7,28,6,'#cc4818'); px(16,11,32,6,'#a8381a'); px(18,17,28,4,'#7a2810');
+  // Yeux composés intenses
+  px(16,9,9,9,'#1a0808'); px(17,10,7,7,'#ffaa44');
+  px(39,9,9,9,'#1a0808'); px(40,10,7,7,'#ffaa44');
+  // Reflets profonds
+  px(18,11,3,3,'#ffeebb'); px(41,11,3,3,'#ffeebb');
+  px(20,13,2,2,'#ff6020'); px(43,13,2,2,'#ff6020');
+  // Mandibules aiguisées
+  px(26,17,4,4,'#1a0808'); px(34,17,4,4,'#1a0808');
+  px(24,19,3,3,'#3a1810'); px(37,19,3,3,'#3a1810');
+  // Cou royal
+  px(28,20,8,4,'#a8381a'); px(30,22,4,3,'#7a2810');
+  // Thorax (plus large, plus orné)
+  px(18,24,28,12,'#cc4818'); px(16,28,32,12,'#a8381a'); px(18,38,28,4,'#7a2810');
+  // Marques flamboyantes royales
+  ctx.globalAlpha=0.9;
+  px(20,28,5,5,'#ffaa44'); px(39,28,5,5,'#ffaa44'); px(26,32,12,4,'#ff7030');
+  ctx.globalAlpha=1;
+  // Décorations dorées sur le thorax
+  px(28,30,2,8,'#ffcc44'); px(34,30,2,8,'#ffcc44');
+  // QUATRE LAMES (deux paires - "lames doubles")
+  // Bras gauche supérieur
+  px(6,20,12,4,'#a8381a'); px(2,16,8,4,'#7a2810');
+  // Lame gauche supérieure
+  px(0,4,4,14,'#cc4818'); px(0,2,3,8,'#dd6028');
+  ctx.globalAlpha=0.9;
+  px(0,6,2,12,'#ffaa44'); px(0,2,2,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Bras gauche inférieur
+  px(6,30,10,4,'#a8381a'); px(2,32,6,4,'#7a2810');
+  // Lame gauche inférieure (plus petite)
+  px(0,30,4,8,'#cc4818'); px(0,28,2,4,'#dd6028');
+  ctx.globalAlpha=0.9;
+  px(0,30,2,8,'#ffaa44');
+  ctx.globalAlpha=1;
+  // Bras droit supérieur
+  px(46,20,12,4,'#a8381a'); px(54,16,8,4,'#7a2810');
+  // Lame droite supérieure
+  px(60,4,4,14,'#cc4818'); px(61,2,3,8,'#dd6028');
+  ctx.globalAlpha=0.9;
+  px(62,6,2,12,'#ffaa44'); px(62,2,2,4,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Bras droit inférieur
+  px(48,30,10,4,'#a8381a'); px(56,32,6,4,'#7a2810');
+  // Lame droite inférieure
+  px(60,30,4,8,'#cc4818'); px(62,28,2,4,'#dd6028');
+  ctx.globalAlpha=0.9;
+  px(62,30,2,8,'#ffaa44');
+  ctx.globalAlpha=1;
+  // Ailes repliées
+  ctx.globalAlpha=0.7;
+  px(14,30,6,12,'#a8381a'); px(44,30,6,12,'#a8381a');
+  ctx.globalAlpha=0.5;
+  px(12,32,6,10,'#cc4818'); px(46,32,6,10,'#cc4818');
+  ctx.globalAlpha=1;
+  // Veines des ailes
+  px(16,32,1,8,'#3a1810'); px(47,32,1,8,'#3a1810');
+  // Abdomen long
+  px(20,40,24,18,'#7a2810'); px(22,44,20,14,'#5e1c08');
+  // Segments
+  px(20,44,24,1,'#3a1810'); px(20,48,24,1,'#3a1810'); px(20,52,24,1,'#3a1810');
+  // Marques dorées sur l'abdomen
+  ctx.globalAlpha=0.9;
+  px(28,42,8,2,'#ffcc44'); px(28,46,8,2,'#ffcc44'); px(28,50,8,2,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Pattes
+  px(20,52,4,10,'#3a1810'); px(40,52,4,10,'#3a1810');
+  px(18,58,4,6,'#3a1810'); px(42,58,4,6,'#3a1810');
+  // Étincelles
+  ctx.globalAlpha=0.9;
+  px(8,2,1,1,'#ffeebb'); px(56,2,1,1,'#ffeebb'); px(28,4,1,1,'#ffeebb');
+  ctx.globalAlpha=1;
+};
+
+// 🌑 Voilarchive — évolution de Voilombre (manteau d'archives)
+PM_SPRITES.voilarchive = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura ancienne
+  ctx.globalAlpha=0.3;
+  px(2,2,60,60,'#3a2a4a'); px(8,8,48,48,'#2a1a3a');
+  ctx.globalAlpha=1;
+  // Capuche royale (plus haute)
+  px(18,2,28,8,'#3a2a4a'); px(14,6,36,10,'#2a1a3a'); px(16,14,32,6,'#1a0a28');
+  // Bordures dorées de la capuche
+  ctx.globalAlpha=0.8;
+  px(14,6,36,1,'#ffcc44'); px(14,16,36,1,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Pointes capuche
+  px(12,12,4,6,'#1a0a28'); px(48,12,4,6,'#1a0a28');
+  // Intérieur sombre
+  px(20,12,24,10,'#000008');
+  // Yeux dans la capuche (plus brillants, anciens)
+  px(24,15,5,5,'#aabbff'); px(35,15,5,5,'#aabbff');
+  ctx.globalAlpha=0.9;
+  px(23,14,7,7,'#ddeeff'); px(34,14,7,7,'#ddeeff');
+  ctx.globalAlpha=1;
+  px(26,17,2,2,'#ffffff'); px(37,17,2,2,'#ffffff');
+  // Manteau qui tombe (plus drapé)
+  px(12,20,40,16,'#3a2a4a'); px(10,24,44,16,'#2a1a3a'); px(12,36,40,8,'#1a0a28');
+  // Plis riches du tissu
+  ctx.globalAlpha=0.6;
+  px(18,26,2,12,'#1a0a28'); px(28,28,2,10,'#1a0a28'); px(38,26,2,12,'#1a0a28'); px(46,28,2,8,'#1a0a28');
+  ctx.globalAlpha=1;
+  // Bordures dorées royales
+  ctx.globalAlpha=0.9;
+  px(12,20,40,1,'#ffcc44'); px(12,38,40,1,'#ffcc44'); px(12,42,40,1,'#aa8844');
+  ctx.globalAlpha=1;
+  // Symboles archives écrits sur le manteau
+  ctx.globalAlpha=0.7;
+  px(20,28,2,2,'#ffeebb'); px(24,32,2,2,'#ffeebb'); px(30,28,2,2,'#ffeebb');
+  px(36,32,2,2,'#ffeebb'); px(42,28,2,2,'#ffeebb'); px(46,32,2,2,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Petits points connecteurs (mémoires)
+  ctx.globalAlpha=0.9;
+  px(21,29,1,1,'#ffffff'); px(31,29,1,1,'#ffffff'); px(43,29,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+  // Manches majestueuses
+  px(4,22,12,14,'#3a2a4a'); px(2,26,12,12,'#2a1a3a'); px(0,30,8,8,'#1a0a28');
+  px(48,22,12,14,'#3a2a4a'); px(50,26,12,12,'#2a1a3a'); px(56,30,8,8,'#1a0a28');
+  // Bordures dorées sur les manches
+  ctx.globalAlpha=0.8;
+  px(2,34,12,1,'#ffcc44'); px(50,34,12,1,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Mains spectrales tenant des objets (un livre, une plume?)
+  ctx.globalAlpha=0.7;
+  px(0,34,6,6,'#5060a0'); px(58,34,6,6,'#5060a0');
+  ctx.globalAlpha=1;
+  // Livre dans la main gauche
+  px(0,32,4,6,'#5a3018'); px(0,33,4,1,'#aa8844'); px(0,36,4,1,'#aa8844');
+  ctx.globalAlpha=0.9;
+  px(1,34,2,1,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Plume dans la main droite
+  px(60,28,2,8,'#ffffff'); px(58,30,2,5,'#ddeeff');
+  // Broche centrale plus grande (cœur de l'archive)
+  px(28,28,8,8,'#aa8844'); px(30,30,4,4,'#ffcc44'); px(31,31,2,2,'#ffeebb');
+  ctx.globalAlpha=0.6;
+  px(25,25,14,14,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Bas du manteau qui se dissout en mémoires
+  ctx.globalAlpha=0.8;
+  px(10,44,44,8,'#2a1a3a'); px(12,48,40,6,'#1a0a28');
+  ctx.globalAlpha=0.6;
+  px(12,52,40,6,'#3a2a4a'); px(14,56,36,4,'#2a1a3a');
+  ctx.globalAlpha=0.4;
+  px(16,58,32,4,'#3a2a4a'); px(20,60,24,3,'#2a1a3a');
+  ctx.globalAlpha=1;
+  // Pages volantes (mémoires)
+  ctx.globalAlpha=0.8;
+  px(4,46,3,3,'#ffeebb'); px(58,48,3,3,'#ffeebb');
+  ctx.globalAlpha=1;
+  px(5,47,1,1,'#aa8844'); px(59,49,1,1,'#aa8844');
+  // Particules d'âme dorées
+  ctx.globalAlpha=0.8;
+  px(2,18,1,1,'#aabbff'); px(60,20,1,1,'#aabbff');
+  px(8,52,2,2,'#ffcc44'); px(54,54,2,2,'#ffcc44');
+  px(2,58,1,1,'#aabbff'); px(60,60,1,1,'#aabbff');
+  ctx.globalAlpha=1;
+};
+
+// 🌀 Brumélord — évolution de Brumélope (antilope-souverain)
+PM_SPRITES.brumelord = function(ctx) {
+  const px = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  // Aura crépusculaire majestueuse
+  ctx.globalAlpha=0.4;
+  px(0,2,64,16,'#ffaa66'); px(0,12,64,12,'#ddccff'); px(0,20,64,8,'#aa88ee');
+  ctx.globalAlpha=1;
+  // Cornes royales gigantesques (plus longues, ramifiées)
+  px(16,2,3,18,'#ddccaa'); px(13,4,3,12,'#eedccc'); px(11,8,2,6,'#ffffff');
+  px(10,2,2,4,'#ffffff'); px(14,0,2,4,'#ffffff');
+  // Ramifications cornes gauches
+  px(10,12,3,3,'#eedccc'); px(8,16,3,3,'#ddccaa');
+  px(45,2,3,18,'#ddccaa'); px(48,4,3,12,'#eedccc'); px(51,8,2,6,'#ffffff');
+  px(52,2,2,4,'#ffffff'); px(48,0,2,4,'#ffffff');
+  // Ramifications cornes droites
+  px(51,12,3,3,'#eedccc'); px(53,16,3,3,'#ddccaa');
+  // Stries dorées sur cornes
+  ctx.globalAlpha=0.9;
+  px(16,8,3,1,'#ffcc44'); px(16,12,3,1,'#ffcc44'); px(16,16,3,1,'#ffcc44');
+  px(45,8,3,1,'#ffcc44'); px(45,12,3,1,'#ffcc44'); px(45,16,3,1,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Couronne dorée entre les cornes
+  px(20,10,24,3,'#ffcc44'); px(28,8,8,3,'#ffeebb');
+  ctx.globalAlpha=0.9;
+  px(30,7,4,2,'#ffffff');
+  ctx.globalAlpha=1;
+  // Tête fine et noble
+  px(20,14,24,8,'#f0d8b8'); px(18,18,28,6,'#dcc098'); px(20,22,24,4,'#bca680');
+  // Marques d'aurore sur le visage
+  ctx.globalAlpha=0.6;
+  px(26,16,12,2,'#ddccff'); px(28,18,8,2,'#ffccaa');
+  ctx.globalAlpha=1;
+  // Yeux royaux profonds
+  px(22,18,4,5,'#1a1a22'); px(23,19,2,3,'#ffccaa'); px(24,20,1,1,'#ffffff');
+  px(38,18,4,5,'#1a1a22'); px(39,19,2,3,'#ffccaa'); px(40,20,1,1,'#ffffff');
+  // Halo léger autour des yeux
+  ctx.globalAlpha=0.5;
+  px(21,17,6,7,'#ffeeee'); px(37,17,6,7,'#ffeeee');
+  ctx.globalAlpha=1;
+  // Petit museau
+  px(30,22,4,3,'#ffffff'); px(31,23,2,1,'#1a1a22');
+  // Cou élancé
+  px(28,24,8,6,'#dcc098'); px(30,28,4,4,'#bca680');
+  // Corps royal
+  px(16,30,32,12,'#f0d8b8'); px(14,34,36,12,'#dcc098'); px(16,42,32,4,'#bca680');
+  // Marques aurorales somptueuses
+  ctx.globalAlpha=0.6;
+  px(20,34,8,4,'#ddccff'); px(36,36,8,4,'#ffccaa'); px(28,40,8,2,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Crinière dorée sur le cou
+  ctx.globalAlpha=0.9;
+  px(28,28,2,4,'#ffcc44'); px(34,28,2,4,'#ffcc44');
+  ctx.globalAlpha=1;
+  // Pattes longues royales
+  px(18,46,4,14,'#bca680'); px(16,54,4,8,'#9c8460');
+  px(40,46,4,14,'#bca680'); px(42,54,4,8,'#9c8460');
+  px(28,46,4,14,'#bca680'); px(30,54,4,8,'#9c8460');
+  px(36,46,4,14,'#bca680'); px(34,54,4,8,'#9c8460');
+  // Sabots dorés
+  px(14,60,8,4,'#ffcc44'); px(40,60,8,4,'#ffcc44');
+  px(28,60,4,4,'#ffcc44'); px(34,60,4,4,'#ffcc44');
+  ctx.globalAlpha=0.9;
+  px(15,61,6,1,'#ffeebb'); px(41,61,6,1,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Queue royale
+  px(46,32,4,8,'#dcc098'); px(50,34,4,6,'#bca680');
+  px(50,38,3,8,'#ffffff'); px(50,44,3,4,'#dcc098');
+  ctx.globalAlpha=0.8;
+  px(50,38,3,3,'#ffeebb');
+  ctx.globalAlpha=1;
+  // Particules d'aurore
+  ctx.globalAlpha=0.7;
+  px(2,30,2,2,'#ffccaa'); px(60,32,2,2,'#ddccff');
+  px(4,52,2,2,'#ffcc44'); px(58,54,2,2,'#ffcc44');
+  px(8,18,1,1,'#ffffff'); px(54,20,1,1,'#ffffff');
+  ctx.globalAlpha=1;
+};
+
+
 // Helper universel pour dessiner un PokePom
 function drawPokePom(canvas, pokepomId) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, 64, 64);
   const fn = PM_SPRITES[pokepomId];
   if (fn) fn(ctx);
+}
+
+// Variante : dessine la silhouette blanche du PokePom (utilisé pour l'animation d'évolution)
+// On dessine d'abord normalement, puis on couvre tous les pixels non-transparents en blanc
+function drawPokePomSilhouette(canvas, pokepomId) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  const fn = PM_SPRITES[pokepomId];
+  if (!fn) return;
+  fn(ctx);
+  // Composite "source-in" : remplace tout pixel rendu par du blanc, en respectant la forme
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 64, 64);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATION D'ÉVOLUTION (popup plein écran)
+   ═══════════════════════════════════════════════════════════════════════════
+   Séquence (durées approximatives) :
+     0   → 600ms   : fade-in du fond noir + texte "Hum ? Quelque chose se passe..."
+     600 → 2200ms  : glow blanc qui s'intensifie autour de la base
+     2200 → 4200ms : alternance silhouette base / silhouette évolution (~250ms chacune)
+     4200 → 4500ms : flash blanc total
+     4500 → 5500ms : reveal de l'évolution + glow qui se dissipe
+     5500ms        : message final + bouton OK (attend l'utilisateur)
+   Pas de skip. Pas de son. Bouton OK obligatoire pour fermer.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+// Affiche l'animation d'évolution. Renvoie une Promise résolue quand l'utilisateur clique OK.
+function pmShowEvolutionAnimation(oldId, newId) {
+  return new Promise((resolve) => {
+    const oldName = PM_DEX[oldId]?.name || oldId;
+    const newName = PM_DEX[newId]?.name || newId;
+
+    // Conteneur plein écran
+    const overlay = document.createElement('div');
+    overlay.id = 'pm-evolution-overlay';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; z-index: 99999;
+      background: rgba(0, 0, 0, 0);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 24px;
+      transition: background 600ms ease-in;
+      pointer-events: auto;
+    `;
+
+    // Zone du sprite (avec glow)
+    const stage = document.createElement('div');
+    stage.style.cssText = `
+      position: relative;
+      width: 256px; height: 256px;
+      display: flex; align-items: center; justify-content: center;
+    `;
+
+    // Glow (radial blanc qui pulse)
+    const glow = document.createElement('div');
+    glow.style.cssText = `
+      position: absolute; inset: 0;
+      background: radial-gradient(circle, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 60%, transparent 100%);
+      transition: background 1500ms ease-in-out;
+      pointer-events: none;
+    `;
+    stage.appendChild(glow);
+
+    // Canvas du sprite (256x256 avec scaling depuis 64x64)
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    canvas.style.cssText = `
+      width: 192px; height: 192px;
+      image-rendering: pixelated; image-rendering: crisp-edges;
+      position: relative; z-index: 2;
+      transition: opacity 200ms;
+    `;
+    stage.appendChild(canvas);
+
+    // Flash blanc plein écran (caché au début)
+    const flash = document.createElement('div');
+    flash.style.cssText = `
+      position: fixed; inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      transition: opacity 200ms ease-out;
+      pointer-events: none;
+      z-index: 100000;
+    `;
+    document.body.appendChild(flash);
+
+    // Texte principal
+    const text = document.createElement('div');
+    text.style.cssText = `
+      font-family: 'Space Mono', monospace;
+      color: #ffffff;
+      font-size: 1.1rem;
+      text-align: center;
+      max-width: 80vw;
+      opacity: 0;
+      transition: opacity 400ms;
+      min-height: 3em;
+      padding: 0 24px;
+    `;
+    text.textContent = '';
+
+    // Bouton OK (caché tant que l'animation n'est pas finie)
+    const okBtn = document.createElement('button');
+    okBtn.textContent = 'OK';
+    okBtn.style.cssText = `
+      padding: 12px 32px;
+      background: #ffffff;
+      color: #1a1a22;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 300ms;
+    `;
+    okBtn.addEventListener('click', () => {
+      overlay.style.background = 'rgba(0, 0, 0, 0)';
+      overlay.style.transition = 'background 300ms ease-out';
+      setTimeout(() => {
+        overlay.remove();
+        flash.remove();
+        resolve();
+      }, 300);
+    });
+
+    overlay.appendChild(stage);
+    overlay.appendChild(text);
+    overlay.appendChild(okBtn);
+    document.body.appendChild(overlay);
+
+    // Étape 1 : Dessine la base immédiatement
+    drawPokePom(canvas, oldId);
+
+    // Étape 2 : Fade-in du fond noir
+    requestAnimationFrame(() => {
+      overlay.style.background = 'rgba(0, 0, 0, 0.92)';
+    });
+
+    // Étape 3 : Apparition du texte d'intro à 600ms
+    setTimeout(() => {
+      text.textContent = `Hum ? Quelque chose se passe...`;
+      text.style.opacity = '1';
+    }, 600);
+
+    // Étape 4 : Glow s'intensifie à 1200ms
+    setTimeout(() => {
+      glow.style.background = 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0) 80%)';
+      text.style.opacity = '0';
+    }, 1200);
+
+    // Étape 5 : Mise à jour du texte à 1700ms
+    setTimeout(() => {
+      text.textContent = `${oldName} évolue !`;
+      text.style.opacity = '1';
+    }, 1700);
+
+    // Étape 6 : Alternance silhouettes base ↔ évolution à 2200ms
+    // 4 alternances de ~400ms chacune (base→évo→base→évo→base→évo→base→évo)
+    let isEvo = false;
+    const altCount = 7; // 7 changements pour finir sur l'évolution
+    let altDone = 0;
+    const altInterval = setInterval(() => {
+      isEvo = !isEvo;
+      if (isEvo) {
+        drawPokePomSilhouette(canvas, newId);
+      } else {
+        drawPokePomSilhouette(canvas, oldId);
+      }
+      altDone++;
+      if (altDone >= altCount) {
+        clearInterval(altInterval);
+      }
+    }, 280);
+
+    // Étape 7 : Flash blanc à 4200ms
+    setTimeout(() => {
+      flash.style.opacity = '1';
+    }, 4200);
+
+    // Étape 8 : Reveal à 4500ms (flash s'estompe, sprite final apparaît)
+    setTimeout(() => {
+      drawPokePom(canvas, newId);
+      flash.style.opacity = '0';
+      // Glow qui se dissipe doucement
+      glow.style.background = 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 60%, transparent 100%)';
+      text.style.opacity = '0';
+    }, 4500);
+
+    // Étape 9 : Glow disparaît complètement à 5200ms
+    setTimeout(() => {
+      glow.style.background = 'radial-gradient(circle, rgba(255,255,255,0) 0%, transparent 100%)';
+    }, 5200);
+
+    // Étape 10 : Message final + bouton OK à 5500ms
+    setTimeout(() => {
+      text.innerHTML = `<strong>Félicitations !</strong><br>${oldName} a évolué en <strong>${newName}</strong> !`;
+      text.style.opacity = '1';
+      okBtn.style.opacity = '1';
+      okBtn.style.pointerEvents = 'auto';
+    }, 5500);
+  });
 }
 
 
@@ -1086,17 +3800,115 @@ function pmCheckDailyReset(player) {
   return player;
 }
 
+// Vérifie si une instance peut/doit évoluer et applique la transformation.
+//
+// L'architecture du jeu calcule les stats à la volée via pmGetStats(instance),
+// donc évoluer = simplement changer instance.pokepomId. Les stats, moves, type,
+// sprite seront automatiquement ceux de la nouvelle forme dès la prochaine lecture.
+//
+// Déclencheurs :
+//   - Le PokePom a une entrée dans PM_EVOLUTIONS
+//   - Niveau >= PM_EVOLUTION_LEVEL (20) OU flag pendingEvolution = true
+//
+// Retourne { oldId, newId } si évolution effectuée, null sinon.
+function pmCheckAndApplyEvolution(instance) {
+  if (!instance) return null;
+  const evoId = PM_EVOLUTIONS[instance.pokepomId];
+  if (!evoId) return null;
+
+  const reachedLevel = instance.level >= PM_EVOLUTION_LEVEL;
+  const isPending = instance.pendingEvolution === true;
+  if (!reachedLevel && !isPending) return null;
+
+  if (!PM_DEX[evoId]) {
+    console.warn('[PokePom] Évolution introuvable dans le Dex:', evoId);
+    return null;
+  }
+
+  const oldId = instance.pokepomId;
+  instance.pokepomId = evoId;
+  delete instance.pendingEvolution;
+  return { oldId, newId: evoId };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOJO — apprentissage de moves
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Retourne le moveset effectif d'une instance sous forme d'array d'IDs (pour Dojo).
+// Si l'instance a customMoves, retourne ça ; sinon les natifs du type.
+function pmGetInstanceMoveIds(instance) {
+  if (Array.isArray(instance.customMoves) && instance.customMoves.length === 4) {
+    return [...instance.customMoves];
+  }
+  const poke = PM_DEX[instance.pokepomId];
+  return [...PM_MOVES_BY_TYPE[poke.type]];
+}
+
+// Apprend un nouveau move au Dojo, en remplacement d'un move existant.
+// Vérifie :
+//   - L'instance existe et appartient au joueur
+//   - Niveau >= PM_DOJO_MIN_LEVEL (10)
+//   - Le move est dans le catalogue de cette espèce
+//   - Le PokePom ne connaît pas déjà ce move (sinon inutile)
+//   - Le slot de remplacement est valide [0..3]
+//   - Le joueur a assez de Pomels (vérifié via wallet)
+//
+// NOTE : la déduction des Pomels est faite par l'UI via addBalanceTransaction
+// (transaction atomique). Cette fonction ne touche pas au wallet. Elle se contente
+// de muter l'instance.
+//
+// Retourne { ok: true, oldMoveId, newMoveId } ou { ok: false, reason }
+function pmDojoLearnMove(player, instanceUid, newMoveId, replaceSlotIdx) {
+  const instance = (player.collection || []).find(i => i.uid === instanceUid);
+  if (!instance) return { ok: false, reason: 'instance_not_found' };
+  if (instance.level < PM_DOJO_MIN_LEVEL) {
+    return { ok: false, reason: 'level_too_low', minLevel: PM_DOJO_MIN_LEVEL };
+  }
+  const allowed = pmDojoMovesFor(instance.pokepomId);
+  if (!allowed.includes(newMoveId)) return { ok: false, reason: 'move_not_learnable' };
+  if (!PM_MOVES[newMoveId]) return { ok: false, reason: 'invalid_move' };
+
+  const currentMoves = pmGetInstanceMoveIds(instance);
+  if (currentMoves.includes(newMoveId)) return { ok: false, reason: 'already_known' };
+  if (replaceSlotIdx < 0 || replaceSlotIdx > 3) return { ok: false, reason: 'invalid_slot' };
+
+  const oldMoveId = currentMoves[replaceSlotIdx];
+
+  // Mute customMoves : crée le tableau si absent
+  const newMoves = [...currentMoves];
+  newMoves[replaceSlotIdx] = newMoveId;
+  instance.customMoves = newMoves;
+
+  return { ok: true, oldMoveId, newMoveId };
+}
+
 // Ajout d'XP et montée de niveau
+// Retourne { leveledUp: bool, evolved: bool, oldId: string|null, newId: string|null }
+// L'évolution est gérée ici pour qu'elle se déclenche systématiquement au passage de niveau
 function pmGainXP(instance, amount) {
   instance.xp += amount;
   let leveledUp = false;
-  while (instance.level < 10 && instance.xp >= PM_XP_TABLE[instance.level]) {
+  while (instance.level < PM_LEVEL_MAX && instance.xp >= PM_XP_TABLE[instance.level]) {
     instance.xp -= PM_XP_TABLE[instance.level];
     instance.level++;
     leveledUp = true;
   }
-  if (instance.level >= 10) instance.xp = 0;
-  return leveledUp;
+  if (instance.level >= PM_LEVEL_MAX) instance.xp = 0;
+
+  // Évolution : niveau 20 OU flag pendingEvolution (capture > niv 20)
+  let evolved = false;
+  let oldId = null, newId = null;
+  if (leveledUp && typeof pmCheckAndApplyEvolution === 'function') {
+    const evoResult = pmCheckAndApplyEvolution(instance);
+    if (evoResult) {
+      evolved = true;
+      oldId = evoResult.oldId;
+      newId = evoResult.newId;
+    }
+  }
+
+  return { leveledUp, evolved, oldId, newId };
 }
 
 // Mettre à jour une instance dans la collection
@@ -1117,7 +3929,7 @@ function pmUpdateInstance(player, updatedInstance) {
 function pmCreateFighter(instance, statMultiplier = 1.0) {
   const stats = pmGetStats(instance);
   const base = PM_DEX[instance.pokepomId];
-  const moves = getMoveset(instance.pokepomId);
+  const moves = getMoveset(instance);  // passe l'instance (pour customMoves)
   return {
     uid: instance.uid,
     instance: instance,
@@ -1153,7 +3965,13 @@ function pmCalcDamage(attacker, defender, move) {
   const stab = (move.type === attacker.type) ? PM_STAB : 1.0;
   // Lecture : PM_WEAK[défenseur][typeAttaque] = multiplicateur subi par le défenseur
   const typeMod = (PM_WEAK[defender.type] && PM_WEAK[defender.type][move.type]) || 1.0;
-  const baseDmg = (attacker.atk * move.power / defender.def) / 3;
+  // Si le move ignore les buffs DEF (ex: Lame d'Orichal), utiliser baseDef
+  // si l'adversaire a un buff DEF positif. Une DEF déjà debuffée reste plus basse.
+  let defValue = defender.def;
+  if (move.ignoreDefBuffs && defender.stages && defender.stages.def > 0) {
+    defValue = defender.baseDef;
+  }
+  const baseDmg = (attacker.atk * move.power / defValue) / 3;
   const dmg = Math.floor(baseDmg * stab * typeMod);
   return Math.max(1, dmg);
 }
@@ -1200,11 +4018,20 @@ function pmExecuteMove(attacker, defender, move) {
       events.push({ type:'recoil', target: attacker.name, amount: recoil });
     }
 
-    // Self-heal (Brise Vitale)
+    // Self-heal (Brise Vitale, ratio sur HP max)
     if (move.selfHealPct) {
       const heal = Math.floor(attacker.maxHp * move.selfHealPct);
       attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
       events.push({ type:'self_heal', target: attacker.name, amount: heal });
+    }
+
+    // Drain (Souffle Aurore, ratio sur dégâts infligés)
+    if (move.healFraction && dmg > 0) {
+      const heal = Math.floor(dmg * move.healFraction);
+      if (heal > 0) {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
+        events.push({ type:'self_heal', target: attacker.name, amount: heal });
+      }
     }
 
     // Brûlure
@@ -1222,6 +4049,12 @@ function pmExecuteMove(attacker, defender, move) {
           defender.stages.def--;
           pmApplyStages(defender);
           events.push({ type:'stage', target: defender.name, stat:'DEF', dir:-1 });
+        }
+      } else if (move.sideEffect === 'debuff_vit') {
+        if (defender.stages.vit > -3) {
+          defender.stages.vit--;
+          pmApplyStages(defender);
+          events.push({ type:'stage', target: defender.name, stat:'VIT', dir:-1 });
         }
       } else if (move.sideEffect === 'buff_atk') {
         if (attacker.stages.atk < 3) {
@@ -1251,14 +4084,20 @@ function pmExecuteMove(attacker, defender, move) {
       events.push({ type:'stat_max', target: attacker.name, stat: move.stat.toUpperCase() });
     }
   } else if (move.category === 'debuff') {
-    if (defender.stages[move.stat] > -3) {
-      defender.stages[move.stat] += move.stages;
-      if (defender.stages[move.stat] < -3) defender.stages[move.stat] = -3;
-      pmApplyStages(defender);
-      events.push({ type:'stage', target: defender.name, stat: move.stat.toUpperCase(), dir: move.stages });
-    } else {
-      events.push({ type:'stat_min', target: defender.name, stat: move.stat.toUpperCase() });
+    // Support pour move multi-stats (ex: Malédiction → ATK + DEF)
+    const statsToDebuff = move.multiStat || [move.stat];
+    let anyApplied = false;
+    for (const stat of statsToDebuff) {
+      if (defender.stages[stat] > -3) {
+        defender.stages[stat] += move.stages;
+        if (defender.stages[stat] < -3) defender.stages[stat] = -3;
+        anyApplied = true;
+        events.push({ type:'stage', target: defender.name, stat: stat.toUpperCase(), dir: move.stages });
+      } else {
+        events.push({ type:'stat_min', target: defender.name, stat: stat.toUpperCase() });
+      }
     }
+    if (anyApplied) pmApplyStages(defender);
   }
 
   return events;
@@ -1409,19 +4248,35 @@ function pmAddToCollection(player, instance) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function pmGenerateWildEncounter() {
+  // Détermine la map active pour filtrer les candidats
+  // (sécurité : si appelée hors map context, default à R1)
+  const mapId = (typeof _pmCurrentMap !== 'undefined' && _pmCurrentMap === 'r2') ? 'r2' : 'r1';
+
   const roll = Math.random() * 100;
   let acc = 0;
   let type = null;
   // Choix du type selon rareté
   for (const t of PM_TYPES) {
-    acc += PM_ENCOUNTER_RATES[t];
+    acc += PM_ENCOUNTER_RATES[t] || 0;
     if (roll < acc) { type = t; break; }
   }
   if (!type) type = 'plante';
 
-  // Liste des PokePoms de ce type
-  const candidates = PM_DEX_IDS.filter(id => PM_DEX[id].type === type);
-  // Chance ultra-rare de légendaire (si type ombre ou lumière, 10% que ce soit le légendaire)
+  // Liste des PokePoms de ce type, filtrée par map et excluant évolutions
+  const allOfType = PM_DEX_IDS.filter(id => PM_DEX[id].type === type);
+  let candidates = pmFilterCandidatesForMap(allOfType, mapId);
+  // Si vide pour la map, fallback : tous les non-évolutions de cette map
+  if (candidates.length === 0) {
+    candidates = PM_DEX_IDS.filter(id => {
+      const p = PM_DEX[id];
+      if (p.isEvolution) return false;
+      if (mapId === 'r1') return !p.region || p.region !== 2;
+      return p.region === 2;
+    });
+  }
+  if (candidates.length === 0) candidates = PM_DEX_IDS.filter(id => !PM_DEX[id].isEvolution);
+
+  // Chance ultra-rare de légendaire
   const legends = candidates.filter(id => PM_DEX[id].legendary);
   let chosen;
   if (legends.length > 0 && Math.random() < 0.1) {
@@ -1432,10 +4287,14 @@ function pmGenerateWildEncounter() {
   }
 
   // Niveau du sauvage : basé sur niveau moyen de l'équipe, ±1
-  const player = pmGetPlayer();
-  const team = pmGetTeam(player);
-  const avgLvl = team.length > 0 ? Math.floor(team.reduce((s,p) => s+p.level, 0) / team.length) : 1;
-  const wildLvl = Math.max(1, Math.min(10, avgLvl + (Math.floor(Math.random() * 3) - 1)));
+  // R1 : plafond PM_R1_WILD_LEVEL_CAP (12)
+  // R2 : plancher PM_R2_WILD_LEVEL_MIN (6), plafond PM_LEVEL_MAX (30)
+  let wildLvl;
+  if (mapId === 'r2') {
+    wildLvl = Math.max(PM_R2_WILD_LEVEL_MIN, Math.min(PM_LEVEL_MAX, avgLvl + (Math.floor(Math.random() * 5) - 2)));
+  } else {
+    wildLvl = Math.max(1, Math.min(PM_R1_WILD_LEVEL_CAP, avgLvl + (Math.floor(Math.random() * 3) - 1)));
+  }
   return pmCreatePokePomInstance(chosen, wildLvl);
 }
 
@@ -1475,8 +4334,9 @@ function pmGenerateGymChampion(gym) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function pmGenerateLeagueOpponent(roundNum) {
-  // Niveau progressif : round 1 = 5, +1 par round, max 10
-  const lvl = Math.min(10, 4 + roundNum);
+  // Ligue R1 : niveau progressif, plafonné cohérent avec R1 (proche du cap sauvages)
+  // Round 1 = 5, +1 par round, max 12 (= niveau cap R1)
+  const lvl = Math.min(PM_R1_WILD_LEVEL_CAP, 4 + roundNum);
   const chosen = PM_DEX_IDS[Math.floor(Math.random() * PM_DEX_IDS.length)];
   return pmCreatePokePomInstance(chosen, lvl);
 }
@@ -1722,6 +4582,7 @@ function pmRenderPage() {
     case 'gymPick': pmRenderGymPick(page, player); break;
     case 'league': pmRenderLeague(page, player); break;
     case 'battle': pmRenderBattle(page, player); break;
+    case 'dojo': pmRenderDojo(page, player); break;
     default: pmRenderHome(page, player);
   }
 
@@ -1825,6 +4686,18 @@ const PM_ZONES = {
   grotte:      { label: 'Grotte du Crépuscule', grass1: '#585868', grass2: '#686880', ground: '#606068', types: ['ombre'], legendRate: 0.05 },
 };
 
+// Zones de la Région 2 — Terres de PomStud
+// Chaque zone a sa palette propre (cohérente avec son thème) et ses types associés.
+// Les R2 spawnent UNIQUEMENT en R2, et inversement les R1 ne spawnent pas en R2.
+const PM_R2_ZONES = {
+  bois_aelmoria:  { label: "Bois d'Aelmoria",     grass1: '#3e7028', grass2: '#5a9038', ground: '#4a6028', types: ['plante','ombre'],     legendRate: 0.04 },
+  cendrelande:    { label: 'Cendrelande',          grass1: '#7a3a28', grass2: '#9a5238', ground: '#5a2818', types: ['feu','metal'],       legendRate: 0.04 },
+  glaciers_vorh:  { label: 'Glaciers de Vorh',     grass1: '#88b8d4', grass2: '#aac8e8', ground: '#688898', types: ['glace','eau'],       legendRate: 0.05 },
+  mines_orichal:  { label: "Mines d'Orichal",      grass1: '#5a4830', grass2: '#7a6848', ground: '#3e3018', types: ['metal','electrique'],legendRate: 0.04 },
+  hauteurs_solenne:{ label: 'Hauteurs de Solenne',grass1: '#c0c058', grass2: '#d8d878', ground: '#a8a848', types: ['lumiere','air'],     legendRate: 0.05 },
+  marais_oblivion:{ label: "Marais d'Oblivion",   grass1: '#3a3848', grass2: '#5a5868', ground: '#2a2838', types: ['ombre','glace'],     legendRate: 0.05 },
+};
+
 // Couleurs GBA
 const GBA = {
   grass:     '#48a848', grassDark: '#389838', grassLight: '#58c058',
@@ -1852,7 +4725,21 @@ let _pmMapNeedsResume = false;
 const PM_MAP_FULL_W = 50;
 const PM_MAP_FULL_H = 38;
 
+// Région 2 — carte plus grande pour accueillir 6 zones (vs 4 en R1)
+// Disposition prévue : 3 zones en haut, 3 en bas, séparées par un chemin en croix
+const PM_MAP_R2_W = 70;
+const PM_MAP_R2_H = 48;
+
+// Carte courante : 'r1' ou 'r2'. Persisté côté player (player.currentMap).
+let _pmCurrentMap = 'r1';
+
+// Grille R2 (générée une fois lors du premier accès, comme R1)
+let _pmMapR2Grid = null;
+let _pmMapR2ZoneGrid = null;
+
 // Cell types: 0=grass, 1=tallgrass, 2=wall, 3=arene, 4=ligue, 5=centre, 6=water, 7=path, 8=tree, 9=flower
+//             10=passage_r2 (porte sur la carte R1 menant en R2), 11=passage_r1 (porte sur R2 menant en R1)
+//             12=dojo (R2 uniquement)
 
 function pmBuildMap() {
   const W = PM_MAP_FULL_W, H = PM_MAP_FULL_H;
@@ -1924,21 +4811,50 @@ function pmBuildMap() {
     }
   }
 
+  // ── Passage vers la Région 2 (Terres de PomStud) ──
+  // Placé sur le bord est, au milieu vertical (au bout du chemin horizontal central).
+  // Une "route" de chemin part du chemin central (cy) jusqu'au bord est (W-2).
+  for (let c = cx + 8; c < W - 1; c++) {
+    if (grid[cy][c] === 0 || grid[cy][c] === 8 || grid[cy][c] === 9) grid[cy][c] = 7;
+    if (grid[cy+1][c] === 0 || grid[cy+1][c] === 8 || grid[cy+1][c] === 9) grid[cy+1][c] = 7;
+  }
+  // Case passage : juste avant le bord
+  grid[cy][W-2] = 10;
+  grid[cy+1][W-2] = 10;
+  zones[cy][W-2] = null;
+  zones[cy+1][W-2] = null;
+
   _pmMapGrid = grid;
   _pmMapZoneGrid = zones;
 }
 
 function pmGetZoneAt(r, c) {
-  if (!_pmMapZoneGrid || r < 0 || c < 0 || r >= PM_MAP_FULL_H || c >= PM_MAP_FULL_W) return null;
-  return _pmMapZoneGrid[r][c];
+  const M = pmGetActiveMapData();
+  if (!M.zones || r < 0 || c < 0 || r >= M.H || c >= M.W) return null;
+  return M.zones[r][c];
 }
 
 // ── Rencontre par zone ──
+// Filtre le pool de candidats selon la carte courante :
+// - En R1 : exclut les natifs R2 (region:2) ET les évolutions (isEvolution:true)
+// - En R2 : exclut les natifs R1 (pas de region:2) et toujours les évolutions
+function pmFilterCandidatesForMap(candidates, mapId) {
+  return candidates.filter(id => {
+    const p = PM_DEX[id];
+    if (p.isEvolution) return false; // Q8 : évolutions jamais sauvages
+    if (mapId === 'r1') return !p.region || p.region !== 2;
+    if (mapId === 'r2') return p.region === 2;
+    return true;
+  });
+}
+
 function pmGenerateZoneEncounter(zoneId) {
   const zone = PM_ZONES[zoneId];
   if (!zone) return pmGenerateWildEncounter();
   const type = zone.types[Math.floor(Math.random() * zone.types.length)];
-  const candidates = PM_DEX_IDS.filter(id => PM_DEX[id].type === type);
+  const allOfType = PM_DEX_IDS.filter(id => PM_DEX[id].type === type);
+  const candidates = pmFilterCandidatesForMap(allOfType, 'r1');
+  if (candidates.length === 0) return pmGenerateWildEncounter();
   const legends = candidates.filter(id => PM_DEX[id].legendary);
   let chosen;
   if (legends.length > 0 && Math.random() < zone.legendRate) {
@@ -1950,8 +4866,185 @@ function pmGenerateZoneEncounter(zoneId) {
   const player = pmGetPlayer();
   const team = pmGetTeam(player);
   const avgLvl = team.length > 0 ? Math.floor(team.reduce((s,p) => s+p.level, 0) / team.length) : 1;
-  const wildLvl = Math.max(1, Math.min(10, avgLvl + (Math.floor(Math.random() * 3) - 1)));
+  // Plafond niveau région 1 (les zones R2 utilisent pmGenerateR2ZoneEncounter)
+  const wildLvl = Math.max(1, Math.min(PM_R1_WILD_LEVEL_CAP, avgLvl + (Math.floor(Math.random() * 3) - 1)));
   return pmCreatePokePomInstance(chosen, wildLvl);
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// RÉGION 2 — Builder de la carte
+// ───────────────────────────────────────────────────────────────────────
+// Layout : carte 70×48 avec
+//   - 6 zones d'herbes hautes (3 en haut, 3 en bas)
+//   - Routes en croix : 2 horizontales, 2 verticales
+//   - Dojo central (3×3)
+//   - Centre PokePom (3×3) au sud du dojo
+//   - Passage R1 sur le bord ouest (au milieu)
+function pmBuildMapR2() {
+  const W = PM_MAP_R2_W, H = PM_MAP_R2_H;
+  const grid = [], zones = [];
+  for (let r = 0; r < H; r++) {
+    grid[r] = []; zones[r] = [];
+    for (let c = 0; c < W; c++) { grid[r][c] = 0; zones[r][c] = null; }
+  }
+
+  // Bordures = arbres
+  for (let c = 0; c < W; c++) { grid[0][c] = 8; grid[H-1][c] = 8; }
+  for (let r = 0; r < H; r++) { grid[r][0] = 8; grid[r][W-1] = 8; }
+
+  const cx = Math.floor(W / 2);
+  const cy = Math.floor(H / 2);
+
+  // Routes horizontales (2 niveaux) : nord et sud du centre, séparant les 6 zones
+  const upperRoadR = Math.floor(H / 3);     // ~16
+  const lowerRoadR = Math.floor(2 * H / 3); // ~32
+  for (let c = 3; c < W - 3; c++) {
+    grid[upperRoadR][c] = 7; grid[upperRoadR + 1][c] = 7;
+    grid[lowerRoadR][c] = 7; grid[lowerRoadR + 1][c] = 7;
+  }
+
+  // Routes verticales : 2 axes (1/3 et 2/3 de la largeur)
+  const leftRoadC = Math.floor(W / 3);   // ~23
+  const rightRoadC = Math.floor(2 * W / 3); // ~46
+  for (let r = 3; r < H - 3; r++) {
+    grid[r][leftRoadC] = 7; grid[r][leftRoadC + 1] = 7;
+    grid[r][rightRoadC] = 7; grid[r][rightRoadC + 1] = 7;
+  }
+
+  // Dojo central (3×3) au centre exact
+  for (let dr = 0; dr <= 2; dr++) for (let dc = 0; dc <= 2; dc++) {
+    grid[cy - 1 + dr][cx - 1 + dc] = 2;
+  }
+  grid[cy + 1][cx] = 12; // porte Dojo
+  // Dégager autour du dojo
+  for (let dc = -3; dc <= 3; dc++) {
+    if (grid[cy + 2][cx + dc] === 0) grid[cy + 2][cx + dc] = 7;
+  }
+
+  // Centre PokePom au sud du Dojo
+  const centerR = cy + 5;
+  for (let dr = 0; dr <= 2; dr++) for (let dc = 0; dc <= 2; dc++) {
+    grid[centerR + dr][cx - 1 + dc] = 2;
+  }
+  grid[centerR + 2][cx] = 5; // porte centre PokePom
+
+  // Passage retour R1 : sur le bord ouest, niveau du milieu vertical
+  // Une "route" part du leftRoadC vers le bord ouest
+  for (let c = 1; c < leftRoadC; c++) {
+    if (grid[cy][c] === 0 || grid[cy][c] === 8 || grid[cy][c] === 9) grid[cy][c] = 7;
+    if (grid[cy + 1][c] === 0 || grid[cy + 1][c] === 8 || grid[cy + 1][c] === 9) grid[cy + 1][c] = 7;
+  }
+  grid[cy][1] = 11;
+  grid[cy + 1][1] = 11;
+
+  // Définir les 6 zones (3 en haut, 3 en bas)
+  // Coordonnées calibrées pour rester entre les routes et bordures
+  const zoneDefs = [
+    // Rangée Nord (au-dessus de upperRoadR)
+    { id: 'bois_aelmoria',   startR: 2, startC: 2,                rows: upperRoadR - 3, cols: leftRoadC - 3 },
+    { id: 'glaciers_vorh',   startR: 2, startC: leftRoadC + 3,    rows: upperRoadR - 3, cols: rightRoadC - leftRoadC - 4 },
+    { id: 'hauteurs_solenne',startR: 2, startC: rightRoadC + 3,   rows: upperRoadR - 3, cols: W - rightRoadC - 5 },
+    // Rangée Sud (sous lowerRoadR)
+    { id: 'cendrelande',     startR: lowerRoadR + 3, startC: 2,                rows: H - lowerRoadR - 5, cols: leftRoadC - 3 },
+    { id: 'mines_orichal',   startR: lowerRoadR + 3, startC: leftRoadC + 3,    rows: H - lowerRoadR - 5, cols: rightRoadC - leftRoadC - 4 },
+    { id: 'marais_oblivion', startR: lowerRoadR + 3, startC: rightRoadC + 3,   rows: H - lowerRoadR - 5, cols: W - rightRoadC - 5 },
+  ];
+
+  for (const z of zoneDefs) {
+    for (let r = z.startR; r < z.startR + z.rows && r < H - 1; r++) {
+      for (let c = z.startC; c < z.startC + z.cols && c < W - 1; c++) {
+        if (grid[r][c] !== 0) continue;
+        const rnd = Math.random();
+        if (rnd < 0.55) grid[r][c] = 1;       // herbe haute
+        else if (rnd < 0.78) grid[r][c] = 0;  // herbe courte
+        else if (rnd < 0.86) grid[r][c] = 6;  // eau
+        else if (rnd < 0.92) grid[r][c] = 9;  // fleur
+        else grid[r][c] = 8;                   // arbre
+        zones[r][c] = z.id;
+      }
+    }
+  }
+
+  // Décor sur les chemins / hors zones : quelques arbres + fleurs épars
+  for (let r = 1; r < H - 1; r++) {
+    for (let c = 1; c < W - 1; c++) {
+      if (grid[r][c] === 0 && !zones[r][c]) {
+        const rnd = Math.random();
+        if (rnd < 0.04) grid[r][c] = 8;
+        else if (rnd < 0.07) grid[r][c] = 9;
+      }
+    }
+  }
+
+  _pmMapR2Grid = grid;
+  _pmMapR2ZoneGrid = zones;
+}
+
+// Rencontre dans une zone R2 — plancher niveau 6
+function pmGenerateR2ZoneEncounter(zoneId) {
+  const zone = PM_R2_ZONES[zoneId];
+  if (!zone) return pmGenerateWildEncounter();
+
+  // On essaie chaque type de la zone dans un ordre aléatoire jusqu'à en trouver
+  // un qui a au moins un candidat R2. Évite de fallback sur des types hors-zone
+  // si un type de la zone n'a pas (encore) de natif R2.
+  const shuffled = [...zone.types].sort(() => Math.random() - 0.5);
+  let candidates = [];
+  let pickedType = null;
+  for (const t of shuffled) {
+    const allOfType = PM_DEX_IDS.filter(id => PM_DEX[id].type === t);
+    const filtered = pmFilterCandidatesForMap(allOfType, 'r2');
+    if (filtered.length > 0) { candidates = filtered; pickedType = t; break; }
+  }
+  if (candidates.length === 0) {
+    // Aucun type de la zone n'a de natif R2 → fallback global (ne devrait pas arriver
+    // si zoneDefs cohérent, mais on protège).
+    const allR2 = PM_DEX_IDS.filter(id => PM_DEX[id].region === 2 && !PM_DEX[id].isEvolution);
+    if (allR2.length === 0) return pmGenerateWildEncounter();
+    const pick = allR2[Math.floor(Math.random() * allR2.length)];
+    return pmCreatePokePomInstance(pick, PM_R2_WILD_LEVEL_MIN);
+  }
+
+  const legends = candidates.filter(id => PM_DEX[id].legendary);
+  let chosen;
+  if (legends.length > 0 && Math.random() < zone.legendRate) {
+    chosen = legends[Math.floor(Math.random() * legends.length)];
+  } else {
+    const nonLegends = candidates.filter(id => !PM_DEX[id].legendary);
+    chosen = nonLegends[Math.floor(Math.random() * nonLegends.length)] || candidates[0];
+  }
+  // Niveau : moyenne équipe ±2, plafonné à PM_LEVEL_MAX, plancher PM_R2_WILD_LEVEL_MIN
+  const player = pmGetPlayer();
+  const team = pmGetTeam(player);
+  const avgLvl = team.length > 0 ? Math.floor(team.reduce((s,p) => s+p.level, 0) / team.length) : PM_R2_WILD_LEVEL_MIN;
+  const wildLvl = Math.max(PM_R2_WILD_LEVEL_MIN, Math.min(PM_LEVEL_MAX, avgLvl + (Math.floor(Math.random() * 5) - 2)));
+  return pmCreatePokePomInstance(chosen, wildLvl);
+}
+
+// Helpers carte courante : retourne grille / zoneGrid / dimensions actives
+function pmGetActiveMapData() {
+  if (_pmCurrentMap === 'r2') {
+    if (!_pmMapR2Grid) pmBuildMapR2();
+    return {
+      grid: _pmMapR2Grid,
+      zones: _pmMapR2ZoneGrid,
+      W: PM_MAP_R2_W,
+      H: PM_MAP_R2_H,
+      mapId: 'r2',
+      zoneDefs: PM_R2_ZONES,
+      encounter: pmGenerateR2ZoneEncounter
+    };
+  }
+  if (!_pmMapGrid) pmBuildMap();
+  return {
+    grid: _pmMapGrid,
+    zones: _pmMapZoneGrid,
+    W: PM_MAP_FULL_W,
+    H: PM_MAP_FULL_H,
+    mapId: 'r1',
+    zoneDefs: PM_ZONES,
+    encounter: pmGenerateZoneEncounter
+  };
 }
 
 // ── Rendu GBA ──
@@ -1963,20 +5056,23 @@ function pmRenderMap() {
   const viewCols = Math.ceil(canvas.width / T) + 1;
   const viewRows = Math.ceil(canvas.height / T) + 1;
 
-  _pmMapViewX = Math.max(0, Math.min(PM_MAP_FULL_W - viewCols + 1, _pmMapPlayer.c - Math.floor(viewCols / 2)));
-  _pmMapViewY = Math.max(0, Math.min(PM_MAP_FULL_H - viewRows + 1, _pmMapPlayer.r - Math.floor(viewRows / 2)));
+  // Map active (R1 ou R2)
+  const M = pmGetActiveMapData();
+
+  _pmMapViewX = Math.max(0, Math.min(M.W - viewCols + 1, _pmMapPlayer.c - Math.floor(viewCols / 2)));
+  _pmMapViewY = Math.max(0, Math.min(M.H - viewRows + 1, _pmMapPlayer.r - Math.floor(viewRows / 2)));
 
   ctx.imageSmoothingEnabled = false;
 
   for (let vr = 0; vr < viewRows; vr++) {
     for (let vc = 0; vc < viewCols; vc++) {
       const mr = vr + _pmMapViewY, mc = vc + _pmMapViewX;
-      if (mr < 0 || mr >= PM_MAP_FULL_H || mc < 0 || mc >= PM_MAP_FULL_W) continue;
-      const cell = _pmMapGrid[mr][mc];
-      const zone = _pmMapZoneGrid[mr][mc];
+      if (mr < 0 || mr >= M.H || mc < 0 || mc >= M.W) continue;
+      const cell = M.grid[mr][mc];
+      const zone = M.zones[mr][mc];
       const px = vc * T, py = vr * T;
       const seed = (mr * 97 + mc * 31) % 17;
-      const zDef = zone ? PM_ZONES[zone] : null;
+      const zDef = zone ? M.zoneDefs[zone] : null;
 
       // Base grass
       ctx.fillStyle = zDef ? zDef.ground : GBA.grass;
@@ -2084,17 +5180,73 @@ function pmRenderMap() {
         ctx.textAlign = 'center';
         ctx.fillText('+', px + 8, py + 11);
         ctx.textAlign = 'left';
+      } else if (cell === 10) {
+        // Passage vers Région 2 (porte/portail spécial)
+        ctx.fillStyle = GBA.path;
+        ctx.fillRect(px, py, T, T);
+        // Cadre du portail (pierre violette)
+        ctx.fillStyle = '#5a3a8a';
+        ctx.fillRect(px + 1, py, T - 2, T);
+        ctx.fillStyle = '#7a5aaa';
+        ctx.fillRect(px + 2, py + 2, T - 4, T - 4);
+        // Centre lumineux animé (pulse)
+        const pulse = Math.abs(Math.sin(Date.now() / 400));
+        ctx.fillStyle = `rgba(255, 240, 200, ${0.6 + pulse * 0.4})`;
+        ctx.fillRect(px + 4, py + 4, T - 8, T - 8);
+        // Symbole flèche vers la droite (vers R2)
+        ctx.fillStyle = '#3a1a5a';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('▶', px + 8, py + 12);
+        ctx.textAlign = 'left';
+      } else if (cell === 11) {
+        // Retour vers Région 1
+        ctx.fillStyle = GBA.path;
+        ctx.fillRect(px, py, T, T);
+        ctx.fillStyle = '#3a5a8a';
+        ctx.fillRect(px + 1, py, T - 2, T);
+        ctx.fillStyle = '#5a7aaa';
+        ctx.fillRect(px + 2, py + 2, T - 4, T - 4);
+        const pulse = Math.abs(Math.sin(Date.now() / 400));
+        ctx.fillStyle = `rgba(220, 240, 255, ${0.6 + pulse * 0.4})`;
+        ctx.fillRect(px + 4, py + 4, T - 8, T - 8);
+        ctx.fillStyle = '#1a3a5a';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('◀', px + 8, py + 12);
+        ctx.textAlign = 'left';
+      } else if (cell === 12) {
+        // Porte du Dojo
+        ctx.fillStyle = GBA.path;
+        ctx.fillRect(px, py, T, T);
+        // Toit traditionnel rouge
+        ctx.fillStyle = '#a82828';
+        ctx.fillRect(px + 2, py, T - 4, T - 2);
+        ctx.fillStyle = '#c84848';
+        ctx.fillRect(px + 1, py + 2, T - 2, 2);
+        // Porte
+        ctx.fillStyle = '#5a3018';
+        ctx.fillRect(px + 5, py + 5, 6, 8);
+        // Symbole "道" (Dojo) — rendu en cercle pour le pixel
+        ctx.fillStyle = '#f8e060';
+        ctx.font = 'bold 8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('道', px + 8, py + 12);
+        ctx.textAlign = 'left';
       }
 
       // Building roofs (row above doors)
       if (mr > 0) {
-        const above = _pmMapGrid[mr - 1] ? _pmMapGrid[mr - 1][mc] : -1;
+        const above = M.grid[mr - 1] ? M.grid[mr - 1][mc] : -1;
         if (cell === 2 && mr >= 2) {
           // Check if this is the top row of a building
-          const below = mr + 1 < PM_MAP_FULL_H ? _pmMapGrid[mr + 1][mc] : -1;
-          if (below === 3 || below === 4 || below === 5) {
+          const below = mr + 1 < M.H ? M.grid[mr + 1][mc] : -1;
+          if (below === 3 || below === 4 || below === 5 || below === 12) {
             // Roof row
-            const roofColor = below === 3 ? GBA.roofGym : below === 4 ? GBA.roofLigue : GBA.roofCentre;
+            const roofColor = below === 3 ? GBA.roofGym
+                            : below === 4 ? GBA.roofLigue
+                            : below === 12 ? '#a82828'
+                            : GBA.roofCentre;
             ctx.fillStyle = roofColor;
             ctx.fillRect(px - 2, py, T + 4, T);
             ctx.fillStyle = roofColor;
@@ -2139,13 +5291,19 @@ function pmRenderMap() {
   }
 
   // Zone label
+  const M2 = pmGetActiveMapData();
   const currentZone = pmGetZoneAt(_pmMapPlayer.r, _pmMapPlayer.c);
-  const currentCell = _pmMapGrid[_pmMapPlayer.r][_pmMapPlayer.c];
+  const currentCell = M2.grid[_pmMapPlayer.r][_pmMapPlayer.c];
   let label = '';
-  if (currentZone && PM_ZONES[currentZone]) label = PM_ZONES[currentZone].label;
+  const zDef2 = currentZone ? M2.zoneDefs[currentZone] : null;
+  if (zDef2) label = zDef2.label;
   else if (currentCell === 3) label = '🏆 Arène';
   else if (currentCell === 4) label = '⭐ Ligue PokePom';
   else if (currentCell === 5) label = '🏥 Centre PokePom';
+  else if (currentCell === 10) label = '🚪 Passage vers Région 2';
+  else if (currentCell === 11) label = '🚪 Retour vers Région 1';
+  else if (currentCell === 12) label = '🥋 Dojo';
+  else if (M2.mapId === 'r2') label = 'Terres de PomStud';
   const labelEl = document.getElementById('pm-map-zone-label');
   if (labelEl) labelEl.textContent = label || 'Pomel World';
 
@@ -2158,13 +5316,17 @@ function pmMapTryMove(dr, dc) {
   const now = Date.now();
   if (now - _pmMapLastStep < PM_STEP_COOLDOWN) return;
   _pmMapLastStep = now;
+  const M = pmGetActiveMapData();
   const nr = _pmMapPlayer.r + dr, nc = _pmMapPlayer.c + dc;
-  if (nr < 0 || nr >= PM_MAP_FULL_H || nc < 0 || nc >= PM_MAP_FULL_W) return;
-  const cell = _pmMapGrid[nr][nc];
+  if (nr < 0 || nr >= M.H || nc < 0 || nc >= M.W) return;
+  const cell = M.grid[nr][nc];
 
   if (cell === 3) { pmStopMap(); pmGoTo('gym'); return; }
   if (cell === 4) { pmStopMap(); pmGoTo('league'); return; }
   if (cell === 5) { pmStopMap(); _pmShowCentreMenu(); return; }
+  if (cell === 12) { pmStopMap(); pmGoTo('dojo'); return; }
+  if (cell === 10) { pmStopMap(); pmTryEnterR2(); return; }
+  if (cell === 11) { pmStopMap(); pmReturnToR1(); return; }
   if (cell === 2 || cell === 6 || cell === 8) return; // mur, eau, arbre
 
   _pmMapPlayer.r = nr;
@@ -2183,6 +5345,70 @@ function pmMapTryMove(dr, dc) {
   pmRenderMap();
 }
 
+// ── Transitions de carte R1 ↔ R2 ──
+// Vérifie le déblocage R2 (7 badges R1) et fait basculer la carte courante.
+// Si non débloqué, affiche un modal explicatif.
+function pmTryEnterR2() {
+  const player = pmGetPlayer();
+  const badgeCount = (player.badges || []).length;
+  if (badgeCount < PM_R2_UNLOCK_BADGES) {
+    pmShowR2LockedModal(badgeCount);
+    return;
+  }
+  // Déblocage : transition vers R2
+  _pmCurrentMap = 'r2';
+  player.currentMap = 'r2';
+  if (!_pmMapR2Grid) pmBuildMapR2();
+  // Position de spawn en R2 : juste à droite du passage retour, milieu vertical
+  _pmMapPlayer = { r: Math.floor(PM_MAP_R2_H / 2), c: 3 };
+  pmSaveNow();
+  pmGoTo('home'); // recharge l'écran map
+}
+
+function pmReturnToR1() {
+  const player = pmGetPlayer();
+  _pmCurrentMap = 'r1';
+  player.currentMap = 'r1';
+  if (!_pmMapGrid) pmBuildMap();
+  // Position de spawn en R1 : juste à gauche du passage R2 (bord est)
+  _pmMapPlayer = { r: Math.floor(PM_MAP_FULL_H / 2), c: PM_MAP_FULL_W - 4 };
+  pmSaveNow();
+  pmGoTo('home');
+}
+
+function pmShowR2LockedModal(currentBadges) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed; inset: 0; z-index: 9000;
+    background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+  `;
+  overlay.innerHTML = `
+    <div style="background: #2a2238; border: 2px solid #7a5aaa; border-radius: 12px; padding: 24px; max-width: 360px; color: #fff;">
+      <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 12px; text-align: center;">
+        🚪 Le passage est scellé
+      </div>
+      <div style="font-size: .95rem; line-height: 1.5; margin-bottom: 16px;">
+        Au-delà s'étendent les <strong>Terres de PomStud</strong>, une région ancienne où
+        sommeillent des PokePoms inconnus. Mais le portail ne s'ouvrira qu'à un Dresseur
+        ayant prouvé sa valeur dans toute la région actuelle.
+      </div>
+      <div style="font-size: .95rem; margin-bottom: 16px; text-align: center;">
+        <strong>Badges nécessaires : ${PM_R2_UNLOCK_BADGES}/${PM_R2_UNLOCK_BADGES}</strong><br>
+        Tu en as actuellement : <strong>${currentBadges}</strong>
+      </div>
+      <button id="pm-r2-locked-close" style="width: 100%; padding: 10px; background: #7a5aaa; color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 1rem; font-weight: bold; cursor: pointer;">D'accord</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('pm-r2-locked-close').addEventListener('click', () => {
+    overlay.remove();
+    // Relancer la map si on était dessus
+    if (typeof pmStartMapLoop === 'function') pmStartMapLoop();
+  });
+}
+
 function _pmShowCentreMenu() {
   const page = document.getElementById('page-pokepom');
   if (!page) return;
@@ -2199,7 +5425,7 @@ function _pmShowCentreMenu() {
       <div class="pm-card">
         <div style="display:flex; flex-direction:column; gap:10px;">
           <button class="btn-primary" onclick="pmGoTo('team')">🔄 Gérer l'équipe</button>
-          <button class="btn-primary" onclick="pmGoTo('collection')" style="background:var(--yellow); color:#000;">📚 PomeDex (${player.collection.length}/25)</button>
+          <button class="btn-primary" onclick="pmGoTo('collection')" style="background:var(--yellow); color:#000;">📚 PomeDex (${player.collection.length}/${PM_DEX_IDS.length})</button>
           <button class="btn-outline" onclick="pmGoTo('info')">📖 Infos & Guide</button>
         </div>
       </div>
@@ -2249,15 +5475,27 @@ function pmMapKeyDown(e) {
     KeyZ:[-1,0], KeyS:[1,0], KeyQ:[0,-1], KeyD:[0,1],
   };
   const d = dirs[e.code];
-  if (d && _pmMapGrid) { e.preventDefault(); pmMapTryMove(d[0], d[1]); }
+  if (d && _pmMapPlayer) { e.preventDefault(); pmMapTryMove(d[0], d[1]); }
 }
 
-function pmMapDpadMove(dr, dc) { if (_pmMapGrid) pmMapTryMove(dr, dc); }
+function pmMapDpadMove(dr, dc) { if (_pmMapPlayer) pmMapTryMove(dr, dc); }
 
 function pmStartMap() {
-  if (!_pmMapGrid) pmBuildMap();
+  // Restaure la carte courante depuis le player si présente
+  const player = pmGetPlayer();
+  if (player && player.currentMap === 'r2') {
+    _pmCurrentMap = 'r2';
+  } else {
+    _pmCurrentMap = 'r1';
+  }
+  // Force la construction de la map active
+  pmGetActiveMapData();
   if (!_pmMapPlayer) {
-    _pmMapPlayer = { r: Math.floor(PM_MAP_FULL_H / 2) + 2, c: Math.floor(PM_MAP_FULL_W / 2) };
+    if (_pmCurrentMap === 'r2') {
+      _pmMapPlayer = { r: Math.floor(PM_MAP_R2_H / 2), c: 3 };
+    } else {
+      _pmMapPlayer = { r: Math.floor(PM_MAP_FULL_H / 2) + 2, c: Math.floor(PM_MAP_FULL_W / 2) };
+    }
   }
   document.addEventListener('keydown', pmMapKeyDown);
   if (_pmMapLoop) cancelAnimationFrame(_pmMapLoop);
@@ -2280,7 +5518,7 @@ function pmRenderHome(page, player) {
       <div class="pm-header" style="margin-bottom:0;">
         <div>
           <div class="pm-title">🐾 PokePom</div>
-          <div class="pm-sub">PomeDex ${player.collection.length}/25 · ${badgeCount}/7 badges</div>
+          <div class="pm-sub">PomeDex ${player.collection.length}/${PM_DEX_IDS.length} · ${badgeCount}/7 badges</div>
         </div>
         <span id="pm-map-hud" style="font-size:.75rem; color:var(--muted); background:var(--surface2); padding:4px 10px; border-radius:6px; font-family:'Space Mono',monospace;"></span>
       </div>
@@ -2344,9 +5582,16 @@ function pmRenderHome(page, player) {
   _pmMapCanvas = document.getElementById('pm-map-canvas');
 
   if (_pmMapNeedsResume) {
-    // Afficher la map figée avec un overlay "Continuer"
-    if (!_pmMapGrid) pmBuildMap();
-    if (!_pmMapPlayer) _pmMapPlayer = { r: Math.floor(PM_MAP_FULL_H / 2) + 2, c: Math.floor(PM_MAP_FULL_W / 2) };
+    // Restaurer la carte courante depuis player.currentMap
+    const player = pmGetPlayer();
+    if (player && player.currentMap === 'r2') _pmCurrentMap = 'r2';
+    else _pmCurrentMap = 'r1';
+    pmGetActiveMapData(); // force build si besoin
+    if (!_pmMapPlayer) {
+      _pmMapPlayer = _pmCurrentMap === 'r2'
+        ? { r: Math.floor(PM_MAP_R2_H / 2), c: 3 }
+        : { r: Math.floor(PM_MAP_FULL_H / 2) + 2, c: Math.floor(PM_MAP_FULL_W / 2) };
+    }
     // Rendre un seul frame
     pmRenderMap();
 
@@ -2565,15 +5810,15 @@ function pmRenderTeamManager(page, player) {
     const card = document.createElement('div');
     card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '');
     card.onclick = () => pmToggleTeam(inst.uid);
-    const xpMax = inst.level < 10 ? PM_XP_TABLE[inst.level] : 0;
-    const xpPct = inst.level < 10 ? (inst.xp / xpMax) * 100 : 100;
+    const xpMax = inst.level < PM_LEVEL_MAX ? PM_XP_TABLE[inst.level] : 0;
+    const xpPct = inst.level < PM_LEVEL_MAX ? (inst.xp / xpMax) * 100 : 100;
     const stats = pmGetStats(inst);
-    const moveIds = PM_MOVES_BY_TYPE[base.type] || [];
-    const movesHtml = moveIds.map(mId => {
-      const m = PM_MOVES[mId];
+    // Moveset effectif (custom si appris au Dojo, sinon natifs)
+    const effectiveMoves = getMoveset(inst);
+    const movesHtml = effectiveMoves.map(m => {
       if (!m) return '';
-      return `<div class="pm-coll-move" style="border-left:3px solid ${PM_TYPE_COLOR[m.type]};">
-        <div class="pm-coll-move-name">${PM_TYPE_EMOJI[m.type]} ${m.name}</div>
+      return `<div class="pm-coll-move" style="border-left:3px solid ${PM_TYPE_COLOR[m.type] || '#888'};">
+        <div class="pm-coll-move-name">${PM_TYPE_EMOJI[m.type] || ''} ${m.name}</div>
         <div class="pm-coll-move-meta">${m.power > 0 ? 'P.' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP</div>
       </div>`;
     }).join('');
@@ -2581,8 +5826,8 @@ function pmRenderTeamManager(page, player) {
       <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-team-${inst.uid}"></canvas>
       <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}${base.legendary ? ' ✦' : ''}</div>
       <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]} ${PM_TYPE_LABEL[base.type]}</span>
-      <div class="pm-collection-level">Niv ${inst.level}${inst.level < 10 ? ` · ${inst.xp}/${xpMax} XP` : ' ★ MAX'}</div>
-      ${inst.level < 10 ? `<div class="pm-xp-bar" style="width:100%;"><div class="pm-xp-fill" style="width:${xpPct}%"></div></div>` : ''}
+      <div class="pm-collection-level">Niv ${inst.level}${inst.level < PM_LEVEL_MAX ? ` · ${inst.xp}/${xpMax} XP` : ' ★ MAX'}</div>
+      ${inst.level < PM_LEVEL_MAX ? `<div class="pm-xp-bar" style="width:100%;"><div class="pm-xp-fill" style="width:${xpPct}%"></div></div>` : ''}
       <div class="pm-coll-stats">
         <div class="pm-coll-stat"><span class="pm-coll-stat-k">HP</span><span class="pm-coll-stat-v">${stats.hp}</span></div>
         <div class="pm-coll-stat"><span class="pm-coll-stat-k">ATK</span><span class="pm-coll-stat-v">${stats.atk}</span></div>
@@ -2607,7 +5852,7 @@ function pmRenderCollection(page, player) {
       <div class="pm-header">
         <div>
           <div class="pm-title">📚 PomeDex</div>
-          <div class="pm-sub">${player.collection.length}/25 PokePoms capturés</div>
+          <div class="pm-sub">${player.collection.length}/${PM_DEX_IDS.length} PokePoms capturés</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
@@ -2755,8 +6000,10 @@ function pmStartWildBattle(firstInstance) {
   let firstIdx = team.findIndex(t => t.uid === firstInstance.uid);
   if (firstIdx < 0) firstIdx = 0;
 
+  // L'encounter à utiliser dépend de la map courante (R1 → pmGenerateZoneEncounter, R2 → pmGenerateR2ZoneEncounter)
+  const M = pmGetActiveMapData();
   const wild = _pmPendingZoneEncounter
-    ? pmGenerateZoneEncounter(_pmPendingZoneEncounter)
+    ? M.encounter(_pmPendingZoneEncounter)
     : pmGenerateWildEncounter();
   _pmPendingZoneEncounter = null;
   const wildFighter = pmCreateFighter(wild, PM_WILD_NERF);
@@ -3151,6 +6398,341 @@ function pmStartLeagueRun() {
 }
 
 // ── Écran de combat ──
+// ═══════════════════════════════════════════════════════════════════════════
+// DOJO — Interface
+// ═══════════════════════════════════════════════════════════════════════════
+// État UI : quel PokePom est actuellement sélectionné dans l'écran Dojo.
+// Stocké au niveau module pour persister entre les rerenders.
+let _pmDojoSelectedUid = null;
+
+function pmRenderDojo(page, player) {
+  // Header + intro
+  page.innerHTML = `
+    <div class="pm-wrap">
+      <div class="pm-header">
+        <div>
+          <div class="pm-title">🥋 Dojo</div>
+          <div class="pm-sub">Apprends de nouvelles techniques à tes PokePoms (niv ${PM_DOJO_MIN_LEVEL}+)</div>
+        </div>
+        <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
+      </div>
+
+      <div class="pm-card">
+        <div style="font-style:italic; color:var(--muted); margin-bottom:12px; font-size:.92rem; line-height:1.5;">
+          « Au cœur des Terres de PomStud, ce Dojo enseigne des techniques que les sauvages
+          ne connaissent pas. Choisis un disciple, choisis un art. »
+        </div>
+
+        <div style="margin-bottom:8px; font-weight:bold;">1. Choisis un PokePom</div>
+        <div id="pm-dojo-team" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;"></div>
+
+        <div id="pm-dojo-detail"></div>
+      </div>
+    </div>
+  `;
+
+  const teamEl = document.getElementById('pm-dojo-team');
+  const eligibleTeam = (player.team || [])
+    .map(uid => player.collection.find(p => p.uid === uid))
+    .filter(Boolean);
+
+  if (eligibleTeam.length === 0) {
+    teamEl.innerHTML = `<div style="color:var(--muted); font-size:.9rem;">Aucun PokePom dans ton équipe. Reviens après en avoir ajouté un.</div>`;
+    return;
+  }
+
+  // Si la sélection actuelle n'est plus dans l'équipe, en choisir une nouvelle
+  if (!_pmDojoSelectedUid || !eligibleTeam.find(i => i.uid === _pmDojoSelectedUid)) {
+    _pmDojoSelectedUid = eligibleTeam[0].uid;
+  }
+
+  eligibleTeam.forEach(inst => {
+    const base = PM_DEX[inst.pokepomId];
+    const isSelected = inst.uid === _pmDojoSelectedUid;
+    const tooLow = inst.level < PM_DOJO_MIN_LEVEL;
+    const card = document.createElement('div');
+    card.style.cssText = `
+      flex: 0 0 96px;
+      padding: 8px;
+      background: ${isSelected ? '#3a3050' : 'var(--card-bg, #1f1a2a)'};
+      border: 2px solid ${isSelected ? '#9a7adc' : 'transparent'};
+      border-radius: 10px;
+      cursor: ${tooLow ? 'not-allowed' : 'pointer'};
+      opacity: ${tooLow ? 0.5 : 1};
+      text-align: center;
+      transition: background .15s, border-color .15s;
+    `;
+    card.innerHTML = `
+      <canvas width="64" height="64" id="pm-dojo-sprite-${inst.uid}" style="image-rendering:pixelated; width:64px; height:64px;"></canvas>
+      <div style="font-size:.78rem; font-weight:bold; margin-top:4px;">${inst.nickname || base.name}</div>
+      <div style="font-size:.7rem; color:var(--muted);">Niv ${inst.level}</div>
+    `;
+    if (!tooLow) {
+      card.onclick = () => {
+        _pmDojoSelectedUid = inst.uid;
+        pmRenderDojo(page, pmGetPlayer());
+      };
+    }
+    teamEl.appendChild(card);
+    // Dessiner le sprite après insertion
+    setTimeout(() => {
+      const cv = document.getElementById(`pm-dojo-sprite-${inst.uid}`);
+      if (cv) drawPokePom(cv, inst.pokepomId);
+    }, 0);
+  });
+
+  // Détail du PokePom sélectionné
+  pmRenderDojoDetail(player);
+}
+
+function pmRenderDojoDetail(player) {
+  const detail = document.getElementById('pm-dojo-detail');
+  if (!detail) return;
+  const inst = player.collection.find(i => i.uid === _pmDojoSelectedUid);
+  if (!inst) {
+    detail.innerHTML = '';
+    return;
+  }
+  if (inst.level < PM_DOJO_MIN_LEVEL) {
+    detail.innerHTML = `
+      <div style="padding:16px; background:#3a2030; border-radius:8px; color:#ffaaaa;">
+        Ce PokePom doit atteindre le niveau ${PM_DOJO_MIN_LEVEL} avant d'apprendre au Dojo.
+      </div>`;
+    return;
+  }
+
+  const base = PM_DEX[inst.pokepomId];
+  const currentMoves = pmGetInstanceMoveIds(inst);
+  const learnable = pmDojoMovesFor(inst.pokepomId).filter(mid => !currentMoves.includes(mid));
+
+  // Section 1 : moves actuels
+  let html = `
+    <div style="margin-bottom:8px; font-weight:bold;">2. Moves actuels de ${inst.nickname || base.name}</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
+  `;
+  currentMoves.forEach((mid, idx) => {
+    const m = PM_MOVES[mid];
+    if (!m) return;
+    html += `
+      <div style="padding:8px; background:var(--card-bg, #1f1a2a); border-left:3px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:4px;">
+        <div style="font-weight:bold; font-size:.85rem;">${PM_TYPE_EMOJI[m.type] || ''} ${m.name}</div>
+        <div style="font-size:.72rem; color:var(--muted);">${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP</div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+
+  // Section 2 : moves apprenables
+  html += `<div style="margin-bottom:8px; font-weight:bold;">3. Moves disponibles au Dojo</div>`;
+  if (learnable.length === 0) {
+    html += `<div style="padding:12px; color:var(--muted); font-style:italic;">Ce PokePom connaît déjà tous les moves disponibles dans son catalogue.</div>`;
+  } else {
+    const balance = (typeof state !== 'undefined' && state) ? (state.balance || 0) : 0;
+    html += `<div style="display:grid; grid-template-columns:1fr; gap:8px;">`;
+    learnable.forEach(mid => {
+      const m = PM_MOVES[mid];
+      if (!m) return;
+      const cost = pmDojoMoveCost(mid);
+      const canAfford = balance >= cost;
+      const isSignature = m.dojoOnly;
+      html += `
+        <div style="padding:10px; background:var(--card-bg, #1f1a2a); border-left:4px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; display:flex; gap:12px; align-items:center;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:bold; font-size:.92rem;">
+              ${PM_TYPE_EMOJI[m.type] || ''} ${m.name}
+              ${isSignature ? '<span style="font-size:.7rem; color:#ffcc44; margin-left:6px;">★ Signature</span>' : ''}
+            </div>
+            <div style="font-size:.78rem; color:var(--muted); margin-top:2px;">
+              ${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP
+            </div>
+            <div style="font-size:.78rem; margin-top:4px; line-height:1.3;">${m.desc || ''}</div>
+          </div>
+          <div style="flex:0 0 auto; text-align:right;">
+            <div style="font-weight:bold; color:${canAfford ? '#ffcc44' : '#888'}; margin-bottom:4px;">
+              ${cost} 🪙
+            </div>
+            <button
+              ${canAfford ? '' : 'disabled'}
+              onclick="pmDojoStartLearning('${inst.uid}', '${mid}')"
+              style="padding:6px 12px; background:${canAfford ? '#9a7adc' : '#444'}; color:#fff; border:none; border-radius:6px; font-family:inherit; font-size:.8rem; cursor:${canAfford ? 'pointer' : 'not-allowed'};">
+              Apprendre
+            </button>
+          </div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    html += `<div style="margin-top:12px; font-size:.82rem; color:var(--muted); text-align:right;">Solde : <strong>${balance} 🪙 Pomels</strong></div>`;
+  }
+
+  detail.innerHTML = html;
+}
+
+// Lance le flow d'apprentissage : popup pour choisir le move à remplacer
+function pmDojoStartLearning(instanceUid, newMoveId) {
+  const player = pmGetPlayer();
+  const inst = player.collection.find(i => i.uid === instanceUid);
+  if (!inst) return;
+  const newMove = PM_MOVES[newMoveId];
+  if (!newMove) return;
+  const cost = pmDojoMoveCost(newMoveId);
+  const balance = (typeof state !== 'undefined' && state) ? (state.balance || 0) : 0;
+  if (balance < cost) {
+    alert(`Tu as besoin de ${cost} 🪙 Pomels (tu en as ${balance}).`);
+    return;
+  }
+
+  const currentMoves = pmGetInstanceMoveIds(inst);
+
+  // Popup de remplacement
+  const overlay = document.createElement('div');
+  overlay.id = 'pm-dojo-replace-overlay';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; z-index: 9000;
+    background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+    padding: 16px;
+  `;
+
+  let movesHtml = '';
+  currentMoves.forEach((mid, idx) => {
+    const m = PM_MOVES[mid];
+    if (!m) return;
+    movesHtml += `
+      <button class="pm-replace-slot" data-slot="${idx}"
+        style="text-align:left; padding:10px 12px; background:var(--card-bg, #1f1a2a); border:2px solid transparent; border-left:3px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; cursor:pointer; color:#fff; font-family:inherit;">
+        <div style="font-weight:bold; font-size:.92rem;">
+          ${PM_TYPE_EMOJI[m.type] || ''} ${m.name}
+        </div>
+        <div style="font-size:.74rem; color:var(--muted);">
+          ${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP
+        </div>
+      </button>
+    `;
+  });
+
+  overlay.innerHTML = `
+    <div style="background:#2a2238; border:2px solid #9a7adc; border-radius:12px; padding:20px; max-width:480px; width:100%; color:#fff;">
+      <div style="font-size:1.1rem; font-weight:bold; margin-bottom:8px;">
+        Apprendre <span style="color:#ffcc44;">${newMove.name}</span> ?
+      </div>
+      <div style="font-size:.85rem; color:var(--muted); margin-bottom:14px;">
+        Quel move ${inst.nickname || PM_DEX[inst.pokepomId].name} doit-il oublier ?
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        ${movesHtml}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button id="pm-dojo-cancel" style="flex:1; padding:10px; background:#444; color:#fff; border:none; border-radius:8px; font-family:inherit; font-weight:bold; cursor:pointer;">Annuler</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Handlers
+  document.getElementById('pm-dojo-cancel').onclick = () => overlay.remove();
+  overlay.querySelectorAll('.pm-replace-slot').forEach(btn => {
+    btn.onmouseenter = () => { btn.style.borderColor = '#9a7adc'; };
+    btn.onmouseleave = () => { btn.style.borderColor = 'transparent'; };
+    btn.onclick = () => {
+      const slot = parseInt(btn.dataset.slot, 10);
+      pmDojoConfirmLearn(instanceUid, newMoveId, slot, overlay);
+    };
+  });
+}
+
+// Effectue l'apprentissage : débite Pomels + mute customMoves
+function pmDojoConfirmLearn(instanceUid, newMoveId, slotIdx, overlay) {
+  const player = pmGetPlayer();
+  const cost = pmDojoMoveCost(newMoveId);
+  const newMove = PM_MOVES[newMoveId];
+  const inst = player.collection.find(i => i.uid === instanceUid);
+  if (!inst) { overlay.remove(); return; }
+  const oldMoveId = pmGetInstanceMoveIds(inst)[slotIdx];
+  const oldMove = PM_MOVES[oldMoveId];
+
+  // Débit Pomels (atomique)
+  if (typeof addBalanceTransaction === 'function' && typeof state !== 'undefined' && state) {
+    addBalanceTransaction(state.code, -cost, {
+      type: 'pokepom_dojo',
+      desc: `Apprentissage Dojo : ${newMove.name}`,
+      amount: -cost,
+      date: new Date().toISOString()
+    }).then(updated => {
+      if (updated && typeof migrateAccount === 'function') {
+        state = migrateAccount(updated);
+        if (typeof refreshUI === 'function') refreshUI();
+      }
+      // Apprendre le move
+      const result = pmDojoLearnMove(player, instanceUid, newMoveId, slotIdx);
+      if (result.ok) {
+        pmUpdateInstance(player, inst);
+        pmSaveNow();
+        overlay.remove();
+        // Toast simple
+        pmShowDojoSuccess(inst, oldMove, newMove);
+      } else {
+        alert('Apprentissage échoué : ' + result.reason);
+      }
+    });
+  } else {
+    // Fallback sans wallet (mode dev/test)
+    if (typeof state !== 'undefined' && state) state.balance = Math.max(0, (state.balance || 0) - cost);
+    const result = pmDojoLearnMove(player, instanceUid, newMoveId, slotIdx);
+    if (result.ok) {
+      pmUpdateInstance(player, inst);
+      pmSaveNow();
+      overlay.remove();
+      pmShowDojoSuccess(inst, oldMove, newMove);
+    } else {
+      alert('Apprentissage échoué : ' + result.reason);
+    }
+  }
+}
+
+// Toast de succès après apprentissage
+function pmShowDojoSuccess(inst, oldMove, newMove) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 10000;
+    background: #2a4838; color: #fff;
+    padding: 14px 20px; border-radius: 8px;
+    font-family: 'Space Mono', monospace; font-size: .9rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    animation: dojoToast 2.4s ease-in-out;
+    border-left: 4px solid #88dd88;
+    max-width: 90vw;
+  `;
+  toast.innerHTML = `
+    <div style="font-weight:bold; margin-bottom:4px;">🥋 Apprentissage réussi !</div>
+    <div style="font-size:.85rem;">
+      ${inst.nickname || PM_DEX[inst.pokepomId].name} a oublié <strong>${oldMove.name}</strong>
+      et a appris <strong>${newMove.name}</strong> !
+    </div>
+  `;
+  if (!document.getElementById('pm-dojo-toast-style')) {
+    const style = document.createElement('style');
+    style.id = 'pm-dojo-toast-style';
+    style.textContent = `
+      @keyframes dojoToast {
+        0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        85% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2400);
+
+  // Re-render le screen Dojo
+  pmGoTo('dojo');
+}
+
+
 function pmRenderBattle(page, player) {
   const bs = _pmBattleState;
   if (!bs) { pmGoTo('home'); return; }
@@ -3210,6 +6792,33 @@ function pmRenderBattle(page, player) {
     // Scroll log to bottom
     const log = document.getElementById('pm-log');
     if (log) log.scrollTop = log.scrollHeight;
+
+    // Animation d'évolution : déclenchée à la fin du combat si une évolution
+    // s'est produite pendant le gain d'XP. On consomme le flag pour éviter
+    // la rejouer si le joueur revient sur l'écran de fin (ex: clic Rejouer).
+    if (bs.ended && bs.pendingEvolution && !bs._evoPlayed) {
+      bs._evoPlayed = true;
+      const { oldId, newId } = bs.pendingEvolution;
+      pmShowEvolutionAnimation(oldId, newId).then(() => {
+        // Persiste l'instance évoluée (pmGainXP a déjà muté l'objet)
+        if (bs.playerInstance) pmUpdateInstance(player, bs.playerInstance);
+        // Synchronise le fighter visible pour que le rerender montre la nouvelle forme
+        if (bs.playerFighter && bs.playerFighter.pokepomId === oldId) {
+          bs.playerFighter.pokepomId = newId;
+          const newBase = PM_DEX[newId];
+          if (newBase) {
+            bs.playerFighter.type = newBase.type;
+            // On garde le nom personnalisé éventuel, sinon nouveau nom de base
+            if (!bs.playerInstance || !bs.playerInstance.nickname || bs.playerInstance.nickname === PM_DEX[oldId].name) {
+              bs.playerFighter.name = newBase.name;
+            }
+          }
+        }
+        pmSaveNow();
+        bs.pendingEvolution = null;
+        pmGoTo('battle');
+      });
+    }
   }, 10);
 }
 
@@ -3460,9 +7069,12 @@ function pmHandleBattleEnd() {
       player.totalBattlesWon = (player.totalBattlesWon || 0) + 1;
 
       // XP
-      const leveledUp = pmGainXP(bs.playerInstance || p.instance, PM_XP_GAIN.league);
-      if (leveledUp) {
+      const xpRes = pmGainXP(bs.playerInstance || p.instance, PM_XP_GAIN.league);
+      if (xpRes.leveledUp) {
         bs.log.push(`⬆️ ${p.name} monte au niveau ${(bs.playerInstance || p.instance).level} !`);
+      }
+      if (xpRes.evolved) {
+        bs.pendingEvolution = { oldId: xpRes.oldId, newId: xpRes.newId };
       }
 
       // Reward Pomels (gain atomique via addBalanceTransaction)
@@ -3529,9 +7141,12 @@ function pmHandleBattleEnd() {
       // Victoire sauvage
       player.dailyWildCount++;
       player.totalBattlesWon = (player.totalBattlesWon || 0) + 1;
-      const leveledUp = pmGainXP(bs.playerInstance, PM_XP_GAIN.wild);
-      if (leveledUp) {
+      const xpRes = pmGainXP(bs.playerInstance, PM_XP_GAIN.wild);
+      if (xpRes.leveledUp) {
         bs.log.push(`⬆️ ${p.name} monte au niveau ${bs.playerInstance.level} !`);
+      }
+      if (xpRes.evolved) {
+        bs.pendingEvolution = { oldId: xpRes.oldId, newId: xpRes.newId };
       }
       pmUpdateInstance(player, bs.playerInstance);
 
@@ -3544,6 +7159,12 @@ function pmHandleBattleEnd() {
         const captured = pmAttemptCapture();
         if (captured) {
           const captureInst = bs.wildInstance;
+          // Si le PokePom est capturé après le niveau d'évolution et qu'il
+          // a une évolution disponible, on pose le flag pendingEvolution
+          // pour qu'il évolue à son prochain passage de niveau (cf. spec Q8).
+          if (captureInst.level >= PM_EVOLUTION_LEVEL && PM_EVOLUTIONS[captureInst.pokepomId]) {
+            captureInst.pendingEvolution = true;
+          }
           pmAddToCollection(player, captureInst);
           bs.log.push(`<strong>🎉 ${PM_DEX[captureInst.pokepomId].name} a été capturé ! Il rejoint ta collection.</strong>`);
         } else {
@@ -3582,9 +7203,12 @@ function pmHandleBattleEnd() {
       player.dailyGymWins++;
       player.totalBattlesWon = (player.totalBattlesWon || 0) + 1;
 
-      const leveledUp = pmGainXP(bs.playerInstance, PM_XP_GAIN.gym);
-      if (leveledUp) {
+      const xpRes = pmGainXP(bs.playerInstance, PM_XP_GAIN.gym);
+      if (xpRes.leveledUp) {
         bs.log.push(`⬆️ ${p.name} monte au niveau ${bs.playerInstance.level} !`);
+      }
+      if (xpRes.evolved) {
+        bs.pendingEvolution = { oldId: xpRes.oldId, newId: xpRes.newId };
       }
       pmUpdateInstance(player, bs.playerInstance);
 
