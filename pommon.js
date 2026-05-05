@@ -4317,13 +4317,44 @@ const PM_GYMS = [
   { id:'lumiere',    name:'Arène Lumière',    champion:'solarion',   championName:'Champion Solarion',     order:7 }
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ARÈNES RÉGION 2 — 6 arènes plus difficiles (niveau 14 → 27)
+// 4 doublons des types R1 (champions = évolutions) + 2 nouveaux types
+// Récompense Pomels par paliers de difficulté.
+// Stockées dans player.badgesR2 (séparé de player.badges).
+// ═══════════════════════════════════════════════════════════════════════════
+const PM_GYMS_R2 = [
+  { id:'plante2',     name:'Arène Plante (R2)',     champion:'mousseroi',  championName:'Maître Mousseroi',  order:1, level:14, reward:1500, region:2 },
+  { id:'feu2',        name:'Arène Feu (R2)',        champion:'pyrecarde',  championName:'Générale Pyrécarde', order:2, level:17, reward:1500, region:2 },
+  { id:'glace',       name:'Arène Glace',           champion:'hivernel',   championName:'Roi Hivernel',      order:3, level:20, reward:2000, region:2 },
+  { id:'eau2',        name:'Arène Eau (R2)',        champion:'goutaragon', championName:'Seigneur Goutaragon', order:4, level:22, reward:2000, region:2 },
+  { id:'metal',       name:'Arène Métal',           champion:'rouilleron', championName:'Titan Rouilleron',  order:5, level:25, reward:2500, region:2 },
+  { id:'electrique2', name:'Arène Électrique (R2)', champion:'fulgurion',  championName:'Tempête Fulgurion', order:6, level:27, reward:2500, region:2 }
+];
+
+// Récompenses Pomels variables pour les arènes R2 (le R1 reste à PM_REWARD_GYM)
+function pmGetGymReward(gym) {
+  return gym.reward || PM_REWARD_GYM;
+}
+
 function pmGetGym(id) {
-  return PM_GYMS.find(g => g.id === id);
+  return PM_GYMS.find(g => g.id === id) || PM_GYMS_R2.find(g => g.id === id);
+}
+
+// Liste des arènes actives selon la carte courante
+function pmGetActiveGyms() {
+  return _pmCurrentMap === 'r2' ? PM_GYMS_R2 : PM_GYMS;
+}
+
+// Liste des badges du joueur pour la map active (R1 → badges, R2 → badgesR2)
+function pmGetActiveBadges(player) {
+  if (_pmCurrentMap === 'r2') return player.badgesR2 || [];
+  return player.badges || [];
 }
 
 function pmGenerateGymChampion(gym) {
-  // Champion au niveau 7, stats boostées
-  const lvl = 7;
+  // Niveau : 7 par défaut (R1), ou champ gym.level pour R2
+  const lvl = gym.level || 7;
   const instance = pmCreatePokePomInstance(gym.champion, lvl);
   return instance;
 }
@@ -4698,6 +4729,114 @@ const PM_R2_ZONES = {
   marais_oblivion:{ label: "Marais d'Oblivion",   grass1: '#3a3848', grass2: '#5a5868', ground: '#2a2838', types: ['ombre','glace'],     legendRate: 0.05 },
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LORE : panneaux (type 13) et PNJ (type 14)
+// ═══════════════════════════════════════════════════════════════════════════
+// Chaque entrée : { kind: 'sign' | 'pnj', zone: 'id_zone', text: 'string',
+//                   pages: ['p1','p2'], pnjLabel?: '...' }
+// Position relative à la zone : posée par le builder dans une case herbe libre
+// (kind 'sign') ou sur le chemin/bord (kind 'pnj').
+// ─────────────────────────────────────────────────────────────────────────
+// Le builder utilise PM_LORE_R1 / PM_LORE_R2 pour placer ces éléments.
+// On peut placer plusieurs éléments dans la même zone — l'ordre de la liste
+// détermine l'ordre de placement (premier libre).
+
+const PM_LORE_R1 = [
+  // Prairie Élémentaire — accueil tutoriel
+  { kind: 'sign', zone: 'elementaire',
+    text: "Bienvenue à la Prairie Élémentaire. Ici cohabitent les quatre éléments fondateurs : Plante, Feu, Eau et Électricité." },
+  { kind: 'pnj', zone: 'elementaire', pnjLabel: 'Vieil Apprenti',
+    pages: [
+      "Tiens, un nouveau visage. Tu sors de Bourg-Pomel ?",
+      "Cette prairie est l'endroit idéal pour commencer. Garde-toi de t'aventurer trop au sud avant d'avoir gagné quelques badges.",
+      "On dit qu'au-delà de la mer s'étendent d'autres terres. Mais ce sont des histoires de marins."
+    ] },
+
+  // Mont des Vents — un peu mystique
+  { kind: 'sign', zone: 'montagne',
+    text: "Mont des Vents. Le souffle ne s'arrête jamais ici. Les anciens disaient qu'il portait la voix des oiseaux disparus." },
+  { kind: 'pnj', zone: 'montagne', pnjLabel: 'Bergère',
+    pages: [
+      "Mes brebis se sont enfuies quand un Cyclonin est passé. Tu en as vu ?",
+      "Si tu en croises un, ne le fixe pas trop longtemps. Il prend ça pour un défi."
+    ] },
+
+  // Plaine Lumineuse
+  { kind: 'sign', zone: 'lumiere',
+    text: "Plaine Lumineuse. Le soleil se lève ici en premier, et se couche en dernier. Les PokePoms qui y vivent en gardent un peu de cet éclat." },
+
+  // Grotte du Crépuscule
+  { kind: 'sign', zone: 'grotte',
+    text: "Grotte du Crépuscule. La lumière n'y entre jamais tout à fait. Les ombres y prennent forme sans qu'on sache si elles regardent." },
+  { kind: 'pnj', zone: 'grotte', pnjLabel: 'Ermite',
+    pages: [
+      "Hé. Pas un mot trop fort. Ils écoutent.",
+      "Si tu cherches Nihilium, perds ton temps ailleurs. C'est lui qui te trouve, pas l'inverse."
+    ] }
+];
+
+const PM_LORE_R2 = [
+  // Bois d'Aelmoria — Plante / Ombre — forêt primordiale
+  { kind: 'sign', zone: 'bois_aelmoria',
+    text: "Bois d'Aelmoria. Forêt primordiale aux arbres millénaires. Les racines y plongent si profond, dit-on, qu'elles touchent l'âme du monde." },
+  { kind: 'pnj', zone: 'bois_aelmoria', pnjLabel: 'Jardinière Errante',
+    pages: [
+      "Tu sens cette odeur ? C'est l'humus des âges.",
+      "Mon Mousseroi a appris à parler aux arbres. Enfin... à les écouter, plus précisément.",
+      "Ne marche pas sur les fougères dorées. Elles se souviennent."
+    ] },
+
+  // Cendrelande — Feu / Métal — plaine volcanique forgée
+  { kind: 'sign', zone: 'cendrelande',
+    text: "Cendrelande. La roche fond et se reforge sans cesse. Les forgerons d'antan y travaillaient le minerai pendant que les flammes bénissaient leurs ouvrages." },
+  { kind: 'pnj', zone: 'cendrelande', pnjLabel: 'Apprenti Forgeron',
+    pages: [
+      "Ah, un voyageur. Approche, mais reste en deçà de la ligne rouge.",
+      "Mon maître affirmait qu'un Forgehammer ne sonne juste qu'entre des mains honnêtes.",
+      "Je n'ai pas encore réussi à le faire chanter. Mais peut-être qu'un jour..."
+    ] },
+
+  // Glaciers de Vorh — Glace / Eau
+  { kind: 'sign', zone: 'glaciers_vorh',
+    text: "Glaciers de Vorh. Mer gelée éternelle. Sous la glace, des courants chauds creusent des cathédrales bleutées que peu d'yeux ont vues." },
+  { kind: 'pnj', zone: 'glaciers_vorh', pnjLabel: 'Pêcheuse de Givre',
+    pages: [
+      "Tu ne devrais pas rester immobile trop longtemps. Le froid pénètre les os.",
+      "J'ai vu un Hivernel, une fois. Une seule. Il n'a pas regardé dans ma direction et j'en remercie encore les saisons.",
+      "Si tu vois une silhouette de cristal danser sur la glace, ne danse pas avec elle."
+    ] },
+
+  // Mines d'Orichal — Métal / Électrique
+  { kind: 'sign', zone: 'mines_orichal',
+    text: "Mines d'Orichal. Galeries oubliées où le minerai vit encore. Les filons d'orichalque pulsent d'une lumière propre, comme si la pierre rêvait d'être éveillée." },
+  { kind: 'pnj', zone: 'mines_orichal', pnjLabel: 'Vieux Mineur',
+    pages: [
+      "Bonjour, voyageur. Ne touche pas aux veines vertes — elles mordent.",
+      "On a cessé d'extraire l'orichalque il y a trois générations. La pierre s'était mise à se plaindre.",
+      "Maintenant on vient juste l'écouter."
+    ] },
+
+  // Hauteurs de Solenne — Lumière / Air
+  { kind: 'sign', zone: 'hauteurs_solenne',
+    text: "Hauteurs de Solenne. Plateaux célestes baignés par un soleil qui ne se couche jamais. Le vent y porte des chants dans une langue que personne ne parle plus." },
+  { kind: 'pnj', zone: 'hauteurs_solenne', pnjLabel: 'Astronome Aveugle',
+    pages: [
+      "L'altitude ? Six mille pas, mesurés au pouls.",
+      "Je ne vois plus, mais j'entends les étoiles bouger. Elles chuchotent ce qui va arriver, parfois.",
+      "Tu transportes quelque chose de fort. Une évolution récente, peut-être ? Je sens l'écho."
+    ] },
+
+  // Marais d'Oblivion — Ombre / Glace
+  { kind: 'sign', zone: 'marais_oblivion',
+    text: "Marais d'Oblivion. Étendue de tourbières gelées où les âmes oubliées prennent forme. Mieux vaut ne pas y prononcer son propre nom à voix haute." },
+  { kind: 'pnj', zone: 'marais_oblivion', pnjLabel: 'Voyageur Sans Nom',
+    pages: [
+      "...",
+      "Ah pardon. J'avais oublié comment on parlait.",
+      "Si tu vois un manteau abandonné sur un rocher, laisse-le. Il attend quelqu'un. Ce n'est pas toi."
+    ] }
+];
+
 // Couleurs GBA
 const GBA = {
   grass:     '#48a848', grassDark: '#389838', grassLight: '#58c058',
@@ -4737,9 +4876,78 @@ let _pmCurrentMap = 'r1';
 let _pmMapR2Grid = null;
 let _pmMapR2ZoneGrid = null;
 
+// Lore : dictionnaires "row,col" → entrée PM_LORE_R1/R2 (rempli par les builders)
+let _pmLoreR1 = {};
+let _pmLoreR2 = {};
+
+// Helper : récupère l'entrée de lore à une position sur la map active
+function pmGetLoreAt(r, c) {
+  const dict = _pmCurrentMap === 'r2' ? _pmLoreR2 : _pmLoreR1;
+  return dict[r + ',' + c] || null;
+}
+
 // Cell types: 0=grass, 1=tallgrass, 2=wall, 3=arene, 4=ligue, 5=centre, 6=water, 7=path, 8=tree, 9=flower
 //             10=passage_r2 (porte sur la carte R1 menant en R2), 11=passage_r1 (porte sur R2 menant en R1)
 //             12=dojo (R2 uniquement)
+//             13=panneau (lore court, déclenche à l'approche), 14=pnj (dialogue plus long)
+
+// Place les éléments de lore (panneaux + PNJ) sur une grille déjà construite.
+// Stratégie pour chaque entrée :
+//   - sign (panneau) : case herbe (0) ou fleur (9) adjacente à un chemin (7) dans la zone cible
+//   - pnj : case chemin (7) à une distance manhattan ≤ 2 d'une case de la zone cible
+// La case est convertie en tile 13 (sign) ou 14 (pnj). L'entrée est mémorisée
+// dans `loreDict` par sa position "row,col".
+function pmPlaceLore(grid, zones, W, H, loreList, loreDict) {
+  // Index : pour chaque case zone, mémoriser sa zone pour faire un BFS local rapide.
+  // Mais pour 6 zones × ~250 cases on peut faire simple.
+
+  for (const entry of loreList) {
+    const candidates = [];
+    for (let r = 1; r < H - 1; r++) {
+      for (let c = 1; c < W - 1; c++) {
+        const tile = grid[r][c];
+
+        if (entry.kind === 'sign') {
+          // Panneau : dans la zone, sur herbe (0) ou fleur (9), idéalement près d'un chemin
+          const inZone = zones[r][c] === entry.zone;
+          if (!inZone) continue;
+          if (tile !== 0 && tile !== 9) continue;
+          const nearPath =
+            (grid[r-1] && grid[r-1][c] === 7) ||
+            (grid[r+1] && grid[r+1][c] === 7) ||
+            (grid[r][c-1] === 7) ||
+            (grid[r][c+1] === 7);
+          candidates.push({ r, c, score: nearPath ? 10 : 1 });
+        } else if (entry.kind === 'pnj') {
+          // PNJ : sur chemin (7), à distance manhattan ≤ 4 d'une case de la zone
+          if (tile !== 7) continue;
+          let minDist = 999;
+          for (let dr = -4; dr <= 4; dr++) {
+            for (let dc = -4; dc <= 4; dc++) {
+              const rr = r + dr, cc = c + dc;
+              if (rr < 0 || rr >= H || cc < 0 || cc >= W) continue;
+              if (zones[rr][cc] === entry.zone) {
+                const dist = Math.abs(dr) + Math.abs(dc);
+                if (dist < minDist) minDist = dist;
+              }
+            }
+          }
+          if (minDist > 4) continue;
+          // Plus c'est proche, plus c'est prioritaire
+          candidates.push({ r, c, score: 10 - minDist });
+        }
+      }
+    }
+
+    if (candidates.length === 0) continue;
+    candidates.sort((a, b) => b.score - a.score);
+    const top = candidates.filter(x => x.score === candidates[0].score);
+    const pick = top[Math.floor(Math.random() * top.length)];
+
+    grid[pick.r][pick.c] = entry.kind === 'sign' ? 13 : 14;
+    loreDict[pick.r + ',' + pick.c] = entry;
+  }
+}
 
 function pmBuildMap() {
   const W = PM_MAP_FULL_W, H = PM_MAP_FULL_H;
@@ -4823,6 +5031,10 @@ function pmBuildMap() {
   grid[cy+1][W-2] = 10;
   zones[cy][W-2] = null;
   zones[cy+1][W-2] = null;
+
+  // Placement du lore (panneaux + PNJ)
+  _pmLoreR1 = {};
+  pmPlaceLore(grid, zones, W, H, PM_LORE_R1, _pmLoreR1);
 
   _pmMapGrid = grid;
   _pmMapZoneGrid = zones;
@@ -4975,6 +5187,10 @@ function pmBuildMapR2() {
       }
     }
   }
+
+  // Placement du lore R2 (panneaux + PNJ)
+  _pmLoreR2 = {};
+  pmPlaceLore(grid, zones, W, H, PM_LORE_R2, _pmLoreR2);
 
   _pmMapR2Grid = grid;
   _pmMapR2ZoneGrid = zones;
@@ -5233,6 +5449,54 @@ function pmRenderMap() {
         ctx.textAlign = 'center';
         ctx.fillText('道', px + 8, py + 12);
         ctx.textAlign = 'left';
+      } else if (cell === 13) {
+        // Panneau de lore (en bois, sur fond herbe)
+        // Fond : herbe (continue de la zone si visible)
+        const zone = M.zones[mr][mc];
+        const zDef = zone ? M.zoneDefs[zone] : null;
+        ctx.fillStyle = zDef ? zDef.ground : GBA.grass;
+        ctx.fillRect(px, py, T, T);
+        // Poteau du panneau
+        ctx.fillStyle = '#5a3018';
+        ctx.fillRect(px + 7, py + 8, 2, 7);
+        // Plaque de bois
+        ctx.fillStyle = '#a87038';
+        ctx.fillRect(px + 2, py + 2, T - 4, 8);
+        ctx.fillStyle = '#c8884a';
+        ctx.fillRect(px + 3, py + 3, T - 6, 6);
+        // Texte "i" pour info
+        ctx.fillStyle = '#3a1a08';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('i', px + 8, py + 9);
+        ctx.textAlign = 'left';
+      } else if (cell === 14) {
+        // PNJ : sur chemin, petit personnage
+        ctx.fillStyle = GBA.path;
+        ctx.fillRect(px, py, T, T);
+        // Tête (peau)
+        ctx.fillStyle = '#f0c890';
+        ctx.fillRect(px + 5, py + 2, 6, 5);
+        // Cheveux
+        ctx.fillStyle = '#5a3018';
+        ctx.fillRect(px + 5, py + 1, 6, 3);
+        // Yeux
+        ctx.fillStyle = '#1a1a22';
+        ctx.fillRect(px + 6, py + 4, 1, 1);
+        ctx.fillRect(px + 9, py + 4, 1, 1);
+        // Corps (vêtement, varie par seed)
+        const seed = (mr * 13 + mc * 7) % 3;
+        const shirts = ['#3878c8', '#c8487a', '#48a848']; // bleu, rose, vert
+        ctx.fillStyle = shirts[seed];
+        ctx.fillRect(px + 4, py + 7, 8, 6);
+        // Jambes
+        ctx.fillStyle = '#3a3a48';
+        ctx.fillRect(px + 5, py + 13, 2, 3);
+        ctx.fillRect(px + 9, py + 13, 2, 3);
+        // Marqueur "!" en surbrillance pour signaler dialogue (subtile)
+        const pulse = Math.abs(Math.sin(Date.now() / 600));
+        ctx.fillStyle = `rgba(255, 240, 100, ${0.4 + pulse * 0.4})`;
+        ctx.fillRect(px + 12, py - 1, 3, 5);
       }
 
       // Building roofs (row above doors)
@@ -5327,10 +5591,26 @@ function pmMapTryMove(dr, dc) {
   if (cell === 12) { pmStopMap(); pmGoTo('dojo'); return; }
   if (cell === 10) { pmStopMap(); pmTryEnterR2(); return; }
   if (cell === 11) { pmStopMap(); pmReturnToR1(); return; }
+  if (cell === 14) {
+    // PNJ : bloque le passage mais déclenche le dialogue
+    const lore = pmGetLoreAt(nr, nc);
+    if (lore) pmShowLoreDialog(lore);
+    return;
+  }
   if (cell === 2 || cell === 6 || cell === 8) return; // mur, eau, arbre
 
   _pmMapPlayer.r = nr;
   _pmMapPlayer.c = nc;
+
+  if (cell === 13) {
+    // Panneau : on marche dessus, déclenche le dialogue
+    const lore = pmGetLoreAt(nr, nc);
+    if (lore) {
+      pmRenderMap(); // pour que la position du joueur soit à jour avant overlay
+      pmShowLoreDialog(lore);
+      return;
+    }
+  }
 
   if (cell === 1) {
     const zone = pmGetZoneAt(nr, nc);
@@ -5407,6 +5687,130 @@ function pmShowR2LockedModal(currentBadges) {
     // Relancer la map si on était dessus
     if (typeof pmStartMapLoop === 'function') pmStartMapLoop();
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DIALOGUE LORE — Boîte style GBA en bas d'écran
+// ═══════════════════════════════════════════════════════════════════════════
+// Affiche une bulle de dialogue avec :
+//   - Pour un panneau (kind:'sign')  : un seul écran de texte
+//   - Pour un PNJ (kind:'pnj')      : pages multiples (entry.pages),
+//     avec label PNJ ("Vieil Apprenti") + indicateur "▼ Continuer"
+// L'overlay capture les clics et les touches Espace/Entrée pour avancer.
+let _pmLoreCurrentPage = 0;
+let _pmLoreCurrentEntry = null;
+
+function pmShowLoreDialog(entry) {
+  if (!entry) return;
+  _pmLoreCurrentEntry = entry;
+  _pmLoreCurrentPage = 0;
+
+  // Construire l'overlay si pas déjà présent
+  let overlay = document.getElementById('pm-lore-overlay');
+  if (overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'pm-lore-overlay';
+  overlay.style.cssText = `
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 8500;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding: 16px;
+    pointer-events: auto;
+  `;
+  // Box GBA-style
+  const box = document.createElement('div');
+  box.id = 'pm-lore-box';
+  box.style.cssText = `
+    background: linear-gradient(180deg, #f8f4d8 0%, #e8d8a8 100%);
+    border: 4px solid #5a3018;
+    border-radius: 8px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.5), inset 0 0 0 2px #f8e4b8;
+    max-width: 640px;
+    width: 100%;
+    padding: 16px 18px 14px;
+    font-family: 'Space Mono', monospace;
+    color: #3a1a08;
+    cursor: pointer;
+    user-select: none;
+  `;
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  pmRenderLorePage();
+
+  // Click-to-advance + clavier
+  const advance = () => pmAdvanceLore();
+  overlay.addEventListener('click', advance);
+  const keyHandler = (e) => {
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      advance();
+    }
+  };
+  // On stocke le handler pour pouvoir le retirer
+  overlay._keyHandler = keyHandler;
+  document.addEventListener('keydown', keyHandler);
+}
+
+function pmRenderLorePage() {
+  const box = document.getElementById('pm-lore-box');
+  const entry = _pmLoreCurrentEntry;
+  if (!box || !entry) return;
+
+  let title = '';
+  let body = '';
+  let hasMore = false;
+
+  if (entry.kind === 'sign') {
+    title = '📜 Panneau';
+    body = entry.text || '';
+    hasMore = false;
+  } else if (entry.kind === 'pnj') {
+    title = entry.pnjLabel || 'Voyageur';
+    const pages = entry.pages || [entry.text || ''];
+    body = pages[_pmLoreCurrentPage] || '';
+    hasMore = _pmLoreCurrentPage < pages.length - 1;
+  }
+
+  const indicator = hasMore ? '▼ Continuer' : '✓ Fermer';
+
+  box.innerHTML = `
+    <div style="font-size:.78rem; font-weight:bold; color:#7a3018; margin-bottom:6px; letter-spacing:.04em;">
+      ${title}
+    </div>
+    <div style="font-size:.95rem; line-height:1.55; min-height:3em;">
+      ${body.replace(/\n/g, '<br>')}
+    </div>
+    <div style="font-size:.72rem; text-align:right; color:#7a4828; margin-top:6px;">
+      ${indicator}
+    </div>
+  `;
+}
+
+function pmAdvanceLore() {
+  const entry = _pmLoreCurrentEntry;
+  if (!entry) { pmCloseLoreDialog(); return; }
+
+  if (entry.kind === 'pnj' && Array.isArray(entry.pages)) {
+    if (_pmLoreCurrentPage < entry.pages.length - 1) {
+      _pmLoreCurrentPage++;
+      pmRenderLorePage();
+      return;
+    }
+  }
+  pmCloseLoreDialog();
+}
+
+function pmCloseLoreDialog() {
+  const overlay = document.getElementById('pm-lore-overlay');
+  if (overlay) {
+    if (overlay._keyHandler) {
+      document.removeEventListener('keydown', overlay._keyHandler);
+    }
+    overlay.remove();
+  }
+  _pmLoreCurrentEntry = null;
+  _pmLoreCurrentPage = 0;
 }
 
 function _pmShowCentreMenu() {
@@ -5518,7 +5922,7 @@ function pmRenderHome(page, player) {
       <div class="pm-header" style="margin-bottom:0;">
         <div>
           <div class="pm-title">🐾 PokePom</div>
-          <div class="pm-sub">PomeDex ${player.collection.length}/${PM_DEX_IDS.length} · ${badgeCount}/7 badges</div>
+          <div class="pm-sub">PomeDex ${player.collection.length}/${PM_DEX_IDS.length} · ${badgeCount}/${PM_GYMS.length} badges${(player.badgesR2 && player.badgesR2.length) ? ` · R2 ${player.badgesR2.length}/${PM_GYMS_R2.length}` : ''}</div>
         </div>
         <span id="pm-map-hud" style="font-size:.75rem; color:var(--muted); background:var(--surface2); padding:4px 10px; border-radius:6px; font-family:'Space Mono',monospace;"></span>
       </div>
@@ -6031,12 +6435,18 @@ function pmStartWildBattle(firstInstance) {
 
 // ── Écran arènes ──
 function pmRenderGyms(page, player) {
+  // Liste d'arènes selon la map active
+  const gyms = pmGetActiveGyms();
+  const badges = pmGetActiveBadges(player);
+  const totalGyms = gyms.length;
+  const regionLabel = _pmCurrentMap === 'r2' ? ' — Terres de PomStud' : '';
+
   page.innerHTML = `
     <div class="pm-wrap">
       <div class="pm-header">
         <div>
-          <div class="pm-title">🏆 Arènes</div>
-          <div class="pm-sub">${player.badges.length}/7 badges · ${player.dailyGymWins >= PM_DAILY_GYM_WINS ? '⛔ Reviens demain — 1 arène battue max par jour' : '✅ Tu peux battre 1 arène aujourd\'hui'}</div>
+          <div class="pm-title">🏆 Arènes${regionLabel}</div>
+          <div class="pm-sub">${badges.length}/${totalGyms} badges · ${player.dailyGymWins >= PM_DAILY_GYM_WINS ? '⛔ Reviens demain — 1 arène battue max par jour' : '✅ Tu peux battre 1 arène aujourd\'hui'}</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
@@ -6045,8 +6455,13 @@ function pmRenderGyms(page, player) {
   `;
 
   const grid = document.getElementById('pm-gym-grid');
-  PM_GYMS.forEach(gym => {
-    const won = player.badges.includes(gym.id);
+  gyms.forEach(gym => {
+    const won = badges.includes(gym.id);
+    // Récupérer le type via le champion (gym.id peut être 'plante2' qui n'est pas un type valide)
+    const championBase = PM_DEX[gym.champion];
+    const championType = championBase ? championBase.type : 'neutre';
+    const reward = pmGetGymReward(gym);
+
     const card = document.createElement('div');
     card.className = 'pm-gym-card' + (won ? ' won' : '');
     card.onclick = won ? null : () => pmStartGymBattle(gym);
@@ -6054,11 +6469,11 @@ function pmRenderGyms(page, player) {
       <div class="pm-sprite-wrap">
         <canvas width="64" height="64" class="pm-sprite pm-sprite-lg" id="pm-gym-${gym.id}"></canvas>
       </div>
-      <div class="pm-gym-name">${PM_TYPE_EMOJI[gym.id]} ${gym.name}</div>
-      <div class="pm-gym-champion">${gym.championName}</div>
-      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[gym.id]}; align-self:flex-start;">${PM_TYPE_LABEL[gym.id]}</span>
+      <div class="pm-gym-name">${PM_TYPE_EMOJI[championType] || ''} ${gym.name}</div>
+      <div class="pm-gym-champion">${gym.championName}${gym.level ? ` · Niv ${gym.level}` : ''}</div>
+      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[championType] || '#888'}; align-self:flex-start;">${PM_TYPE_LABEL[championType] || ''}</span>
       <div style="font-size:.72rem; color:var(--muted); margin-top:4px;">
-        Récompense : 1000 🪙 + badge
+        Récompense : ${reward} 🪙 + badge
       </div>
       ${won ? '<div style="color:var(--green); font-weight:700; font-size:.85rem;">✓ Battue</div>' : ''}
     `;
@@ -6069,7 +6484,8 @@ function pmRenderGyms(page, player) {
 
 function pmStartGymBattle(gym) {
   const player = pmGetPlayer();
-  if (player.badges.includes(gym.id)) return;
+  const badges = pmGetActiveBadges(player);
+  if (badges.includes(gym.id)) return;
   if (player.dailyGymWins >= PM_DAILY_GYM_WINS) {
     if (typeof showToast === 'function') showToast('Tu as déjà battu une arène aujourd\'hui ! Reviens demain. 🕐', '⚠️');
     return;
@@ -6745,7 +7161,7 @@ function pmRenderBattle(page, player) {
     <div class="pm-wrap">
       <div class="pm-header">
         <div>
-          <div class="pm-title">${bs.mode === 'wild' ? '🌿 Combat sauvage' : bs.mode === 'gym' ? '🏆 Arène ' + PM_TYPE_LABEL[bs.gym.id] : '⭐ Ligue · Round ' + (bs.roundNum || 1)}</div>
+          <div class="pm-title">${bs.mode === 'wild' ? '🌿 Combat sauvage' : bs.mode === 'gym' ? '🏆 ' + bs.gym.name : '⭐ Ligue · Round ' + (bs.roundNum || 1)}</div>
           ${bs.mode === 'league' ? `<div class="pm-sub">Victoires dans la run : ${bs.winsInRun}</div>` : ''}
         </div>
       </div>
@@ -7198,8 +7614,14 @@ function pmHandleBattleEnd() {
     }
   } else if (bs.mode === 'gym') {
     if (o.ko) {
-      // Victoire arène
-      player.badges.push(bs.gym.id);
+      // Victoire arène : R1 stocke dans player.badges, R2 dans player.badgesR2
+      const isR2 = bs.gym.region === 2;
+      if (isR2) {
+        player.badgesR2 = player.badgesR2 || [];
+        if (!player.badgesR2.includes(bs.gym.id)) player.badgesR2.push(bs.gym.id);
+      } else {
+        if (!player.badges.includes(bs.gym.id)) player.badges.push(bs.gym.id);
+      }
       player.dailyGymWins++;
       player.totalBattlesWon = (player.totalBattlesWon || 0) + 1;
 
@@ -7219,12 +7641,17 @@ function pmHandleBattleEnd() {
         });
       }
 
-      // Reward Pomels (gain atomique via addBalanceTransaction)
+      // Récompense Pomels (montant variable selon arène)
+      const reward = pmGetGymReward(bs.gym);
+      // Label du type via le champion (gym.id peut être 'plante2', invalide pour PM_TYPE_LABEL)
+      const championType = (PM_DEX[bs.gym.champion] || {}).type || 'neutre';
+      const typeLabel = PM_TYPE_LABEL[championType] || bs.gym.name;
+
       if (typeof addBalanceTransaction === 'function') {
-        addBalanceTransaction(state.code, PM_REWARD_GYM, {
+        addBalanceTransaction(state.code, reward, {
           type: 'pokepom_gym',
-          desc: `Arène ${PM_TYPE_LABEL[bs.gym.id]} battue`,
-          amount: PM_REWARD_GYM,
+          desc: `${bs.gym.name} battue`,
+          amount: reward,
           date: new Date().toISOString()
         }).then(updated => {
           if (updated && typeof migrateAccount === 'function') {
@@ -7233,11 +7660,11 @@ function pmHandleBattleEnd() {
           }
         });
       } else if (typeof state !== 'undefined' && state) {
-        state.balance = (state.balance || 0) + PM_REWARD_GYM;
+        state.balance = (state.balance || 0) + reward;
         if (typeof saveAccount === 'function') saveAccount(state);
       }
 
-      bs.log.push(`<strong>🏆 Arène ${PM_TYPE_LABEL[bs.gym.id]} vaincue ! Badge obtenu + ${PM_REWARD_GYM} 🪙 Pomels !</strong>`);
+      bs.log.push(`<strong>🏆 ${bs.gym.name} vaincue ! Badge obtenu + ${reward} 🪙 Pomels !</strong>`);
       pmSavePlayer(player);
       bs.ended = true;
       pmSaveNow();
@@ -7287,9 +7714,10 @@ function pmRenderBattleEnd(bs) {
     }
   } else if (bs.mode === 'gym') {
     if (o.ko) {
+      const reward = pmGetGymReward(bs.gym);
       html += `
         <div class="pm-result-title win">🏆 Arène vaincue !</div>
-        <div class="pm-reward">+${PM_REWARD_GYM} 🪙 + Badge ${PM_TYPE_LABEL[bs.gym.id]}</div>
+        <div class="pm-reward">+${reward} 🪙 + Badge ${bs.gym.name}</div>
         <button class="btn-primary" onclick="pmGoTo('home')">Retour à l'accueil</button>
       `;
     } else {
