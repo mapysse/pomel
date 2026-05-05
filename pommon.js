@@ -82,10 +82,8 @@ const PM_LEVEL_BONUS = 0.05;    // +5% par niveau
 const PM_STAGE_MULT = [0.35, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75];
 
 // Limites quotidiennes
-// Limites quotidiennes
-// ⚠ MODE DEBUG : limites élevées pour tester. Remettre à 3/1/5 avant la prod !
-const PM_DAILY_WILD = 25;
-const PM_DAILY_GYM_WINS = 7;
+
+const PM_DAILY_GYM_WINS = 1;  // 1 arène battue par jour max
 const PM_DAILY_LEAGUE = 20;
 
 // Brûlure
@@ -1549,6 +1547,8 @@ function pmInjectStyles() {
     .pm-collection-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; transition:all .15s; min-width:0; }
     .pm-collection-card:hover { border-color:var(--primary); transform:translateY(-1px); }
     .pm-collection-card.in-team { border-color:var(--green); }
+    .pm-collection-card.pm-coll-unknown { opacity:0.6; cursor:default; filter:grayscale(1); }
+    .pm-collection-card.pm-coll-unknown:hover { border-color:var(--border); transform:none; }
     .pm-collection-name { font-size:.88rem; font-weight:700; text-align:center; }
     .pm-collection-level { font-size:.72rem; color:var(--muted); font-family:'Space Mono',monospace; }
     .pm-coll-lore { font-size:.72rem; color:var(--text); opacity:.8; font-style:italic; text-align:center; line-height:1.35; padding:4px 6px; }
@@ -2150,10 +2150,7 @@ function pmRenderMap() {
   if (labelEl) labelEl.textContent = label || 'Pomel World';
 
   const hudEl = document.getElementById('pm-map-hud');
-  if (hudEl) {
-    const player = pmGetPlayer();
-    hudEl.textContent = `🌿 ${Math.max(0, PM_DAILY_WILD - player.dailyWildCount)}/${PM_DAILY_WILD}`;
-  }
+  if (hudEl) hudEl.textContent = '';
 }
 
 // ── Mouvement & interactions ──
@@ -2176,13 +2173,10 @@ function pmMapTryMove(dr, dc) {
   if (cell === 1) {
     const zone = pmGetZoneAt(nr, nc);
     if (zone && Math.random() < PM_ENCOUNTER_CHANCE) {
-      const player = pmGetPlayer();
-      if (player.dailyWildCount < PM_DAILY_WILD) {
-        _pmPendingZoneEncounter = zone;
-        pmStopMap();
-        pmGoTo('wild');
-        return;
-      }
+      _pmPendingZoneEncounter = zone;
+      pmStopMap();
+      pmGoTo('wild');
+      return;
     }
   }
 
@@ -2205,7 +2199,7 @@ function _pmShowCentreMenu() {
       <div class="pm-card">
         <div style="display:flex; flex-direction:column; gap:10px;">
           <button class="btn-primary" onclick="pmGoTo('team')">🔄 Gérer l'équipe</button>
-          <button class="btn-primary" onclick="pmGoTo('collection')" style="background:var(--yellow); color:#000;">📚 Collection (${player.collection.length} PokePoms)</button>
+          <button class="btn-primary" onclick="pmGoTo('collection')" style="background:var(--yellow); color:#000;">📚 PomeDex (${player.collection.length}/25)</button>
           <button class="btn-outline" onclick="pmGoTo('info')">📖 Infos & Guide</button>
         </div>
       </div>
@@ -2286,7 +2280,7 @@ function pmRenderHome(page, player) {
       <div class="pm-header" style="margin-bottom:0;">
         <div>
           <div class="pm-title">🐾 PokePom</div>
-          <div class="pm-sub">${player.collection.length} capturés · ${badgeCount}/7 badges</div>
+          <div class="pm-sub">PomeDex ${player.collection.length}/25 · ${badgeCount}/7 badges</div>
         </div>
         <span id="pm-map-hud" style="font-size:.75rem; color:var(--muted); background:var(--surface2); padding:4px 10px; border-radius:6px; font-family:'Space Mono',monospace;"></span>
       </div>
@@ -2440,7 +2434,7 @@ function pmRenderInfo(page, player) {
           <div><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#3a2a40; vertical-align:middle; margin-right:6px;"></span><strong>Grotte du Crépuscule</strong> (bas-droite) — Ombre 🌑 uniquement. Chance rare de légendaire.</div>
         </div>
         <div style="margin-top:8px; padding:10px 14px; background:var(--surface2); border-radius:8px; font-size:.78rem; color:var(--muted); line-height:1.5;">
-          Tu as <strong>${PM_DAILY_WILD} rencontres sauvages par jour</strong>. Choisis bien dans quelle zone tu chasses ! Le nombre de combats restants est affiché en haut de la map.
+          Choisis bien dans quelle zone tu chasses selon les types que tu veux capturer !
         </div>
       </div>
 
@@ -2517,7 +2511,7 @@ function pmRenderInfo(page, player) {
       <div class="pm-card">
         <h3 style="font-size:.85rem; font-weight:700; color:var(--primary); margin-bottom:10px;">🎮 Modes de jeu</h3>
         <div style="display:flex; flex-direction:column; gap:8px; font-size:.85rem; line-height:1.6; color:var(--text);">
-          <div><strong>🌿 Combat sauvage</strong> — Affronte un PokePom aléatoire. Tu peux le capturer si tu le bats ! (${PM_DAILY_WILD} combats/jour)</div>
+          <div><strong>🌿 Combat sauvage</strong> — Affronte un PokePom aléatoire. Tu peux le capturer si tu le bats !</div>
           <div><strong>🏆 Arènes</strong> — 7 arènes de type, chacune avec un champion. Bats-les tous pour débloquer la Ligue ! (${PM_DAILY_GYM_WINS} victoire/jour)</div>
           <div><strong>⭐ Ligue PokePom</strong> — Enchaîne des combats contre des adversaires de plus en plus forts. Nécessite 7 badges. (${PM_DAILY_LEAGUE} runs/jour)</div>
         </div>
@@ -2604,13 +2598,15 @@ function pmRenderTeamManager(page, player) {
   });
 }
 
-// ── Écran « Collection » : sprite + type + lore, focus encyclopédique ──
+// ── Écran « PomeDex » : sprite + type + lore, focus encyclopédique ──
 function pmRenderCollection(page, player) {
+  const capturedIds = new Set(player.collection.map(i => i.pokepomId));
+
   page.innerHTML = `
     <div class="pm-wrap">
       <div class="pm-header">
         <div>
-          <div class="pm-title">📚 Collection</div>
+          <div class="pm-title">📚 PomeDex</div>
           <div class="pm-sub">${player.collection.length}/25 PokePoms capturés</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
@@ -2622,22 +2618,54 @@ function pmRenderCollection(page, player) {
   `;
 
   const grid = document.getElementById('pm-coll-grid');
-  player.collection.forEach(inst => {
-    const base = PM_DEX[inst.pokepomId];
-    const inTeam = player.team.includes(inst.uid);
+
+  // Afficher tous les Pokepoms du Dex (capturés + non capturés)
+  Object.values(PM_DEX).forEach(base => {
+    const captured = capturedIds.has(base.id);
+    const inst = captured ? player.collection.find(i => i.pokepomId === base.id) : null;
+    const inTeam = inst ? player.team.includes(inst.uid) : false;
     const card = document.createElement('div');
-    card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '');
-    // Dans la collection, clic = toggle équipe aussi (pour rester pratique)
-    card.onclick = () => pmToggleTeam(inst.uid);
-    card.innerHTML = `
-      <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-${inst.uid}"></canvas>
-      <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}${base.legendary ? ' ✦' : ''}</div>
-      <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]} ${PM_TYPE_LABEL[base.type]}</span>
-      <div class="pm-collection-level">Niv ${inst.level}${base.legendary ? ' · Légendaire' : ''}</div>
-      ${base.lore ? `<div class="pm-coll-lore">${base.lore}</div>` : ''}
-    `;
-    grid.appendChild(card);
-    setTimeout(() => drawPokePom(document.getElementById('pm-coll-' + inst.uid), inst.pokepomId), 10);
+
+    if (captured) {
+      card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '');
+      card.onclick = () => pmToggleTeam(inst.uid);
+      card.innerHTML = `
+        <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-${inst.uid}"></canvas>
+        <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}${base.legendary ? ' ✦' : ''}</div>
+        <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]} ${PM_TYPE_LABEL[base.type]}</span>
+        <div class="pm-collection-level">Niv ${inst.level}${base.legendary ? ' · Légendaire' : ''}</div>
+        ${base.lore ? `<div class="pm-coll-lore">${base.lore}</div>` : ''}
+      `;
+      grid.appendChild(card);
+      setTimeout(() => drawPokePom(document.getElementById('pm-coll-' + inst.uid), base.id), 10);
+    } else {
+      // Non capturé : silhouette noire + nom ???
+      card.className = 'pm-collection-card pm-coll-unknown';
+      card.innerHTML = `
+        <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-unk-${base.id}"></canvas>
+        <div class="pm-collection-name">???</div>
+        <span class="pm-type-badge" style="background:#555;">? Inconnu</span>
+        <div class="pm-collection-level">Non capturé</div>
+      `;
+      grid.appendChild(card);
+      // Dessiner le sprite puis appliquer le filtre silhouette
+      setTimeout(() => {
+        const canvas = document.getElementById('pm-coll-unk-' + base.id);
+        if (!canvas) return;
+        drawPokePom(canvas, base.id);
+        setTimeout(() => {
+          const ctx = canvas.getContext('2d');
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] > 0) { // pixel non transparent
+              d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; // tout en noir
+            }
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }, 50);
+      }, 10);
+    }
   });
 }
 
@@ -2665,21 +2693,6 @@ function pmToggleTeam(uid) {
 
 // ── Écran combat sauvage (avant combat) ──
 function pmRenderWildBattle(page, player) {
-  if (player.dailyWildCount >= PM_DAILY_WILD) {
-    page.innerHTML = `
-      <div class="pm-wrap">
-        <div class="pm-header">
-          <div>
-            <div class="pm-title">🌿 Combats sauvages</div>
-            <div class="pm-sub">Limite quotidienne atteinte — reviens demain !</div>
-          </div>
-          <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
   const team = pmGetTeam(player);
   if (team.length === 0) {
     page.innerHTML = `
@@ -2703,7 +2716,6 @@ function pmRenderWildBattle(page, player) {
       <div class="pm-header">
         <div>
           <div class="pm-title">🌿 Combat sauvage</div>
-          <div class="pm-sub">${PM_DAILY_WILD - player.dailyWildCount}/${PM_DAILY_WILD} rencontres restantes aujourd'hui</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
@@ -2777,7 +2789,7 @@ function pmRenderGyms(page, player) {
       <div class="pm-header">
         <div>
           <div class="pm-title">🏆 Arènes</div>
-          <div class="pm-sub">${player.badges.length}/7 badges · ${player.dailyGymWins >= PM_DAILY_GYM_WINS ? 'Tu as déjà gagné une arène aujourd\'hui' : 'Tentatives illimitées aujourd\'hui (1 victoire max)'}</div>
+          <div class="pm-sub">${player.badges.length}/7 badges · ${player.dailyGymWins >= PM_DAILY_GYM_WINS ? '⛔ Reviens demain — 1 arène battue max par jour' : '✅ Tu peux battre 1 arène aujourd\'hui'}</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
@@ -2812,7 +2824,7 @@ function pmStartGymBattle(gym) {
   const player = pmGetPlayer();
   if (player.badges.includes(gym.id)) return;
   if (player.dailyGymWins >= PM_DAILY_GYM_WINS) {
-    if (typeof showToast === 'function') showToast('Tu as déjà gagné une arène aujourd\'hui !', '⚠️');
+    if (typeof showToast === 'function') showToast('Tu as déjà battu une arène aujourd\'hui ! Reviens demain. 🕐', '⚠️');
     return;
   }
 
