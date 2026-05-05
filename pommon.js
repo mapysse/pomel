@@ -3635,6 +3635,24 @@ function pmNormalizePlayer(data) {
     data.badges = Object.values(data.badges);
   }
   if (!Array.isArray(data.badges)) data.badges = [];
+  // Badges R2 (étape 6)
+  if (data.badgesR2 && !Array.isArray(data.badgesR2)) {
+    data.badgesR2 = Object.values(data.badgesR2);
+  }
+  if (!Array.isArray(data.badgesR2)) data.badgesR2 = [];
+  // PomeDex étendu : trace des PokePoms RENCONTRÉS (capturés ou évolués depuis).
+  // Permet de garder la forme de base au PomeDex après évolution. Pour les
+  // anciens players, on initialise à partir de leur collection actuelle.
+  if (data.dexSeen && !Array.isArray(data.dexSeen)) {
+    data.dexSeen = Object.values(data.dexSeen);
+  }
+  if (!Array.isArray(data.dexSeen)) {
+    data.dexSeen = (data.collection || []).map(i => i.pokepomId);
+  }
+  // Backfill : s'il y a une instance dans collection dont l'id n'est pas dans dexSeen, l'ajouter
+  (data.collection || []).forEach(i => {
+    if (i.pokepomId && !data.dexSeen.includes(i.pokepomId)) data.dexSeen.push(i.pokepomId);
+  });
   // Valeurs numériques par défaut
   data.dailyWildCount   = data.dailyWildCount   || 0;
   data.dailyGymWins     = data.dailyGymWins     || 0;
@@ -3828,6 +3846,22 @@ function pmCheckAndApplyEvolution(instance) {
   const oldId = instance.pokepomId;
   instance.pokepomId = evoId;
   delete instance.pendingEvolution;
+
+  // PomeDex : marquer la NOUVELLE forme comme vue (la base reste vue puisqu'elle
+  // a été ajoutée à dexSeen au moment de la capture initiale, et qu'on ne retire
+  // jamais d'entrées du PomeDex).
+  try {
+    const player = (typeof pmGetPlayer === 'function') ? pmGetPlayer() : null;
+    if (player) {
+      if (!player.dexSeen) player.dexSeen = [];
+      if (!player.dexSeen.includes(evoId)) {
+        player.dexSeen.push(evoId);
+        // pmSavePlayer si dispo (pour persister immédiatement)
+        if (typeof pmSavePlayer === 'function') pmSavePlayer(player);
+      }
+    }
+  } catch (e) { /* sandbox/test env, on ignore */ }
+
   return { oldId, newId: evoId };
 }
 
@@ -4239,6 +4273,11 @@ function pmSetTeam(player, uids) {
 function pmAddToCollection(player, instance) {
   player.collection.push(instance);
   player.totalCaptures = (player.totalCaptures || 0) + 1;
+  // Marquer comme vu dans le PomeDex (idempotent)
+  if (!player.dexSeen) player.dexSeen = [];
+  if (instance.pokepomId && !player.dexSeen.includes(instance.pokepomId)) {
+    player.dexSeen.push(instance.pokepomId);
+  }
   pmSavePlayer(player);
 }
 
@@ -5684,8 +5723,8 @@ function pmShowR2LockedModal(currentBadges) {
   document.body.appendChild(overlay);
   document.getElementById('pm-r2-locked-close').addEventListener('click', () => {
     overlay.remove();
-    // Relancer la map si on était dessus
-    if (typeof pmStartMapLoop === 'function') pmStartMapLoop();
+    // Relancer la map (pmStopMap a été appelée avant le modal)
+    if (typeof pmStartMap === 'function') pmStartMap();
   });
 }
 
@@ -6249,14 +6288,26 @@ function pmRenderTeamManager(page, player) {
 
 // ── Écran « PomeDex » : sprite + type + lore, focus encyclopédique ──
 function pmRenderCollection(page, player) {
-  const capturedIds = new Set(player.collection.map(i => i.pokepomId));
+  // Set des PokePoms RENCONTRÉS (capturés + obtenus par évolution depuis).
+  // Une fois vu, un PokePom reste au PomeDex pour toujours, même si on n'a plus
+  // d'instance vivante de cette forme (cas évolution : la base disparaît du
+  // tableau collection mais reste au PomeDex).
+  const seenIds = new Set([
+    ...(player.dexSeen || []),
+    ...player.collection.map(i => i.pokepomId)
+  ]);
+  // Map id → première instance possédée (pour permettre les actions équipe)
+  const firstInstanceById = {};
+  player.collection.forEach(i => {
+    if (!firstInstanceById[i.pokepomId]) firstInstanceById[i.pokepomId] = i;
+  });
 
   page.innerHTML = `
     <div class="pm-wrap">
       <div class="pm-header">
         <div>
           <div class="pm-title">📚 PomeDex</div>
-          <div class="pm-sub">${player.collection.length}/${PM_DEX_IDS.length} PokePoms capturés</div>
+          <div class="pm-sub">${seenIds.size}/${PM_DEX_IDS.length} PokePoms découverts · ${player.collection.length} possédés</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
@@ -6268,33 +6319,40 @@ function pmRenderCollection(page, player) {
 
   const grid = document.getElementById('pm-coll-grid');
 
-  // Afficher tous les Pokepoms du Dex (capturés + non capturés)
+  // Afficher tous les PokePoms du Dex (vus + non vus)
   Object.values(PM_DEX).forEach(base => {
-    const captured = capturedIds.has(base.id);
-    const inst = captured ? player.collection.find(i => i.pokepomId === base.id) : null;
+    const seen = seenIds.has(base.id);
+    const inst = firstInstanceById[base.id]; // peut être undefined si forme évolutive perdue
+    const owned = !!inst;
     const inTeam = inst ? player.team.includes(inst.uid) : false;
     const card = document.createElement('div');
 
-    if (captured) {
-      card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '');
-      card.onclick = () => pmToggleTeam(inst.uid);
+    if (seen) {
+      // Vu — affichage complet (avec ou sans instance)
+      card.className = 'pm-collection-card' + (inTeam ? ' in-team' : '') + (owned ? '' : ' pm-coll-evolved-away');
+      // Cliquable seulement si on a encore une instance
+      if (owned) card.onclick = () => pmToggleTeam(inst.uid);
+      const slotId = inst ? inst.uid : 'seen-' + base.id;
+      const levelLine = owned
+        ? `Niv ${inst.level}${base.legendary ? ' · Légendaire' : ''}`
+        : (base.legendary ? 'Légendaire' : 'Vu (évolué)');
       card.innerHTML = `
-        <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-${inst.uid}"></canvas>
+        <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-${slotId}"></canvas>
         <div class="pm-collection-name">${base.name}${inTeam ? ' ✓' : ''}${base.legendary ? ' ✦' : ''}</div>
         <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[base.type]};">${PM_TYPE_EMOJI[base.type]} ${PM_TYPE_LABEL[base.type]}</span>
-        <div class="pm-collection-level">Niv ${inst.level}${base.legendary ? ' · Légendaire' : ''}</div>
+        <div class="pm-collection-level">${levelLine}</div>
         ${base.lore ? `<div class="pm-coll-lore">${base.lore}</div>` : ''}
       `;
       grid.appendChild(card);
-      setTimeout(() => drawPokePom(document.getElementById('pm-coll-' + inst.uid), base.id), 10);
+      setTimeout(() => drawPokePom(document.getElementById('pm-coll-' + slotId), base.id), 10);
     } else {
-      // Non capturé : silhouette noire + nom ???
+      // Non vu : silhouette noire + nom ???
       card.className = 'pm-collection-card pm-coll-unknown';
       card.innerHTML = `
         <canvas width="64" height="64" class="pm-sprite pm-sprite-md" id="pm-coll-unk-${base.id}"></canvas>
         <div class="pm-collection-name">???</div>
         <span class="pm-type-badge" style="background:#555;">? Inconnu</span>
-        <div class="pm-collection-level">Non capturé</div>
+        <div class="pm-collection-level">Non découvert</div>
       `;
       grid.appendChild(card);
       // Dessiner le sprite puis appliquer le filtre silhouette
@@ -6823,6 +6881,8 @@ let _pmDojoSelectedUid = null;
 
 function pmRenderDojo(page, player) {
   // Header + intro
+  // NOTE : le Dojo utilise un thème "papier" (fond clair, texte sombre) avec des
+  // couleurs explicites partout pour rester lisible quel que soit le thème global.
   page.innerHTML = `
     <div class="pm-wrap">
       <div class="pm-header">
@@ -6833,16 +6893,16 @@ function pmRenderDojo(page, player) {
         <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
       </div>
 
-      <div class="pm-card">
-        <div style="font-style:italic; color:var(--muted); margin-bottom:12px; font-size:.92rem; line-height:1.5;">
+      <div class="pm-card" style="background:#f5edd6; color:#3a1a08; border:2px solid #5a3018;">
+        <div style="font-style:italic; color:#7a4828; margin-bottom:12px; font-size:.92rem; line-height:1.5;">
           « Au cœur des Terres de PomStud, ce Dojo enseigne des techniques que les sauvages
           ne connaissent pas. Choisis un disciple, choisis un art. »
         </div>
 
-        <div style="margin-bottom:8px; font-weight:bold;">1. Choisis un PokePom</div>
+        <div style="margin-bottom:8px; font-weight:bold; color:#3a1a08;">1. Choisis un PokePom</div>
         <div id="pm-dojo-team" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;"></div>
 
-        <div id="pm-dojo-detail"></div>
+        <div id="pm-dojo-detail" style="color:#3a1a08;"></div>
       </div>
     </div>
   `;
@@ -6853,7 +6913,7 @@ function pmRenderDojo(page, player) {
     .filter(Boolean);
 
   if (eligibleTeam.length === 0) {
-    teamEl.innerHTML = `<div style="color:var(--muted); font-size:.9rem;">Aucun PokePom dans ton équipe. Reviens après en avoir ajouté un.</div>`;
+    teamEl.innerHTML = `<div style="color:#7a4828; font-size:.9rem;">Aucun PokePom dans ton équipe. Reviens après en avoir ajouté un.</div>`;
     return;
   }
 
@@ -6870,18 +6930,19 @@ function pmRenderDojo(page, player) {
     card.style.cssText = `
       flex: 0 0 96px;
       padding: 8px;
-      background: ${isSelected ? '#3a3050' : 'var(--card-bg, #1f1a2a)'};
-      border: 2px solid ${isSelected ? '#9a7adc' : 'transparent'};
+      background: ${isSelected ? '#fff4d8' : '#e8d8a8'};
+      border: 2px solid ${isSelected ? '#a06028' : '#b89858'};
       border-radius: 10px;
       cursor: ${tooLow ? 'not-allowed' : 'pointer'};
-      opacity: ${tooLow ? 0.5 : 1};
+      opacity: ${tooLow ? 0.55 : 1};
       text-align: center;
       transition: background .15s, border-color .15s;
+      color: #3a1a08;
     `;
     card.innerHTML = `
       <canvas width="64" height="64" id="pm-dojo-sprite-${inst.uid}" style="image-rendering:pixelated; width:64px; height:64px;"></canvas>
-      <div style="font-size:.78rem; font-weight:bold; margin-top:4px;">${inst.nickname || base.name}</div>
-      <div style="font-size:.7rem; color:var(--muted);">Niv ${inst.level}</div>
+      <div style="font-size:.78rem; font-weight:bold; margin-top:4px; color:#3a1a08;">${inst.nickname || base.name}</div>
+      <div style="font-size:.7rem; color:#7a4828;">Niv ${inst.level}</div>
     `;
     if (!tooLow) {
       card.onclick = () => {
@@ -6890,7 +6951,6 @@ function pmRenderDojo(page, player) {
       };
     }
     teamEl.appendChild(card);
-    // Dessiner le sprite après insertion
     setTimeout(() => {
       const cv = document.getElementById(`pm-dojo-sprite-${inst.uid}`);
       if (cv) drawPokePom(cv, inst.pokepomId);
@@ -6911,7 +6971,7 @@ function pmRenderDojoDetail(player) {
   }
   if (inst.level < PM_DOJO_MIN_LEVEL) {
     detail.innerHTML = `
-      <div style="padding:16px; background:#3a2030; border-radius:8px; color:#ffaaaa;">
+      <div style="padding:16px; background:#f8e0d8; border:2px solid #a04040; border-radius:8px; color:#7a2020;">
         Ce PokePom doit atteindre le niveau ${PM_DOJO_MIN_LEVEL} avant d'apprendre au Dojo.
       </div>`;
     return;
@@ -6923,25 +6983,25 @@ function pmRenderDojoDetail(player) {
 
   // Section 1 : moves actuels
   let html = `
-    <div style="margin-bottom:8px; font-weight:bold;">2. Moves actuels de ${inst.nickname || base.name}</div>
+    <div style="margin-bottom:8px; font-weight:bold; color:#3a1a08;">2. Moves actuels de ${inst.nickname || base.name}</div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
   `;
   currentMoves.forEach((mid, idx) => {
     const m = PM_MOVES[mid];
     if (!m) return;
     html += `
-      <div style="padding:8px; background:var(--card-bg, #1f1a2a); border-left:3px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:4px;">
-        <div style="font-weight:bold; font-size:.85rem;">${PM_TYPE_EMOJI[m.type] || ''} ${m.name}</div>
-        <div style="font-size:.72rem; color:var(--muted);">${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP</div>
+      <div style="padding:8px; background:#fbf3da; border:1px solid #c8b07a; border-left:4px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:4px; color:#3a1a08;">
+        <div style="font-weight:bold; font-size:.85rem; color:#3a1a08;">${PM_TYPE_EMOJI[m.type] || ''} ${m.name}</div>
+        <div style="font-size:.72rem; color:#7a4828;">${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP</div>
       </div>
     `;
   });
   html += `</div>`;
 
   // Section 2 : moves apprenables
-  html += `<div style="margin-bottom:8px; font-weight:bold;">3. Moves disponibles au Dojo</div>`;
+  html += `<div style="margin-bottom:8px; font-weight:bold; color:#3a1a08;">3. Moves disponibles au Dojo</div>`;
   if (learnable.length === 0) {
-    html += `<div style="padding:12px; color:var(--muted); font-style:italic;">Ce PokePom connaît déjà tous les moves disponibles dans son catalogue.</div>`;
+    html += `<div style="padding:12px; color:#7a4828; font-style:italic;">Ce PokePom connaît déjà tous les moves disponibles dans son catalogue.</div>`;
   } else {
     const balance = (typeof state !== 'undefined' && state) ? (state.balance || 0) : 0;
     html += `<div style="display:grid; grid-template-columns:1fr; gap:8px;">`;
@@ -6952,25 +7012,25 @@ function pmRenderDojoDetail(player) {
       const canAfford = balance >= cost;
       const isSignature = m.dojoOnly;
       html += `
-        <div style="padding:10px; background:var(--card-bg, #1f1a2a); border-left:4px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; display:flex; gap:12px; align-items:center;">
+        <div style="padding:10px; background:#fbf3da; border:1px solid #c8b07a; border-left:5px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; display:flex; gap:12px; align-items:center; color:#3a1a08;">
           <div style="flex:1; min-width:0;">
-            <div style="font-weight:bold; font-size:.92rem;">
+            <div style="font-weight:bold; font-size:.92rem; color:#3a1a08;">
               ${PM_TYPE_EMOJI[m.type] || ''} ${m.name}
-              ${isSignature ? '<span style="font-size:.7rem; color:#ffcc44; margin-left:6px;">★ Signature</span>' : ''}
+              ${isSignature ? '<span style="font-size:.7rem; color:#a87000; margin-left:6px;">★ Signature</span>' : ''}
             </div>
-            <div style="font-size:.78rem; color:var(--muted); margin-top:2px;">
+            <div style="font-size:.78rem; color:#7a4828; margin-top:2px;">
               ${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP
             </div>
-            <div style="font-size:.78rem; margin-top:4px; line-height:1.3;">${m.desc || ''}</div>
+            <div style="font-size:.78rem; margin-top:4px; line-height:1.3; color:#3a1a08;">${m.desc || ''}</div>
           </div>
           <div style="flex:0 0 auto; text-align:right;">
-            <div style="font-weight:bold; color:${canAfford ? '#ffcc44' : '#888'}; margin-bottom:4px;">
+            <div style="font-weight:bold; color:${canAfford ? '#a06000' : '#a08068'}; margin-bottom:4px;">
               ${cost} 🪙
             </div>
             <button
               ${canAfford ? '' : 'disabled'}
               onclick="pmDojoStartLearning('${inst.uid}', '${mid}')"
-              style="padding:6px 12px; background:${canAfford ? '#9a7adc' : '#444'}; color:#fff; border:none; border-radius:6px; font-family:inherit; font-size:.8rem; cursor:${canAfford ? 'pointer' : 'not-allowed'};">
+              style="padding:6px 12px; background:${canAfford ? '#7a4828' : '#aaa'}; color:#fff; border:none; border-radius:6px; font-family:inherit; font-size:.8rem; font-weight:bold; cursor:${canAfford ? 'pointer' : 'not-allowed'};">
               Apprendre
             </button>
           </div>
@@ -6978,7 +7038,7 @@ function pmRenderDojoDetail(player) {
       `;
     });
     html += `</div>`;
-    html += `<div style="margin-top:12px; font-size:.82rem; color:var(--muted); text-align:right;">Solde : <strong>${balance} 🪙 Pomels</strong></div>`;
+    html += `<div style="margin-top:12px; font-size:.82rem; color:#7a4828; text-align:right;">Solde : <strong style="color:#a06000;">${balance} 🪙 Pomels</strong></div>`;
   }
 
   detail.innerHTML = html;
@@ -7017,11 +7077,11 @@ function pmDojoStartLearning(instanceUid, newMoveId) {
     if (!m) return;
     movesHtml += `
       <button class="pm-replace-slot" data-slot="${idx}"
-        style="text-align:left; padding:10px 12px; background:var(--card-bg, #1f1a2a); border:2px solid transparent; border-left:3px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; cursor:pointer; color:#fff; font-family:inherit;">
-        <div style="font-weight:bold; font-size:.92rem;">
+        style="text-align:left; padding:10px 12px; background:#fbf3da; border:2px solid #c8b07a; border-left:5px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; cursor:pointer; color:#3a1a08; font-family:inherit; transition:background .15s, border-color .15s;">
+        <div style="font-weight:bold; font-size:.92rem; color:#3a1a08;">
           ${PM_TYPE_EMOJI[m.type] || ''} ${m.name}
         </div>
-        <div style="font-size:.74rem; color:var(--muted);">
+        <div style="font-size:.74rem; color:#7a4828;">
           ${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}% · ${m.pp}PP
         </div>
       </button>
@@ -7029,18 +7089,18 @@ function pmDojoStartLearning(instanceUid, newMoveId) {
   });
 
   overlay.innerHTML = `
-    <div style="background:#2a2238; border:2px solid #9a7adc; border-radius:12px; padding:20px; max-width:480px; width:100%; color:#fff;">
-      <div style="font-size:1.1rem; font-weight:bold; margin-bottom:8px;">
-        Apprendre <span style="color:#ffcc44;">${newMove.name}</span> ?
+    <div style="background:#f5edd6; border:3px solid #5a3018; border-radius:12px; padding:20px; max-width:480px; width:100%; color:#3a1a08; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+      <div style="font-size:1.1rem; font-weight:bold; margin-bottom:8px; color:#3a1a08;">
+        Apprendre <span style="color:#a06000;">${newMove.name}</span> ?
       </div>
-      <div style="font-size:.85rem; color:var(--muted); margin-bottom:14px;">
+      <div style="font-size:.85rem; color:#7a4828; margin-bottom:14px;">
         Quel move ${inst.nickname || PM_DEX[inst.pokepomId].name} doit-il oublier ?
       </div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
         ${movesHtml}
       </div>
       <div style="display:flex; gap:8px; margin-top:16px;">
-        <button id="pm-dojo-cancel" style="flex:1; padding:10px; background:#444; color:#fff; border:none; border-radius:8px; font-family:inherit; font-weight:bold; cursor:pointer;">Annuler</button>
+        <button id="pm-dojo-cancel" style="flex:1; padding:10px; background:#a08068; color:#fff; border:none; border-radius:8px; font-family:inherit; font-weight:bold; cursor:pointer;">Annuler</button>
       </div>
     </div>
   `;
@@ -7049,8 +7109,8 @@ function pmDojoStartLearning(instanceUid, newMoveId) {
   // Handlers
   document.getElementById('pm-dojo-cancel').onclick = () => overlay.remove();
   overlay.querySelectorAll('.pm-replace-slot').forEach(btn => {
-    btn.onmouseenter = () => { btn.style.borderColor = '#9a7adc'; };
-    btn.onmouseleave = () => { btn.style.borderColor = 'transparent'; };
+    btn.onmouseenter = () => { btn.style.borderColor = '#a06028'; btn.style.background = '#fff4d8'; };
+    btn.onmouseleave = () => { btn.style.borderColor = '#c8b07a'; btn.style.background = '#fbf3da'; };
     btn.onclick = () => {
       const slot = parseInt(btn.dataset.slot, 10);
       pmDojoConfirmLearn(instanceUid, newMoveId, slot, overlay);
