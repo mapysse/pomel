@@ -157,6 +157,49 @@ const PM_BURN_DURATION = 3;
 const PM_REWARD_GYM = 1000;
 const PM_REWARD_LEAGUE_PER_WIN = 50;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PvP — combats multijoueurs synchrones
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ELO et paliers
+const PM_ELO_START = 1000;          // ELO de départ pour tout nouveau joueur
+const PM_ELO_K = 32;                // K-factor (ampleur des changements ELO)
+
+// Paliers ELO et leurs seuils (ascendant : minElo inclusif)
+// On les classe dans l'ordre pour faciliter la recherche du tier d'un ELO donné.
+const PM_ELO_TIERS = [
+  { id: 'debutant',  label: 'Débutant',  minElo: 0,    color: '#a8a8a8', emoji: '🌱' },
+  { id: 'novice',    label: 'Novice',    minElo: 800,  color: '#88c850', emoji: '🌿' },
+  { id: 'confirme',  label: 'Confirmé',  minElo: 1100, color: '#3890f8', emoji: '⚔️' },
+  { id: 'champion',  label: 'Champion',  minElo: 1400, color: '#a060c8', emoji: '🏆' },
+  { id: 'maitre',    label: 'Maître',    minElo: 1700, color: '#f0a830', emoji: '👑' }
+];
+
+// Récompenses Pomels par tier (modéré, validé)
+const PM_PVP_REWARDS = {
+  debutant:  { win: 200,  loss: 50  },
+  novice:    { win: 350,  loss: 75  },
+  confirme:  { win: 500,  loss: 100 },
+  champion:  { win: 700,  loss: 150 },
+  maitre:    { win: 1000, loss: 200 }
+};
+
+// Timing
+const PM_PVP_TURN_TIMEOUT_MS = 60 * 60 * 1000;   // 1 heure par tour, défaite si dépassé
+const PM_PVP_LISTING_LIMIT = 50;                 // max 50 joueurs affichés dans la liste
+
+// Soin auto avant chaque combat PvP : true (validé)
+const PM_PVP_HEAL_BEFORE = true;
+
+// Récompenses hebdomadaires basées sur le classement ELO :
+//   Top 1 : 2000, Top 2 : 1500, Top 3 : 1000, le reste : 500
+// Distribuées chaque lundi à 9h. NE réinitialise PAS l'ELO (cumulatif).
+const PM_PVP_WEEKLY_PRIZES = [2000, 1500, 1000];
+const PM_PVP_WEEKLY_CONSOLATION = 500;
+// Le LB est dérivé du nœud pokepom_pvp directement (pas de LB séparé)
+// On utilise un nœud "distributed" pour garantir l'idempotence de la distribution
+const PM_PVP_DISTRIBUTED_PATH = 'pokepom_pvp_distributed';
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    2. DONNÉES POMMONS (25 créatures)
@@ -3917,6 +3960,287 @@ function pmDojoLearnMove(player, instanceUid, newMoveId, replaceSlotIdx) {
   return { ok: true, oldMoveId, newMoveId };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PvP — Helpers ELO et profil
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Renvoie le tier (objet de PM_ELO_TIERS) correspondant à une valeur ELO.
+// Recherche descendante : on prend le plus haut tier dont minElo <= elo.
+function pmEloTier(elo) {
+  for (let i = PM_ELO_TIERS.length - 1; i >= 0; i--) {
+    if (elo >= PM_ELO_TIERS[i].minElo) return PM_ELO_TIERS[i];
+  }
+  return PM_ELO_TIERS[0];
+}
+
+// Calcule la variation ELO selon la formule classique.
+//   - myElo : ELO actuel du joueur
+//   - oppElo : ELO de l'adversaire
+//   - win : true si le joueur a gagné, false sinon
+// Retourne le nouveau ELO (entier, plancher à 0).
+//
+// Formule : expected = 1 / (1 + 10^((oppElo - myElo) / 400))
+//           change = K * (actual - expected)
+//           où actual = 1.0 si victoire, 0.0 si défaite
+function pmEloCalc(myElo, oppElo, win) {
+  const expected = 1 / (1 + Math.pow(10, (oppElo - myElo) / 400));
+  const actual = win ? 1.0 : 0.0;
+  const change = Math.round(PM_ELO_K * (actual - expected));
+  return Math.max(0, myElo + change);
+}
+
+// Calcule la récompense Pomels selon le tier ACTUEL du joueur (avant maj ELO).
+// On utilise le tier d'avant pour qu'un débutant qui passe novice à la victoire
+// ne touche pas la récompense novice "rétroactivement".
+function pmEloReward(tierId, win) {
+  const r = PM_PVP_REWARDS[tierId] || PM_PVP_REWARDS.debutant;
+  return win ? r.win : r.loss;
+}
+
+// Profil PvP par défaut pour un nouveau joueur (jamais joué de combat PvP).
+function pmCreatePvpProfile(code, displayName, avatarId) {
+  return {
+    code: code,
+    displayName: displayName || code,
+    avatarId: avatarId || 'avatar_classic',
+    elo: PM_ELO_START,
+    wins: 0,
+    losses: 0,
+    abandons: 0,
+    currentBattleId: null,
+    teamSnapshot: null,           // équipe figée pour affichage côté liste
+    lastSeen: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+}
+
+// Normalise un profil PvP venant de Firebase (peut être incomplet selon âge)
+function pmNormalizePvpProfile(data, code) {
+  if (!data) return pmCreatePvpProfile(code);
+  const profile = { ...data };
+  if (typeof profile.elo !== 'number') profile.elo = PM_ELO_START;
+  if (typeof profile.wins !== 'number') profile.wins = 0;
+  if (typeof profile.losses !== 'number') profile.losses = 0;
+  if (typeof profile.abandons !== 'number') profile.abandons = 0;
+  if (!profile.lastSeen) profile.lastSeen = new Date().toISOString();
+  if (!profile.createdAt) profile.createdAt = profile.lastSeen;
+  if (!profile.code) profile.code = code;
+  if (!profile.displayName) profile.displayName = code;
+  return profile;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Firebase I/O pour PvP
+// ─────────────────────────────────────────────────────────────────────
+// Structure :
+//   pokepom_pvp/{code}     → profil PvP (ELO, stats, équipe snapshot, combat actif)
+//   pokepom_battles/{id}   → état complet d'un combat en cours
+//
+// Le polling Firebase est à la charge de l'écran de combat (dbGet périodique).
+
+const PM_PVP_PATH = 'pokepom_pvp';
+const PM_PVP_BATTLES_PATH = 'pokepom_battles';
+
+// Cache du profil PvP du joueur courant (évite multiples roundtrips)
+let _pmPvpProfileCache = null;
+let _pmPvpProfileLoaded = false;
+
+// Charge le profil PvP du joueur courant. Crée s'il n'existe pas.
+async function pmLoadPvpProfile() {
+  if (typeof dbGet !== 'function' || !state || !state.code) return null;
+  const path = PM_PVP_PATH + '/' + state.code;
+  try {
+    const data = await dbGet(path);
+    if (data) {
+      _pmPvpProfileCache = pmNormalizePvpProfile(data, state.code);
+    } else {
+      // Premier accès → crée le profil
+      _pmPvpProfileCache = pmCreatePvpProfile(
+        state.code,
+        (state.name || state.code),
+        _pmMapAvatar || 'avatar_classic'
+      );
+      // Sauvegarde immédiate
+      if (typeof dbSet === 'function') {
+        await dbSet(path, _pmPvpProfileCache);
+      }
+    }
+  } catch (e) {
+    console.error('[pokepom-pvp] loadProfile', e);
+    _pmPvpProfileCache = null;
+  }
+  _pmPvpProfileLoaded = true;
+  return _pmPvpProfileCache;
+}
+
+// Met à jour le profil PvP du joueur courant (full overwrite)
+async function pmSavePvpProfile(profile) {
+  if (typeof dbSet !== 'function' || !profile || !profile.code) return;
+  _pmPvpProfileCache = profile;
+  try {
+    await dbSet(PM_PVP_PATH + '/' + profile.code, profile);
+  } catch (e) {
+    console.error('[pokepom-pvp] saveProfile', e);
+  }
+}
+
+// Met à jour le snapshot d'équipe du joueur courant pour qu'il soit visible
+// dans la liste PvP (toujours à jour quand on accède au menu PvP).
+function pmBuildTeamSnapshot(player) {
+  const team = pmGetTeam(player);
+  return team.map(inst => ({
+    pokepomId: inst.pokepomId,
+    nickname: inst.nickname || PM_DEX[inst.pokepomId].name,
+    level: inst.level,
+    customMoves: Array.isArray(inst.customMoves) ? [...inst.customMoves] : null
+  }));
+}
+
+// Charge tous les profils PvP (pour la liste de défi).
+// Retourne un array trié par proximité ELO avec le joueur courant.
+async function pmLoadPvpList(myElo) {
+  if (typeof dbGet !== 'function') return [];
+  try {
+    const snap = await dbGet(PM_PVP_PATH);
+    if (!snap) return [];
+    const all = Object.values(snap)
+      .filter(p => p && p.code && (!state || p.code !== state.code)); // exclut moi-même
+    // Tri : ELO le plus proche en premier
+    all.sort((a, b) => Math.abs((a.elo || 1000) - myElo) - Math.abs((b.elo || 1000) - myElo));
+    return all.slice(0, PM_PVP_LISTING_LIMIT);
+  } catch (e) {
+    console.error('[pokepom-pvp] loadList', e);
+    return [];
+  }
+}
+
+// Lecture du profil PvP d'un autre joueur (par code)
+async function pmLoadOtherPvpProfile(code) {
+  if (typeof dbGet !== 'function' || !code) return null;
+  try {
+    const data = await dbGet(PM_PVP_PATH + '/' + code);
+    return data ? pmNormalizePvpProfile(data, code) : null;
+  } catch (e) {
+    console.error('[pokepom-pvp] loadOther', code, e);
+    return null;
+  }
+}
+
+// Lit l'état d'un combat (utilisé en polling)
+async function pmLoadBattle(battleId) {
+  if (typeof dbGet !== 'function' || !battleId) return null;
+  try {
+    return await dbGet(PM_PVP_BATTLES_PATH + '/' + battleId);
+  } catch (e) {
+    console.error('[pokepom-pvp] loadBattle', battleId, e);
+    return null;
+  }
+}
+
+// Écrit l'état complet d'un combat
+async function pmSaveBattle(battleId, battle) {
+  if (typeof dbSet !== 'function' || !battleId || !battle) return false;
+  try {
+    await dbSet(PM_PVP_BATTLES_PATH + '/' + battleId, battle);
+    return true;
+  } catch (e) {
+    console.error('[pokepom-pvp] saveBattle', battleId, e);
+    return false;
+  }
+}
+
+// Génère un id unique pour un combat
+function pmGenBattleId() {
+  return 'b_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Leaderboard PvP & distribution hebdomadaire
+// ─────────────────────────────────────────────────────────────────────
+
+// Clé de la semaine courante (lundi 00:00 → format YYYY-MM-DD)
+function getPmPvpWeekKey() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  const mon = new Date(now);
+  mon.setDate(now.getDate() + diff);
+  return mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+}
+
+// Récupère le top N joueurs par ELO (sert au leaderboard et à la distribution)
+async function pmLoadPvpLeaderboard(limit = 50) {
+  if (typeof dbGet !== 'function') return [];
+  try {
+    const snap = await dbGet(PM_PVP_PATH);
+    if (!snap) return [];
+    // On exige au moins 1 partie jouée pour figurer (sinon tous les nouveaux comptes apparaissent à 1000 ELO)
+    const all = Object.values(snap).filter(p => p && p.code && ((p.wins || 0) + (p.losses || 0)) > 0);
+    all.sort((a, b) => (b.elo || 0) - (a.elo || 0));
+    return all.slice(0, limit);
+  } catch (e) {
+    console.error('[pokepom-pvp] loadLeaderboard', e);
+    return [];
+  }
+}
+
+// Vérifie si la distribution hebdo doit être faite et l'exécute (idempotent).
+// Pattern aligné sur checkPmLeagueWeeklyReset() :
+//   - Lundi >= 9h : on cible la semaine PRÉCÉDENTE
+//   - Verrou via dbSet pokepom_pvp_distributed/{weekKey} = true
+//   - Recheck après petit délai aléatoire pour éviter doubles distributions
+//     en cas d'ouverture simultanée par plusieurs joueurs
+//   - Distribution via distributeReliably (s'il existe côté Pomel)
+//   - PAS de reset des ELO (le classement reste cumulatif d'une semaine sur l'autre)
+async function checkPmPvpWeeklyReset() {
+  const now = new Date();
+  if (now.getDay() !== 1 || now.getHours() < 9) return;
+  // Calcul de la clé de la semaine PRÉCÉDENTE (à laquelle s'applique la distribution)
+  const prevMon = new Date(now);
+  prevMon.setDate(now.getDate() - 7);
+  const pDay = prevMon.getDay();
+  const pDiff = pDay === 0 ? -6 : 1 - pDay;
+  prevMon.setDate(prevMon.getDate() + pDiff);
+  const prevWeekKey = prevMon.getFullYear() + '-' + String(prevMon.getMonth()+1).padStart(2,'0') + '-' + String(prevMon.getDate()).padStart(2,'0');
+
+  if (typeof dbGet !== 'function' || typeof dbSet !== 'function') return;
+  // Verrou : déjà distribué ?
+  const distributed = await dbGet(PM_PVP_DISTRIBUTED_PATH + '/' + prevWeekKey);
+  if (distributed) return;
+  // Pose le verrou immédiatement
+  await dbSet(PM_PVP_DISTRIBUTED_PATH + '/' + prevWeekKey, true);
+  // Recheck après petit délai (anti-race basique)
+  await new Promise(r => setTimeout(r, 200 + Math.random() * 300));
+  const recheck = await dbGet(PM_PVP_DISTRIBUTED_PATH + '/' + prevWeekKey);
+  if (recheck !== true) return; // quelqu'un d'autre a déjà ramassé
+
+  // Récupère le snapshot des profils PvP au moment de la distribution
+  const snap = await dbGet(PM_PVP_PATH);
+  if (!snap) return;
+  // Tri par ELO (filtré : au moins 1 partie jouée pour figurer)
+  const entries = Object.values(snap)
+    .filter(e => e && e.code && ((e.wins || 0) + (e.losses || 0)) > 0)
+    .sort((a, b) => (b.elo || 0) - (a.elo || 0));
+  if (entries.length === 0) return;
+
+  if (typeof distributeReliably === 'function') {
+    await distributeReliably(entries.map((e, i) => {
+      const amount = i < 3 ? PM_PVP_WEEKLY_PRIZES[i] : PM_PVP_WEEKLY_CONSOLATION;
+      return {
+        code: e.code,
+        amount: amount,
+        historyEntry: {
+          type: 'pokepom_pvp',
+          desc: '⚔️ Classement hebdo PvP — #' + (i+1),
+          amount: amount,
+          date: new Date().toISOString()
+        }
+      };
+    }));
+  }
+  // Pas de reset des ELO : le classement continue
+}
+
 // Ajout d'XP et montée de niveau
 // Retourne { leveledUp: bool, evolved: bool, oldId: string|null, newId: string|null }
 // L'évolution est gérée ici pour qu'elle se déclenche systématiquement au passage de niveau
@@ -4653,6 +4977,9 @@ function pmRenderPage() {
     case 'league': pmRenderLeague(page, player); break;
     case 'battle': pmRenderBattle(page, player); break;
     case 'dojo': pmRenderDojo(page, player); break;
+    case 'pvp': pmRenderPvpHub(page, player); break;
+    case 'pvpList': pmRenderPvpList(page, player); break;
+    case 'pvpBattle': pmRenderPvpBattle(page, player); break;
     default: pmRenderHome(page, player);
   }
 
@@ -5996,6 +6323,9 @@ function pmRenderHome(page, player) {
         <div onclick="pmGoTo('info')" style="display:flex; align-items:center; gap:5px; font-size:.72rem; color:#fff; cursor:pointer; font-weight:700; background:var(--primary); padding:4px 12px; border-radius:6px; transition:all .2s;" onmouseenter="this.style.filter='brightness(1.15)'" onmouseleave="this.style.filter=''">
           📖 Infos & Guide
         </div>
+        <div onclick="pmGoTo('pvp')" style="display:flex; align-items:center; gap:5px; font-size:.72rem; color:#fff; cursor:pointer; font-weight:700; background:#a83838; padding:4px 12px; border-radius:6px; transition:all .2s;" onmouseenter="this.style.filter='brightness(1.15)'" onmouseleave="this.style.filter=''">
+          ⚔️ PvP
+        </div>
       </div>
 
       <div style="text-align:center; font-size:.65rem; color:var(--muted); margin-top:2px;">
@@ -7208,6 +7538,1365 @@ function pmShowDojoSuccess(inst, oldMove, newMove) {
   pmGoTo('dojo');
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PvP — Hub d'accueil
+// ═══════════════════════════════════════════════════════════════════════════
+// Cet écran affiche :
+//   - Le profil PvP du joueur (ELO, tier, stats victoires/défaites)
+//   - L'équipe actuelle (snapshot pour le PvP)
+//   - Un bouton pour voir la liste des joueurs et défier
+//   - Un bandeau "Combat en cours" si currentBattleId existe (reprise rapide)
+//
+// Charge async depuis Firebase. Pendant le load, affiche un spinner discret.
+
+async function pmRenderPvpHub(page, player) {
+  // Affichage initial (loading)
+  page.innerHTML = `
+    <div class="pm-wrap">
+      <div class="pm-header">
+        <div>
+          <div class="pm-title">⚔️ PvP — Combats classés</div>
+          <div class="pm-sub">Défie d'autres dresseurs et grimpe le classement</div>
+        </div>
+        <button class="btn-outline" onclick="pmGoTo('home')">← Retour</button>
+      </div>
+      <div class="pm-card" id="pm-pvp-hub-content" style="text-align:center; padding:40px 20px;">
+        <div style="color:var(--muted); font-size:.9rem;">Chargement de ton profil PvP...</div>
+      </div>
+    </div>
+  `;
+
+  const profile = await pmLoadPvpProfile();
+  if (!profile) {
+    const c = document.getElementById('pm-pvp-hub-content');
+    if (c) c.innerHTML = `<div style="color:#c84848; font-size:.9rem;">Impossible de charger le profil PvP. Connexion réseau ?</div>`;
+    return;
+  }
+
+  // Tentative de distribution hebdo (lundi >= 9h, idempotent côté serveur)
+  // Fire-and-forget : on ne bloque pas l'affichage du hub
+  checkPmPvpWeeklyReset().catch(() => {});
+
+  // Mise à jour du snapshot d'équipe à chaque visite du hub
+  const snapshot = pmBuildTeamSnapshot(player);
+  if (snapshot.length > 0) {
+    profile.teamSnapshot = snapshot;
+    profile.lastSeen = new Date().toISOString();
+    await pmSavePvpProfile(profile);
+  }
+
+  const tier = pmEloTier(profile.elo);
+  const totalGames = profile.wins + profile.losses;
+  const winRate = totalGames > 0 ? Math.round((profile.wins / totalGames) * 100) : 0;
+  // Progression vers le tier suivant
+  const tierIdx = PM_ELO_TIERS.findIndex(t => t.id === tier.id);
+  const nextTier = tierIdx < PM_ELO_TIERS.length - 1 ? PM_ELO_TIERS[tierIdx + 1] : null;
+  let progressHtml = '';
+  if (nextTier) {
+    const span = nextTier.minElo - tier.minElo;
+    const inTier = profile.elo - tier.minElo;
+    const pct = Math.min(100, Math.max(0, Math.round(inTier * 100 / span)));
+    progressHtml = `
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:.72rem; color:var(--muted); margin-bottom:4px;">
+          <span>${tier.label}</span>
+          <span>${profile.elo} / ${nextTier.minElo} ELO</span>
+          <span>${nextTier.label} ${nextTier.emoji}</span>
+        </div>
+        <div style="height:8px; background:var(--surface2); border-radius:4px; overflow:hidden;">
+          <div style="width:${pct}%; height:100%; background:${tier.color};"></div>
+        </div>
+      </div>
+    `;
+  } else {
+    progressHtml = `<div style="margin-top:12px; font-size:.78rem; text-align:center; color:${tier.color}; font-weight:bold;">★ Tier maximal atteint ★</div>`;
+  }
+
+  // Indicateur combat actif
+  let battleHtml = '';
+  if (profile.currentBattleId) {
+    battleHtml = `
+      <div style="margin-bottom:12px; padding:12px; background:#a83838; color:#fff; border-radius:8px; text-align:center; cursor:pointer;" onclick="pmGoTo('pvpBattle')">
+        ⚔️ <strong>Combat en cours !</strong> Clique pour le reprendre.
+      </div>
+    `;
+  }
+
+  // Équipe (snapshot)
+  let teamHtml = '';
+  if (snapshot.length === 0) {
+    teamHtml = `
+      <div style="padding:14px; background:#3a2030; color:#ffaaaa; border-radius:8px; margin-bottom:12px;">
+        ⚠️ Aucun PokePom dans ton équipe. Le PvP nécessite au moins 1 PokePom.
+      </div>
+    `;
+  } else {
+    teamHtml = `<div style="margin-bottom:8px; font-size:.78rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;">Ton équipe (snapshot pour le PvP)</div>`;
+    teamHtml += `<div style="display:flex; gap:8px; justify-content:center; margin-bottom:16px; flex-wrap:wrap;">`;
+    snapshot.forEach((s, i) => {
+      const base = PM_DEX[s.pokepomId];
+      teamHtml += `
+        <div style="text-align:center; padding:6px;">
+          <canvas width="64" height="64" id="pm-pvphub-${i}" style="image-rendering:pixelated; width:56px; height:56px;"></canvas>
+          <div style="font-size:.7rem; font-weight:bold;">${s.nickname}</div>
+          <div style="font-size:.65rem; color:var(--muted);">Niv ${s.level}</div>
+        </div>
+      `;
+    });
+    teamHtml += `</div>`;
+  }
+
+  const content = document.getElementById('pm-pvp-hub-content');
+  content.innerHTML = `
+    ${battleHtml}
+
+    <!-- Carte profil principale -->
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+      <div style="font-size:3rem; line-height:1;">${tier.emoji}</div>
+      <div style="flex:1; text-align:left;">
+        <div style="font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;">Ton rang</div>
+        <div style="font-size:1.4rem; font-weight:bold; color:${tier.color};">${tier.label}</div>
+        <div style="font-size:.85rem; color:var(--muted); font-family:'Space Mono',monospace;">${profile.elo} ELO</div>
+      </div>
+    </div>
+    ${progressHtml}
+
+    <!-- Stats -->
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:16px; margin-bottom:16px;">
+      <div style="text-align:center; padding:10px; background:var(--surface2); border-radius:6px;">
+        <div style="font-size:.7rem; color:var(--muted); text-transform:uppercase;">Victoires</div>
+        <div style="font-size:1.2rem; font-weight:bold; color:#88dd88;">${profile.wins}</div>
+      </div>
+      <div style="text-align:center; padding:10px; background:var(--surface2); border-radius:6px;">
+        <div style="font-size:.7rem; color:var(--muted); text-transform:uppercase;">Défaites</div>
+        <div style="font-size:1.2rem; font-weight:bold; color:#dd8888;">${profile.losses}</div>
+      </div>
+      <div style="text-align:center; padding:10px; background:var(--surface2); border-radius:6px;">
+        <div style="font-size:.7rem; color:var(--muted); text-transform:uppercase;">Win rate</div>
+        <div style="font-size:1.2rem; font-weight:bold;">${totalGames > 0 ? winRate + '%' : '—'}</div>
+      </div>
+    </div>
+
+    ${teamHtml}
+
+    <!-- Bouton défier -->
+    <button onclick="pmGoTo('pvpList')"
+      ${snapshot.length === 0 || profile.currentBattleId ? 'disabled' : ''}
+      style="width:100%; padding:14px; background:${snapshot.length === 0 || profile.currentBattleId ? '#555' : '#a83838'}; color:#fff; border:none; border-radius:8px; font-family:inherit; font-size:1rem; font-weight:bold; cursor:${snapshot.length === 0 || profile.currentBattleId ? 'not-allowed' : 'pointer'};">
+      ⚔️ Voir les joueurs à défier
+    </button>
+
+    <!-- Leaderboard hebdomadaire -->
+    <div style="margin-top:18px; padding:14px; background:var(--surface2); border:1px solid var(--border); border-radius:10px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div>
+          <div style="font-weight:bold; font-size:.95rem;">🏆 Classement hebdo PvP</div>
+          <div style="font-size:.7rem; color:var(--muted);">Récompenses chaque lundi 9h · Top 1 : 2000 🪙 · Top 2 : 1500 🪙 · Top 3 : 1000 🪙 · Autres : 500 🪙</div>
+        </div>
+      </div>
+      <div id="pm-pvp-lb-list" style="font-size:.85rem;">
+        <div style="color:var(--muted); font-size:.78rem; text-align:center; padding:10px;">Chargement du classement...</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px; font-size:.74rem; color:var(--muted); text-align:center; line-height:1.5;">
+      Combats synchrones · 1h par tour · Soin auto avant combat<br>
+      Récompense par combat : <strong>${PM_PVP_REWARDS[tier.id].win}</strong> Pomels en cas de victoire, <strong>${PM_PVP_REWARDS[tier.id].loss}</strong> en cas de défaite
+    </div>
+  `;
+
+  // Dessiner les sprites
+  setTimeout(() => {
+    snapshot.forEach((s, i) => {
+      const cv = document.getElementById('pm-pvphub-' + i);
+      if (cv) drawPokePom(cv, s.pokepomId);
+    });
+  }, 0);
+
+  // Charger le leaderboard async (ne bloque pas le rendu)
+  pmRenderPvpLeaderboard();
+}
+
+// Rendu du leaderboard PvP — affiche le top 10 par ELO
+async function pmRenderPvpLeaderboard() {
+  const list = document.getElementById('pm-pvp-lb-list');
+  if (!list || typeof dbGet !== 'function') {
+    if (list) list.innerHTML = '<div style="color:var(--muted); font-size:.78rem; text-align:center;">Classement indisponible.</div>';
+    return;
+  }
+  try {
+    const top = await pmLoadPvpLeaderboard(10);
+    if (top.length === 0) {
+      list.innerHTML = '<div style="color:var(--muted); font-size:.78rem; text-align:center; padding:10px;">Aucun joueur n\'a encore disputé de combat. Sois le premier !</div>';
+      return;
+    }
+    const medals = ['🥇', '🥈', '🥉'];
+    const myCode = state && state.code;
+    let html = '';
+    for (let i = 0; i < top.length; i++) {
+      const e = top[i];
+      const rank = i + 1;
+      const isMe = e.code === myCode;
+      const tier = pmEloTier(e.elo || 1000);
+      const safeName = typeof escapeHTML === 'function' ? escapeHTML(e.displayName || e.code) : (e.displayName || e.code).replace(/</g, '&lt;');
+      const prize = i < 3 ? PM_PVP_WEEKLY_PRIZES[i] : PM_PVP_WEEKLY_CONSOLATION;
+      html += `
+        <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isMe ? 'rgba(168,56,56,0.15)' : 'var(--card-bg, transparent)'}; border:1px solid ${isMe ? '#a83838' : 'var(--border)'}; border-radius:6px; margin-bottom:4px;">
+          <div style="font-weight:700; min-width:26px; font-size:.9rem;">${medals[i] || ('#' + rank)}</div>
+          <div style="font-size:1.1rem;">${tier.emoji}</div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600; font-size:.85rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${safeName}${isMe ? ' <span style="background:#a83838; color:#fff; padding:1px 6px; border-radius:100px; font-size:.6rem; margin-left:4px;">Moi</span>' : ''}</div>
+            <div style="font-size:.68rem; color:${tier.color}; font-weight:600;">${tier.label} · ${e.elo || 1000} ELO</div>
+          </div>
+          <div style="font-family:'Space Mono',monospace; font-weight:700; color:#a06000; font-size:.78rem; white-space:nowrap;">+${prize} 🪙</div>
+        </div>
+      `;
+    }
+    // Indication "tu n'es pas dans le top 10" si applicable
+    if (myCode && !top.some(e => e.code === myCode)) {
+      html += `<div style="margin-top:8px; padding:6px 10px; font-size:.74rem; color:var(--muted); text-align:center; font-style:italic;">Tu n'es pas dans le top 10 — gagne des combats pour grimper !</div>`;
+    }
+    list.innerHTML = html;
+  } catch (e) {
+    console.error('[pokepom-pvp] renderLeaderboard', e);
+    list.innerHTML = '<div style="color:#c84848; font-size:.78rem;">Erreur de chargement.</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PvP — Liste des joueurs à défier
+// ═══════════════════════════════════════════════════════════════════════════
+// Affiche tous les joueurs PvP triés par proximité ELO.
+// Indique pour chacun :
+//   - Tier + ELO
+//   - Stats (V/D)
+//   - État (libre / en combat)
+//   - Bouton "Défier"
+//
+// État global du load :
+let _pmPvpListCache = null;
+let _pmPvpListCacheTime = 0;
+
+async function pmRenderPvpList(page, player) {
+  page.innerHTML = `
+    <div class="pm-wrap">
+      <div class="pm-header">
+        <div>
+          <div class="pm-title">⚔️ Choisir un adversaire</div>
+          <div class="pm-sub">Joueurs triés par proximité de rang</div>
+        </div>
+        <button class="btn-outline" onclick="pmGoTo('pvp')">← Retour</button>
+      </div>
+      <div id="pm-pvp-list-content" class="pm-card">
+        <div style="color:var(--muted); font-size:.9rem; text-align:center; padding:20px;">Recherche des dresseurs...</div>
+      </div>
+    </div>
+  `;
+
+  // Charger mon profil pour avoir mon ELO
+  const me = await pmLoadPvpProfile();
+  if (!me) {
+    document.getElementById('pm-pvp-list-content').innerHTML =
+      `<div style="color:#c84848;">Impossible de charger ton profil.</div>`;
+    return;
+  }
+
+  // Vérifier que le joueur a une équipe
+  const team = pmGetTeam(player);
+  if (team.length === 0) {
+    document.getElementById('pm-pvp-list-content').innerHTML =
+      `<div style="padding:14px; background:#3a2030; color:#ffaaaa; border-radius:8px;">
+        Tu dois avoir au moins 1 PokePom dans ton équipe pour défier quelqu'un.
+      </div>`;
+    return;
+  }
+
+  // Charger la liste (avec cache 30s pour éviter spam)
+  const now = Date.now();
+  let list;
+  if (_pmPvpListCache && (now - _pmPvpListCacheTime) < 30000) {
+    list = _pmPvpListCache;
+  } else {
+    list = await pmLoadPvpList(me.elo);
+    _pmPvpListCache = list;
+    _pmPvpListCacheTime = now;
+  }
+
+  const content = document.getElementById('pm-pvp-list-content');
+  if (!list || list.length === 0) {
+    content.innerHTML = `
+      <div style="text-align:center; padding:30px 12px;">
+        <div style="font-size:2.5rem; margin-bottom:10px;">🔍</div>
+        <div style="font-weight:bold; margin-bottom:6px;">Aucun adversaire pour l'instant</div>
+        <div style="color:var(--muted); font-size:.85rem;">Sois le premier ! Tes amis te verront dès qu'ils ouvriront le PvP.</div>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `<div style="display:flex; flex-direction:column; gap:8px;">`;
+  list.forEach(p => {
+    const tier = pmEloTier(p.elo || 1000);
+    const total = (p.wins || 0) + (p.losses || 0);
+    const inBattle = !!p.currentBattleId;
+    const safeName = (typeof escapeHTML === 'function')
+      ? escapeHTML(p.displayName || p.code)
+      : (p.displayName || p.code).replace(/</g, '&lt;');
+
+    // Aperçu de l'équipe
+    let teamPreview = '';
+    if (Array.isArray(p.teamSnapshot) && p.teamSnapshot.length > 0) {
+      teamPreview = '<div style="display:flex; gap:2px; margin-top:4px;">';
+      p.teamSnapshot.forEach((s, i) => {
+        const cvId = `pm-pvplist-team-${p.code}-${i}`;
+        teamPreview += `<canvas width="64" height="64" id="${cvId}" data-pokepom="${s.pokepomId}" style="image-rendering:pixelated; width:32px; height:32px;"></canvas>`;
+      });
+      teamPreview += '</div>';
+    }
+
+    html += `
+      <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-left:4px solid ${tier.color}; border-radius:8px;">
+        <div style="font-size:1.6rem;">${tier.emoji}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:bold; font-size:.92rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${safeName}</div>
+          <div style="font-size:.72rem; color:${tier.color}; font-weight:bold;">${tier.label} · ${p.elo || 1000} ELO</div>
+          <div style="font-size:.68rem; color:var(--muted);">${p.wins || 0}V / ${p.losses || 0}D${total > 0 ? ' · ' + Math.round((p.wins||0)*100/total) + '% wr' : ''}</div>
+          ${teamPreview}
+        </div>
+        <div style="flex:0 0 auto;">
+          ${inBattle
+            ? '<button disabled style="padding:6px 14px; background:#666; color:#aaa; border:none; border-radius:6px; cursor:not-allowed; font-size:.78rem;">En combat</button>'
+            : '<button onclick="pmPvpInitChallenge(\'' + p.code + '\')" style="padding:8px 14px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold; font-size:.82rem;">Défier ⚔</button>'}
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+
+  // Bouton refresh
+  html += `
+    <div style="text-align:center; margin-top:14px;">
+      <button onclick="_pmPvpListCache = null; pmGoTo('pvpList');" style="padding:8px 18px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:.8rem;">
+        🔄 Rafraîchir
+      </button>
+    </div>
+  `;
+
+  content.innerHTML = html;
+
+  // Dessiner les sprites des équipes
+  setTimeout(() => {
+    list.forEach(p => {
+      if (!Array.isArray(p.teamSnapshot)) return;
+      p.teamSnapshot.forEach((s, i) => {
+        const cv = document.getElementById(`pm-pvplist-team-${p.code}-${i}`);
+        if (cv) drawPokePom(cv, s.pokepomId);
+      });
+    });
+  }, 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PvP — Création de défi
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Sérialise un fighter complet pour stockage dans Firebase.
+// On extrait tout ce dont la résolution de tour aura besoin :
+//   - identité, type, level
+//   - stats (max + courant + base pour ignoreDefBuffs)
+//   - stages, moves, états (burn, etc.), customMoves
+function pmSerializeFighterForPvp(fighter, instance) {
+  return {
+    uid: fighter.uid,
+    pokepomId: fighter.pokepomId,
+    name: fighter.name,
+    type: fighter.type,
+    level: fighter.level,
+    hp: fighter.hp,
+    maxHp: fighter.maxHp,
+    atk: fighter.atk,
+    def: fighter.def,
+    vit: fighter.vit,
+    baseAtk: fighter.baseAtk,
+    baseDef: fighter.baseDef,
+    baseVit: fighter.baseVit,
+    stages: { ...fighter.stages },
+    burnTurns: fighter.burnTurns || 0,
+    ko: !!fighter.ko,
+    // Moves : on stocke les ids pour que la résolution reconstruise les objets via PM_MOVES
+    moveIds: fighter.moves.map(m => m.id),
+    // Référence à l'instance d'origine (pour XP éventuel après combat — non utilisé en PvP mais pour info)
+    instanceUid: instance ? instance.uid : null
+  };
+}
+
+// Désérialise un fighter venant de Firebase pour rejouer le combat
+function pmDeserializeFighterFromPvp(data) {
+  return {
+    uid: data.uid,
+    pokepomId: data.pokepomId,
+    name: data.name,
+    type: data.type,
+    level: data.level,
+    hp: data.hp,
+    maxHp: data.maxHp,
+    atk: data.atk,
+    def: data.def,
+    vit: data.vit,
+    baseAtk: data.baseAtk,
+    baseDef: data.baseDef,
+    baseVit: data.baseVit,
+    // Cloner stages pour éviter de muter l'objet Firebase d'origine
+    stages: data.stages ? { ...data.stages } : { atk: 0, def: 0, vit: 0 },
+    burnTurns: data.burnTurns || 0,
+    ko: !!data.ko,
+    moves: (data.moveIds || []).map(id => PM_MOVES[id]).filter(Boolean),
+    instanceUid: data.instanceUid || null
+  };
+}
+
+// Construit le team[] sérialisé pour PvP : un fighter par PokePom de l'équipe.
+// Soigne tous les PokePoms à 100% si PM_PVP_HEAL_BEFORE est true (soin auto).
+function pmBuildPvpTeam(player) {
+  const team = pmGetTeam(player);
+  return team.map(inst => {
+    const fighter = pmCreateFighter(inst, 1.0);
+    if (PM_PVP_HEAL_BEFORE) {
+      fighter.hp = fighter.maxHp;
+      fighter.burnTurns = 0;
+      fighter.stages = { atk: 0, def: 0, vit: 0 };
+      fighter.ko = false;
+    }
+    return pmSerializeFighterForPvp(fighter, inst);
+  });
+}
+
+// Lance un défi contre un autre joueur.
+// Étapes :
+//   1. Vérifications côté joueur courant (équipe, pas en combat)
+//   2. Chargement profil adversaire + vérifs (existe, libre)
+//   3. Construction des deux équipes (snapshot avec soin)
+//   4. Création de l'objet battle avec deadline pour le 1er tour
+//   5. Mise à jour des 2 profils (currentBattleId)
+//   6. Redirection vers l'écran de combat
+async function pmPvpInitChallenge(opponentCode) {
+  if (typeof dbGet !== 'function' || typeof dbSet !== 'function') {
+    alert('Connexion réseau indisponible.');
+    return;
+  }
+  const player = pmGetPlayer();
+  if (!player) {
+    alert('Erreur : profil joueur introuvable.');
+    return;
+  }
+  // Empêche le double-clic et donne un retour visuel
+  if (_pmPvpInitInProgress) return;
+  _pmPvpInitInProgress = true;
+
+  try {
+    // 1. Vérifications joueur courant
+    const team = pmGetTeam(player);
+    if (team.length === 0) {
+      alert('Tu dois avoir au moins 1 PokePom dans ton équipe.');
+      return;
+    }
+
+    const myProfile = await pmLoadPvpProfile();
+    if (!myProfile) {
+      alert('Erreur : impossible de charger ton profil PvP.');
+      return;
+    }
+    if (myProfile.currentBattleId) {
+      alert('Tu as déjà un combat en cours. Termine-le avant d\'en lancer un autre.');
+      return;
+    }
+
+    // 2. Vérification adversaire
+    if (!opponentCode || opponentCode === player.code || opponentCode === state.code) {
+      alert('Adversaire invalide.');
+      return;
+    }
+    const oppProfile = await pmLoadOtherPvpProfile(opponentCode);
+    if (!oppProfile) {
+      alert('Cet adversaire n\'a plus de profil PvP.');
+      return;
+    }
+    if (oppProfile.currentBattleId) {
+      alert(`${oppProfile.displayName} est déjà en combat. Choisis quelqu'un d'autre.`);
+      // Invalide le cache pour que la liste se rafraîchisse
+      _pmPvpListCache = null;
+      pmGoTo('pvpList');
+      return;
+    }
+    if (!Array.isArray(oppProfile.teamSnapshot) || oppProfile.teamSnapshot.length === 0) {
+      alert(`${oppProfile.displayName} n'a pas encore configuré son équipe pour le PvP.`);
+      return;
+    }
+
+    // 3. Construction des équipes
+    const myTeam = pmBuildPvpTeam(player);
+
+    // L'équipe adverse vient de son snapshot ; on doit la "matérialiser" en fighters.
+    // Le snapshot ne contient que { pokepomId, nickname, level, customMoves }.
+    // On reconstruit chaque fighter avec stats au niveau correspondant.
+    const oppTeam = oppProfile.teamSnapshot.map(s => {
+      // Crée une instance temporaire pour pouvoir réutiliser pmCreateFighter
+      const tmpInst = {
+        uid: 'opp_' + s.pokepomId + '_' + Math.random().toString(36).slice(2, 6),
+        pokepomId: s.pokepomId,
+        nickname: s.nickname,
+        level: s.level,
+        xp: 0,
+        customMoves: Array.isArray(s.customMoves) ? s.customMoves : null
+      };
+      const fighter = pmCreateFighter(tmpInst, 1.0);
+      if (PM_PVP_HEAL_BEFORE) {
+        fighter.hp = fighter.maxHp;
+        fighter.burnTurns = 0;
+        fighter.stages = { atk: 0, def: 0, vit: 0 };
+        fighter.ko = false;
+      }
+      return pmSerializeFighterForPvp(fighter, tmpInst);
+    });
+
+    // 4. Création de l'objet battle
+    const battleId = pmGenBattleId();
+    const now = Date.now();
+    const battle = {
+      id: battleId,
+      status: 'active',
+      createdAt: new Date(now).toISOString(),
+      lastUpdate: new Date(now).toISOString(),
+
+      // Identité des joueurs
+      p1: {
+        code: player.code,
+        displayName: myProfile.displayName,
+        avatarId: myProfile.avatarId || 'avatar_classic',
+        eloAtStart: myProfile.elo,
+        tierAtStart: pmEloTier(myProfile.elo).id
+      },
+      p2: {
+        code: oppProfile.code,
+        displayName: oppProfile.displayName,
+        avatarId: oppProfile.avatarId || 'avatar_classic',
+        eloAtStart: oppProfile.elo,
+        tierAtStart: pmEloTier(oppProfile.elo).id
+      },
+
+      // Équipes
+      p1Team: myTeam,
+      p2Team: oppTeam,
+      p1ActiveIdx: 0,
+      p2ActiveIdx: 0,
+
+      // État de tour
+      turnNumber: 1,
+      turnDeadline: new Date(now + PM_PVP_TURN_TIMEOUT_MS).toISOString(),
+      p1Action: null,
+      p2Action: null,
+      // Le résolveur est par convention P1. Il pose un flag "resolving" pour éviter
+      // qu'on tente de résoudre deux fois en parallèle si les deux clients lisent en même temps.
+      resolving: false,
+
+      // Log
+      log: [
+        `${myProfile.displayName} défie ${oppProfile.displayName} !`,
+        `Tour 1 : choisissez vos actions.`
+      ],
+
+      // Résultat
+      winner: null,
+      endReason: null
+    };
+
+    // 5. Sauvegarde atomique : battle d'abord, puis profils
+    const saved = await pmSaveBattle(battleId, battle);
+    if (!saved) {
+      alert('Erreur : impossible de créer le combat sur le serveur.');
+      return;
+    }
+
+    // Mettre à jour les deux profils
+    myProfile.currentBattleId = battleId;
+    myProfile.lastSeen = new Date().toISOString();
+    await pmSavePvpProfile(myProfile);
+
+    oppProfile.currentBattleId = battleId;
+    await pmSavePvpProfile(oppProfile);
+
+    // 6. Redirection
+    _pmPvpCurrentBattleId = battleId;
+    _pmPvpListCache = null; // invalide le cache pour la prochaine liste
+    pmGoTo('pvpBattle');
+
+  } catch (e) {
+    console.error('[pokepom-pvp] initChallenge', e);
+    alert('Erreur lors du lancement du défi : ' + (e.message || e));
+  } finally {
+    _pmPvpInitInProgress = false;
+  }
+}
+
+// Variables d'état pour le combat PvP
+let _pmPvpInitInProgress = false;
+let _pmPvpCurrentBattleId = null;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PvP — Écran de combat synchrone
+// ═══════════════════════════════════════════════════════════════════════════
+// Architecture :
+//   - Polling Firebase (toutes les 3s) pour récupérer les actions de l'adversaire
+//   - Choix d'action (move ou switch) → écrit dans battle.p1Action/p2Action
+//   - P1 est le résolveur unique : quand p1Action && p2Action, P1 calcule le tour
+//     et écrit le nouvel état (avec flag `resolving` pour éviter double-résolution)
+//   - Timer 1h par tour : si la deadline passe et un seul a joué, l'autre est défaite
+
+// État local de l'écran de combat
+let _pmPvpPollTimer = null;
+let _pmPvpLastBattle = null;       // dernière version connue (pour diff)
+let _pmPvpResolving = false;       // verrou local anti-double-résolution
+
+const PM_PVP_POLL_INTERVAL_MS = 3000;
+
+async function pmRenderPvpBattle(page, player) {
+  // Stop tout polling précédent
+  _pmPvpStopPolling();
+
+  page.innerHTML = `
+    <div class="pm-wrap">
+      <div class="pm-header">
+        <div>
+          <div class="pm-title">⚔️ Combat PvP</div>
+          <div class="pm-sub" id="pm-pvp-battle-sub">Chargement...</div>
+        </div>
+        <button class="btn-outline" onclick="pmPvpExitBattleScreen()">← Retour</button>
+      </div>
+      <div id="pm-pvp-battle-content" class="pm-card" style="background:#f5edd6; color:#3a1a08; border:2px solid #5a3018;">
+        <div style="color:#7a4828; text-align:center; padding:20px;">Récupération de l'état du combat...</div>
+      </div>
+    </div>
+  `;
+
+  // Trouver l'id du combat actif
+  const myProfile = await pmLoadPvpProfile();
+  const battleId = (myProfile && myProfile.currentBattleId) || _pmPvpCurrentBattleId;
+  if (!battleId) {
+    document.getElementById('pm-pvp-battle-content').innerHTML =
+      `<div style="text-align:center; padding:30px;">
+        <div style="font-size:2.5rem;">🕊️</div>
+        <div style="margin-top:8px; font-weight:bold;">Aucun combat en cours.</div>
+        <button onclick="pmGoTo('pvp')" style="margin-top:16px; padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Retour au PvP</button>
+      </div>`;
+    return;
+  }
+
+  _pmPvpCurrentBattleId = battleId;
+
+  // Chargement initial + premier rendu
+  const battle = await pmLoadBattle(battleId);
+  if (!battle) {
+    document.getElementById('pm-pvp-battle-content').innerHTML =
+      `<div style="color:#aa3030; text-align:center; padding:20px;">Combat introuvable. Il a peut-être été nettoyé.</div>`;
+    return;
+  }
+  _pmPvpLastBattle = battle;
+  _pmPvpRenderBattleUI(battle);
+
+  // Lancer polling
+  _pmPvpStartPolling(battleId);
+
+  // Si je suis P1 et qu'il y a déjà 2 actions au moment du chargement → résoudre tout de suite
+  await _pmPvpMaybeResolve(battle);
+}
+
+// Quitter l'écran de combat (retour vers hub PvP)
+function pmPvpExitBattleScreen() {
+  _pmPvpStopPolling();
+  pmGoTo('pvp');
+}
+
+// Démarre le polling périodique
+function _pmPvpStartPolling(battleId) {
+  if (_pmPvpPollTimer) clearInterval(_pmPvpPollTimer);
+  _pmPvpPollTimer = setInterval(async () => {
+    if (!battleId) return _pmPvpStopPolling();
+    const fresh = await pmLoadBattle(battleId);
+    if (!fresh) {
+      _pmPvpStopPolling();
+      return;
+    }
+    // Détection de changement (turnNumber, status, actions)
+    const last = _pmPvpLastBattle;
+    const changed = !last
+      || fresh.turnNumber !== last.turnNumber
+      || fresh.status !== last.status
+      || (fresh.p1Action ? 1 : 0) !== (last.p1Action ? 1 : 0)
+      || (fresh.p2Action ? 1 : 0) !== (last.p2Action ? 1 : 0)
+      || (fresh.log && last.log && fresh.log.length !== last.log.length);
+    _pmPvpLastBattle = fresh;
+    if (changed) _pmPvpRenderBattleUI(fresh);
+    // Tentative de résolution si je suis P1 et que les 2 actions sont là
+    await _pmPvpMaybeResolve(fresh);
+    // Tentative de gestion du timeout
+    await _pmPvpCheckTimeout(fresh);
+  }, PM_PVP_POLL_INTERVAL_MS);
+}
+
+function _pmPvpStopPolling() {
+  if (_pmPvpPollTimer) {
+    clearInterval(_pmPvpPollTimer);
+    _pmPvpPollTimer = null;
+  }
+}
+
+// Rendu pur : prend un objet battle, l'affiche.
+function _pmPvpRenderBattleUI(battle) {
+  const content = document.getElementById('pm-pvp-battle-content');
+  const subEl = document.getElementById('pm-pvp-battle-sub');
+  if (!content) return;
+
+  const myCode = state && state.code;
+  const isP1 = battle.p1 && battle.p1.code === myCode;
+  if (!isP1 && !(battle.p2 && battle.p2.code === myCode)) {
+    content.innerHTML = `<div style="color:#aa3030;">Ce combat ne te concerne pas.</div>`;
+    return;
+  }
+
+  const me = isP1 ? battle.p1 : battle.p2;
+  const opp = isP1 ? battle.p2 : battle.p1;
+  const myTeam = (isP1 ? battle.p1Team : battle.p2Team) || [];
+  const oppTeam = (isP1 ? battle.p2Team : battle.p1Team) || [];
+  const myActiveIdx = (isP1 ? battle.p1ActiveIdx : battle.p2ActiveIdx) || 0;
+  const oppActiveIdx = (isP1 ? battle.p2ActiveIdx : battle.p1ActiveIdx) || 0;
+  const myAction = isP1 ? battle.p1Action : battle.p2Action;
+  const oppAction = isP1 ? battle.p2Action : battle.p1Action;
+  const myActive = myTeam[myActiveIdx];
+  const oppActive = oppTeam[oppActiveIdx];
+
+  // Cas combat terminé : afficher le résultat
+  if (battle.status === 'completed') {
+    _pmPvpStopPolling();
+    const iWon = (isP1 && battle.winner === 'p1') || (!isP1 && battle.winner === 'p2');
+    const titleColor = iWon ? '#3a8030' : '#a83030';
+    const titleEmoji = iWon ? '🏆' : '💔';
+    const titleText = iWon ? 'Victoire !' : 'Défaite';
+    const reasonLabel = battle.endReason === 'forfeit' ? 'par abandon'
+      : battle.endReason === 'timeout' ? 'par timeout (1h dépassée)'
+      : 'par K.O.';
+
+    if (subEl) subEl.textContent = 'Combat terminé';
+    content.innerHTML = `
+      <div style="text-align:center; padding:20px;">
+        <div style="font-size:3rem; margin-bottom:10px;">${titleEmoji}</div>
+        <div style="font-size:1.6rem; font-weight:bold; color:${titleColor};">${titleText}</div>
+        <div style="font-size:.9rem; color:#7a4828; margin-top:4px;">${reasonLabel}</div>
+        <div style="margin-top:16px; padding:12px; background:#fbf3da; border:1px solid #c8b07a; border-radius:8px; text-align:left; max-height:200px; overflow-y:auto;">
+          ${battle.log.map(l => `<div style="margin-bottom:3px; font-size:.84rem;">${l}</div>`).join('')}
+        </div>
+        <button onclick="pmPvpExitBattleScreen()" style="margin-top:18px; padding:12px 24px; background:#5a3018; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold;">Retour</button>
+      </div>
+    `;
+    return;
+  }
+
+  // Sous-titre : tour + état
+  let subText = `Tour ${battle.turnNumber}`;
+  if (myAction && !oppAction) subText += ' · En attente de l\'adversaire...';
+  else if (!myAction && oppAction) subText += ' · L\'adversaire a joué — à toi !';
+  else if (!myAction && !oppAction) subText += ' · Choisis ton action';
+  else if (myAction && oppAction) subText += ' · Résolution...';
+  if (subEl) subEl.textContent = subText;
+
+  // Timer (h restant)
+  let timerHtml = '';
+  if (battle.turnDeadline) {
+    const ms = new Date(battle.turnDeadline).getTime() - Date.now();
+    if (ms > 0) {
+      const min = Math.floor(ms / 60000);
+      timerHtml = `<div style="font-size:.78rem; color:#7a4828; text-align:right;">⏱️ ${min} min restantes</div>`;
+    } else {
+      timerHtml = `<div style="font-size:.78rem; color:#aa3030; text-align:right; font-weight:bold;">⏱️ Temps écoulé !</div>`;
+    }
+  }
+
+  // Helper rendu d'un fighter actif (sprite + nom + barre HP + état)
+  const renderActive = (fighter, side) => {
+    if (!fighter) return '<div></div>';
+    const hpPct = Math.max(0, Math.min(100, (fighter.hp / fighter.maxHp) * 100));
+    const hpColor = hpPct > 50 ? '#3a8030' : hpPct > 20 ? '#a08020' : '#aa3030';
+    const burnIcon = fighter.burnTurns > 0 ? ' 🔥' : '';
+    const koIcon = fighter.ko ? ' ✗' : '';
+    const cvId = `pm-pvp-active-${side}`;
+    return `
+      <div style="display:flex; align-items:center; gap:10px; padding:8px; background:#fbf3da; border:1px solid #c8b07a; border-radius:8px;">
+        <canvas width="64" height="64" id="${cvId}" style="image-rendering:pixelated; width:56px; height:56px;"></canvas>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:bold; font-size:.92rem; color:#3a1a08;">${fighter.name}${burnIcon}${koIcon}</div>
+          <div style="font-size:.72rem; color:#7a4828;">Niv ${fighter.level} · ${PM_TYPE_EMOJI[fighter.type] || ''} ${PM_TYPE_LABEL[fighter.type] || ''}</div>
+          <div style="height:8px; background:#e8d8a8; border-radius:4px; margin-top:4px; overflow:hidden;">
+            <div style="width:${hpPct}%; height:100%; background:${hpColor};"></div>
+          </div>
+          <div style="font-size:.7rem; color:#3a1a08; margin-top:2px; font-family:'Space Mono',monospace;">${fighter.hp}/${fighter.maxHp} PV</div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Helper équipe (mini sprites cliquables pour switch)
+  const renderTeamBar = (team, activeIdx, side, clickable) => {
+    let html = `<div style="display:flex; gap:4px; margin-top:6px; justify-content:center;">`;
+    team.forEach((f, i) => {
+      const isActive = i === activeIdx;
+      const isKo = f.ko || f.hp <= 0;
+      const dotColor = isKo ? '#aa3030' : isActive ? '#3a8030' : '#7a4828';
+      const cvId = `pm-pvp-mini-${side}-${i}`;
+      const opacity = isKo ? 0.4 : 1;
+      const click = clickable && !isKo && !isActive
+        ? `onclick="pmPvpSubmitSwitch(${i})"`
+        : '';
+      const cursor = (clickable && !isKo && !isActive) ? 'pointer' : 'default';
+      html += `
+        <div ${click} style="position:relative; padding:2px; opacity:${opacity}; cursor:${cursor};" title="${f.name}${isKo ? ' (K.O.)' : ''}">
+          <canvas width="32" height="32" id="${cvId}" style="image-rendering:pixelated; width:32px; height:32px; border:2px solid ${dotColor}; border-radius:6px; background:#e8d8a8;"></canvas>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    return html;
+  };
+
+  // Choix d'action
+  const myAvailableSwitch = myTeam.filter((f, i) => i !== myActiveIdx && !(f.ko || f.hp <= 0)).length;
+  let actionHtml = '';
+
+  if (myAction) {
+    // J'ai joué, j'attends
+    actionHtml = `
+      <div style="margin-top:14px; padding:14px; background:#fbf3da; border:2px solid #c8b07a; border-radius:8px; text-align:center;">
+        <div style="font-size:1.1rem; margin-bottom:4px;">⏳</div>
+        <div style="font-size:.92rem; font-weight:bold; color:#3a1a08;">En attente de l'adversaire...</div>
+        <div style="font-size:.78rem; color:#7a4828; margin-top:4px;">Tu as choisi : <strong>${_pmPvpDescribeAction(myAction, myTeam)}</strong></div>
+      </div>
+    `;
+  } else if (myActive && (myActive.ko || myActive.hp <= 0)) {
+    // Mon PokePom est KO, je dois switch obligatoirement
+    if (myAvailableSwitch === 0) {
+      actionHtml = `
+        <div style="margin-top:14px; padding:14px; background:#f8e0d8; border:2px solid #aa3030; border-radius:8px; text-align:center;">
+          <div style="font-weight:bold; color:#aa3030;">Tous tes PokePoms sont K.O. !</div>
+        </div>
+      `;
+    } else {
+      actionHtml = `
+        <div style="margin-top:14px; padding:14px; background:#f8e0d8; border:2px solid #aa3030; border-radius:8px;">
+          <div style="font-weight:bold; color:#aa3030; margin-bottom:8px; text-align:center;">${myActive.name} est K.O. — Choisis un remplaçant :</div>
+          <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+      `;
+      myTeam.forEach((f, i) => {
+        if (i === myActiveIdx || f.ko || f.hp <= 0) return;
+        actionHtml += `
+          <button onclick="pmPvpSubmitSwitch(${i})" style="padding:8px 12px; background:#5a3018; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:.85rem;">
+            ${f.name} (${f.hp}/${f.maxHp})
+          </button>
+        `;
+      });
+      actionHtml += `</div></div>`;
+    }
+  } else if (myActive) {
+    // Choix normal : 4 moves + switch
+    actionHtml = `
+      <div style="margin-top:14px;">
+        <div style="font-size:.78rem; font-weight:bold; color:#3a1a08; margin-bottom:6px;">Choisis ton action :</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+    `;
+    myActive.moves.forEach((m, i) => {
+      if (!m) return;
+      actionHtml += `
+        <button onclick="pmPvpSubmitMove(${i})" style="padding:10px; background:#fbf3da; border:2px solid #c8b07a; border-left:5px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; cursor:pointer; text-align:left; color:#3a1a08; font-family:inherit;">
+          <div style="font-weight:bold; font-size:.85rem;">${PM_TYPE_EMOJI[m.type] || ''} ${m.name}</div>
+          <div style="font-size:.7rem; color:#7a4828;">${m.power > 0 ? 'P.' + m.power + ' · ' : ''}${m.accuracy}%</div>
+        </button>
+      `;
+    });
+    actionHtml += `</div>`;
+
+    if (myAvailableSwitch > 0) {
+      actionHtml += `<div style="font-size:.78rem; font-weight:bold; color:#3a1a08; margin-bottom:4px;">Ou changer de PokePom :</div>`;
+      actionHtml += `<div style="display:flex; gap:6px; flex-wrap:wrap;">`;
+      myTeam.forEach((f, i) => {
+        if (i === myActiveIdx || f.ko || f.hp <= 0) return;
+        actionHtml += `
+          <button onclick="pmPvpSubmitSwitch(${i})" style="padding:6px 10px; background:#e8d8a8; color:#3a1a08; border:1px solid #c8b07a; border-radius:6px; cursor:pointer; font-family:inherit; font-size:.78rem;">
+            ⇄ ${f.name} (${f.hp}/${f.maxHp})
+          </button>
+        `;
+      });
+      actionHtml += `</div>`;
+    }
+    actionHtml += `</div>`;
+  }
+
+  // Log (derniers ~10 messages)
+  const recentLog = (battle.log || []).slice(-10);
+  const logHtml = `
+    <div style="margin-top:14px; padding:10px 12px; background:#fbf3da; border:1px solid #c8b07a; border-radius:6px; max-height:140px; overflow-y:auto;">
+      ${recentLog.map(l => `<div style="margin-bottom:3px; font-size:.82rem; color:#3a1a08;">${l}</div>`).join('')}
+    </div>
+  `;
+
+  // Boutons utilitaires
+  const utilityHtml = `
+    <div style="margin-top:14px; display:flex; gap:8px;">
+      <button onclick="pmPvpAbandon('${battle.id}')" style="flex:1; padding:10px; background:#882020; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:.85rem;">🏳️ Abandonner</button>
+    </div>
+  `;
+
+  // Assemblage
+  content.innerHTML = `
+    ${timerHtml}
+
+    <!-- Adversaire -->
+    <div style="font-size:.7rem; color:#7a4828; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">${opp.displayName}</div>
+    ${renderActive(oppActive, 'opp')}
+    ${renderTeamBar(oppTeam, oppActiveIdx, 'opp', false)}
+
+    <div style="height:14px;"></div>
+
+    <!-- Moi -->
+    <div style="font-size:.7rem; color:#7a4828; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">${me.displayName} (toi)</div>
+    ${renderActive(myActive, 'me')}
+    ${renderTeamBar(myTeam, myActiveIdx, 'me', !myAction)}
+
+    ${actionHtml}
+    ${logHtml}
+    ${utilityHtml}
+  `;
+
+  // Dessiner les sprites
+  setTimeout(() => {
+    if (myActive) { const c = document.getElementById('pm-pvp-active-me'); if (c) drawPokePom(c, myActive.pokepomId); }
+    if (oppActive) { const c = document.getElementById('pm-pvp-active-opp'); if (c) drawPokePom(c, oppActive.pokepomId); }
+    myTeam.forEach((f, i) => { const c = document.getElementById(`pm-pvp-mini-me-${i}`); if (c) drawPokePom(c, f.pokepomId); });
+    oppTeam.forEach((f, i) => { const c = document.getElementById(`pm-pvp-mini-opp-${i}`); if (c) drawPokePom(c, f.pokepomId); });
+  }, 0);
+}
+
+// Description courte d'une action (pour "Tu as choisi : Lame Sève")
+function _pmPvpDescribeAction(action, team) {
+  if (!action) return '?';
+  if (action.type === 'move') {
+    const fighter = team[action.activeIdx !== undefined ? action.activeIdx : 0];
+    const move = fighter && fighter.moves[action.moveIdx];
+    return move ? move.name : 'Move ?';
+  }
+  if (action.type === 'switch') {
+    const target = team[action.toIdx];
+    return target ? `Switch → ${target.name}` : 'Switch';
+  }
+  if (action.type === 'forfeit') return 'Abandon';
+  return '?';
+}
+
+// Soumet une action "move" pour le tour courant
+async function pmPvpSubmitMove(moveIdx) {
+  const battle = _pmPvpLastBattle;
+  if (!battle || battle.status !== 'active') return;
+  const myCode = state && state.code;
+  const isP1 = battle.p1.code === myCode;
+  const myAction = isP1 ? battle.p1Action : battle.p2Action;
+  if (myAction) return; // déjà joué
+
+  const myActiveIdx = (isP1 ? battle.p1ActiveIdx : battle.p2ActiveIdx) || 0;
+  const myTeam = isP1 ? battle.p1Team : battle.p2Team;
+  const myActive = myTeam[myActiveIdx];
+  if (!myActive || myActive.ko || myActive.hp <= 0) return; // KO, doit switch
+  if (!myActive.moves[moveIdx]) return; // index invalide
+
+  // Re-fetch fresh pour éviter race
+  const fresh = await pmLoadBattle(battle.id);
+  if (!fresh || fresh.status !== 'active') {
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh || battle);
+    return;
+  }
+  const freshMyAction = isP1 ? fresh.p1Action : fresh.p2Action;
+  if (freshMyAction) {
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh);
+    return;
+  }
+
+  const action = { type: 'move', moveIdx: moveIdx, activeIdx: myActiveIdx };
+  if (isP1) fresh.p1Action = action;
+  else fresh.p2Action = action;
+  fresh.lastUpdate = new Date().toISOString();
+
+  await pmSaveBattle(fresh.id, fresh);
+  _pmPvpLastBattle = fresh;
+  _pmPvpRenderBattleUI(fresh);
+  // Si je suis P1, lance la résolution si l'autre a déjà joué
+  await _pmPvpMaybeResolve(fresh);
+}
+
+// Soumet une action "switch"
+async function pmPvpSubmitSwitch(toIdx) {
+  const battle = _pmPvpLastBattle;
+  if (!battle || battle.status !== 'active') return;
+  const myCode = state && state.code;
+  const isP1 = battle.p1.code === myCode;
+  const myAction = isP1 ? battle.p1Action : battle.p2Action;
+  if (myAction) return;
+
+  const myActiveIdx = (isP1 ? battle.p1ActiveIdx : battle.p2ActiveIdx) || 0;
+  const myTeam = isP1 ? battle.p1Team : battle.p2Team;
+  const target = myTeam[toIdx];
+  if (!target || target.ko || target.hp <= 0) return; // cible invalide
+  if (toIdx === myActiveIdx) return; // déjà actif
+
+  const fresh = await pmLoadBattle(battle.id);
+  if (!fresh || fresh.status !== 'active') {
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh || battle);
+    return;
+  }
+  const freshMyAction = isP1 ? fresh.p1Action : fresh.p2Action;
+  if (freshMyAction) {
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh);
+    return;
+  }
+
+  const action = { type: 'switch', toIdx: toIdx, activeIdx: myActiveIdx };
+  if (isP1) fresh.p1Action = action;
+  else fresh.p2Action = action;
+  fresh.lastUpdate = new Date().toISOString();
+
+  await pmSaveBattle(fresh.id, fresh);
+  _pmPvpLastBattle = fresh;
+  _pmPvpRenderBattleUI(fresh);
+  await _pmPvpMaybeResolve(fresh);
+}
+
+// Le résolveur. Exécuté côté P1 uniquement, quand les 2 actions sont là.
+// Réutilise le moteur PvE pmRunTurn() en reconstituant des fighters.
+async function _pmPvpMaybeResolve(battle) {
+  if (!battle || battle.status !== 'active') return;
+  const myCode = state && state.code;
+  const isP1 = battle.p1.code === myCode;
+  if (!isP1) return; // seul P1 résout
+  if (!battle.p1Action || !battle.p2Action) return;
+  if (battle.resolving) return; // déjà en cours
+  if (_pmPvpResolving) return;
+  _pmPvpResolving = true;
+
+  try {
+    // Re-fetch + flag resolving
+    const fresh = await pmLoadBattle(battle.id);
+    if (!fresh || fresh.status !== 'active' || !fresh.p1Action || !fresh.p2Action || fresh.resolving) {
+      _pmPvpResolving = false;
+      return;
+    }
+    fresh.resolving = true;
+    await pmSaveBattle(fresh.id, fresh);
+
+    const p1Fighter = pmDeserializeFighterFromPvp(fresh.p1Team[fresh.p1ActiveIdx]);
+    const p2Fighter = pmDeserializeFighterFromPvp(fresh.p2Team[fresh.p2ActiveIdx]);
+    const p1Action = fresh.p1Action;
+    const p2Action = fresh.p2Action;
+    const newLog = [];
+
+    // Étape 1 : appliquer les switches (priorité absolue, ne consomment pas le tour)
+    let p1Switched = false, p2Switched = false;
+    if (p1Action.type === 'switch' && fresh.p1Team[p1Action.toIdx]) {
+      newLog.push(`<strong>${fresh.p1.displayName}</strong> retire ${p1Fighter.name} et envoie <strong>${fresh.p1Team[p1Action.toIdx].name}</strong> !`);
+      fresh.p1ActiveIdx = p1Action.toIdx;
+      p1Switched = true;
+    }
+    if (p2Action.type === 'switch' && fresh.p2Team[p2Action.toIdx]) {
+      newLog.push(`<strong>${fresh.p2.displayName}</strong> retire ${p2Fighter.name} et envoie <strong>${fresh.p2Team[p2Action.toIdx].name}</strong> !`);
+      fresh.p2ActiveIdx = p2Action.toIdx;
+      p2Switched = true;
+    }
+
+    // Étape 2 : si les deux ont switché, le tour est terminé
+    // Si un seul switch, l'autre attaque la nouvelle cible
+    // Si aucun switch, combat normal
+    let p1Attacker = pmDeserializeFighterFromPvp(fresh.p1Team[fresh.p1ActiveIdx]);
+    let p2Attacker = pmDeserializeFighterFromPvp(fresh.p2Team[fresh.p2ActiveIdx]);
+
+    if (!p1Switched && !p2Switched) {
+      // Combat moves vs moves : utilise pmRunTurn comme en PvE
+      // pmRunTurn applique aussi pmApplyEndOfTurnEffects sur les 2
+      const events = pmRunTurn(p1Attacker, p2Attacker, p1Action.moveIdx, p2Action.moveIdx);
+      events.forEach(ev => {
+        const text = pmEventToText(ev);
+        if (text) newLog.push(text);
+      });
+    } else if (p1Switched && !p2Switched) {
+      // P2 attaque P1 (qui vient d'arriver)
+      const move = p2Attacker.moves[p2Action.moveIdx];
+      if (move) {
+        const events = pmExecuteMove(p2Attacker, p1Attacker, move);
+        events.forEach(ev => {
+          const text = pmEventToText(ev);
+          if (text) newLog.push(text);
+        });
+        // End of turn pour les 2
+        const eotEvents = [...pmApplyEndOfTurnEffects(p1Attacker), ...pmApplyEndOfTurnEffects(p2Attacker)];
+        eotEvents.forEach(ev => {
+          const text = pmEventToText(ev);
+          if (text) newLog.push(text);
+        });
+      }
+    } else if (!p1Switched && p2Switched) {
+      // P1 attaque P2 (qui vient d'arriver)
+      const move = p1Attacker.moves[p1Action.moveIdx];
+      if (move) {
+        const events = pmExecuteMove(p1Attacker, p2Attacker, move);
+        events.forEach(ev => {
+          const text = pmEventToText(ev);
+          if (text) newLog.push(text);
+        });
+        const eotEvents = [...pmApplyEndOfTurnEffects(p1Attacker), ...pmApplyEndOfTurnEffects(p2Attacker)];
+        eotEvents.forEach(ev => {
+          const text = pmEventToText(ev);
+          if (text) newLog.push(text);
+        });
+      }
+    }
+    // (Si les deux switchent, rien de plus, log déjà fait)
+
+    // Re-sérialiser les fighters mis à jour dans les équipes
+    fresh.p1Team[fresh.p1ActiveIdx] = pmSerializeFighterForPvp(p1Attacker, null);
+    fresh.p2Team[fresh.p2ActiveIdx] = pmSerializeFighterForPvp(p2Attacker, null);
+
+    // Préserver les instanceUids dans le serialized (pmSerializeFighterForPvp avec null instance les perd)
+    // → on relit l'ancien snapshot pour ré-injecter instanceUid
+    if (battle.p1Team[battle.p1ActiveIdx]) fresh.p1Team[fresh.p1ActiveIdx].instanceUid = battle.p1Team[battle.p1ActiveIdx].instanceUid;
+    if (battle.p2Team[battle.p2ActiveIdx]) fresh.p2Team[fresh.p2ActiveIdx].instanceUid = battle.p2Team[battle.p2ActiveIdx].instanceUid;
+
+    // Append log
+    fresh.log = (fresh.log || []).concat(newLog);
+
+    // Détection fin de combat
+    const p1AllKo = fresh.p1Team.every(f => f.ko || f.hp <= 0);
+    const p2AllKo = fresh.p2Team.every(f => f.ko || f.hp <= 0);
+
+    if (p1AllKo && p2AllKo) {
+      // Égalité très rare (les 2 KO en même temps) → P1 perd par défaut (équilibrage)
+      fresh.status = 'completed';
+      fresh.winner = 'p2';
+      fresh.endReason = 'ko';
+      fresh.log.push(`<strong>Les deux équipes sont K.O. ! La victoire revient à ${fresh.p2.displayName} par tirage.</strong>`);
+    } else if (p1AllKo) {
+      fresh.status = 'completed';
+      fresh.winner = 'p2';
+      fresh.endReason = 'ko';
+      fresh.log.push(`<strong>${fresh.p2.displayName} remporte le combat !</strong>`);
+    } else if (p2AllKo) {
+      fresh.status = 'completed';
+      fresh.winner = 'p1';
+      fresh.endReason = 'ko';
+      fresh.log.push(`<strong>${fresh.p1.displayName} remporte le combat !</strong>`);
+    } else {
+      // Combat continue : nouveau tour
+      fresh.turnNumber++;
+      fresh.p1Action = null;
+      fresh.p2Action = null;
+      fresh.turnDeadline = new Date(Date.now() + PM_PVP_TURN_TIMEOUT_MS).toISOString();
+      fresh.log.push(`Tour ${fresh.turnNumber} : choisissez vos actions.`);
+    }
+
+    fresh.resolving = false;
+    fresh.lastUpdate = new Date().toISOString();
+    await pmSaveBattle(fresh.id, fresh);
+
+    // Si le combat est terminé : appliquer ELO et récompenses
+    if (fresh.status === 'completed') {
+      await _pmPvpHandleBattleEnd(fresh);
+    }
+
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh);
+  } catch (e) {
+    console.error('[pokepom-pvp] resolve error', e);
+    // Tenter de débloquer le flag resolving en cas d'erreur
+    try {
+      const recovery = await pmLoadBattle(battle.id);
+      if (recovery && recovery.resolving) {
+        recovery.resolving = false;
+        await pmSaveBattle(battle.id, recovery);
+      }
+    } catch (_) { /* ignore */ }
+  } finally {
+    _pmPvpResolving = false;
+  }
+}
+
+// Vérifie si la deadline est dépassée. Si oui, le joueur qui n'a pas joué perd.
+// Convention : seul P1 résout les timeouts pour éviter race.
+async function _pmPvpCheckTimeout(battle) {
+  if (!battle || battle.status !== 'active' || !battle.turnDeadline) return;
+  const myCode = state && state.code;
+  const isP1 = battle.p1.code === myCode;
+  if (!isP1) return;
+  const ms = new Date(battle.turnDeadline).getTime() - Date.now();
+  if (ms > 0) return;
+  if (battle.resolving) return;
+  if (_pmPvpResolving) return;
+
+  // Cas 1 : les deux ont joué → la résolution normale s'occupera. On ne touche pas.
+  if (battle.p1Action && battle.p2Action) return;
+
+  _pmPvpResolving = true;
+  try {
+    const fresh = await pmLoadBattle(battle.id);
+    if (!fresh || fresh.status !== 'active' || fresh.resolving) { _pmPvpResolving = false; return; }
+    if (fresh.p1Action && fresh.p2Action) { _pmPvpResolving = false; return; }
+    const dl = new Date(fresh.turnDeadline).getTime();
+    if (Date.now() < dl) { _pmPvpResolving = false; return; }
+
+    // Quelqu'un n'a pas joué.
+    fresh.resolving = true;
+    await pmSaveBattle(fresh.id, fresh);
+
+    fresh.status = 'completed';
+    fresh.endReason = 'timeout';
+    if (!fresh.p1Action && !fresh.p2Action) {
+      // Aucun n'a joué — match nul, on attribue une défaite à P1 par convention (ou rien)
+      // Spec : "défaite immédiate du combat" → on traite comme défaite mutuelle.
+      // Choix raisonnable : aucun gagnant, mais on conclut par "abandon" sans ELO.
+      // Plus simple : P1 est considéré comme principal initiateur, donc c'est lui qui perd.
+      fresh.winner = 'p2';
+      fresh.log.push(`⏱️ <strong>Aucun joueur n'a joué dans le délai. ${fresh.p2.displayName} l'emporte par forfait.</strong>`);
+    } else if (!fresh.p1Action) {
+      fresh.winner = 'p2';
+      fresh.log.push(`⏱️ <strong>${fresh.p1.displayName} n'a pas joué dans le délai. Défaite immédiate.</strong>`);
+    } else {
+      fresh.winner = 'p1';
+      fresh.log.push(`⏱️ <strong>${fresh.p2.displayName} n'a pas joué dans le délai. Défaite immédiate.</strong>`);
+    }
+    fresh.resolving = false;
+    fresh.lastUpdate = new Date().toISOString();
+    await pmSaveBattle(fresh.id, fresh);
+    await _pmPvpHandleBattleEnd(fresh);
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh);
+  } catch (e) {
+    console.error('[pokepom-pvp] timeout check error', e);
+  } finally {
+    _pmPvpResolving = false;
+  }
+}
+
+// Abandonner = défaite par forfait
+async function pmPvpAbandon(battleId) {
+  if (!battleId) return;
+  if (!confirm('Abandonner compte comme une défaite et entraîne une perte d\'ELO. Confirmer ?')) return;
+  try {
+    const fresh = await pmLoadBattle(battleId);
+    if (!fresh || fresh.status !== 'active') return;
+    const myCode = state && state.code;
+    const isP1 = fresh.p1.code === myCode;
+    fresh.status = 'completed';
+    fresh.winner = isP1 ? 'p2' : 'p1';
+    fresh.endReason = 'forfeit';
+    fresh.log.push(`🏳️ <strong>${(isP1 ? fresh.p1 : fresh.p2).displayName} abandonne. ${(isP1 ? fresh.p2 : fresh.p1).displayName} l'emporte.</strong>`);
+    fresh.lastUpdate = new Date().toISOString();
+    await pmSaveBattle(battleId, fresh);
+    await _pmPvpHandleBattleEnd(fresh);
+    _pmPvpLastBattle = fresh;
+    _pmPvpRenderBattleUI(fresh);
+  } catch (e) {
+    console.error('[pokepom-pvp] abandon error', e);
+    alert('Erreur lors de l\'abandon.');
+  }
+}
+
+// Applique les conséquences d'une fin de combat (ELO + récompenses + clear currentBattleId).
+// Appelé par les chemins KO, timeout et abandon. Idempotent (ne modifie pas si déjà appliqué).
+async function _pmPvpHandleBattleEnd(battle) {
+  if (!battle || battle.status !== 'completed' || !battle.winner) return;
+  if (battle.endApplied) return; // idempotence
+  battle.endApplied = true;
+
+  const myCode = state && state.code;
+  const isP1 = battle.p1.code === myCode;
+  const iWon = (isP1 && battle.winner === 'p1') || (!isP1 && battle.winner === 'p2');
+
+  // Mon profil
+  try {
+    const myProfile = await pmLoadPvpProfile();
+    if (myProfile) {
+      const oppEloAtStart = isP1 ? battle.p2.eloAtStart : battle.p1.eloAtStart;
+      const myEloAtStart = isP1 ? battle.p1.eloAtStart : battle.p2.eloAtStart;
+      const tierAtStart = pmEloTier(myEloAtStart).id;
+      const newElo = pmEloCalc(myEloAtStart, oppEloAtStart, iWon);
+      myProfile.elo = newElo;
+      if (iWon) myProfile.wins = (myProfile.wins || 0) + 1;
+      else myProfile.losses = (myProfile.losses || 0) + 1;
+      if (battle.endReason === 'forfeit' && !iWon) {
+        myProfile.abandons = (myProfile.abandons || 0) + 1;
+      }
+      myProfile.currentBattleId = null;
+      myProfile.lastSeen = new Date().toISOString();
+      await pmSavePvpProfile(myProfile);
+
+      // Récompense Pomels (basée sur tier d'avant)
+      const reward = pmEloReward(tierAtStart, iWon);
+      if (reward > 0 && typeof addBalanceTransaction === 'function' && typeof state !== 'undefined' && state) {
+        addBalanceTransaction(state.code, reward, {
+          type: 'pokepom_pvp',
+          desc: iWon ? `Victoire PvP vs ${(isP1 ? battle.p2 : battle.p1).displayName}` : `Défaite PvP vs ${(isP1 ? battle.p2 : battle.p1).displayName}`,
+          amount: reward,
+          date: new Date().toISOString()
+        }).then(updated => {
+          if (updated && typeof migrateAccount === 'function') {
+            state = migrateAccount(updated);
+            if (typeof refreshUI === 'function') refreshUI();
+          }
+        }).catch(e => console.warn('[pokepom-pvp] reward transaction', e));
+      }
+
+      // Ajouter récap au log (côté affichage)
+      const eloDelta = newElo - myEloAtStart;
+      const sign = eloDelta >= 0 ? '+' : '';
+      battle.log.push(`📊 <strong>Toi :</strong> ${sign}${eloDelta} ELO (${myEloAtStart} → ${newElo}) · <strong>+${reward} Pomels</strong>`);
+    }
+  } catch (e) {
+    console.error('[pokepom-pvp] handleEnd my profile', e);
+  }
+
+  // Profil adverse — seul P1 met à jour pour éviter doubles écritures (l'autre verra à son prochain reload)
+  if (isP1) {
+    try {
+      const oppCode = battle.p2.code;
+      const oppProfile = await pmLoadOtherPvpProfile(oppCode);
+      if (oppProfile) {
+        const oppWon = battle.winner === 'p2';
+        const oppEloAtStart = battle.p2.eloAtStart;
+        const myEloAtStart = battle.p1.eloAtStart;
+        const newElo = pmEloCalc(oppEloAtStart, myEloAtStart, oppWon);
+        oppProfile.elo = newElo;
+        if (oppWon) oppProfile.wins = (oppProfile.wins || 0) + 1;
+        else oppProfile.losses = (oppProfile.losses || 0) + 1;
+        if (battle.endReason === 'forfeit' && !oppWon) {
+          oppProfile.abandons = (oppProfile.abandons || 0) + 1;
+        }
+        oppProfile.currentBattleId = null;
+        await pmSavePvpProfile(oppProfile);
+      }
+    } catch (e) {
+      console.error('[pokepom-pvp] handleEnd opp profile', e);
+    }
+  }
+
+  // Sauvegarder battle avec endApplied (pour idempotence)
+  battle.lastUpdate = new Date().toISOString();
+  await pmSaveBattle(battle.id, battle);
+}
 
 function pmRenderBattle(page, player) {
   const bs = _pmBattleState;
