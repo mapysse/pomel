@@ -4218,13 +4218,19 @@ async function pmLoadBattle(battleId) {
 
 // Écrit l'état complet d'un combat
 async function pmSaveBattle(battleId, battle) {
-  if (typeof dbSet !== 'function' || !battleId || !battle) return false;
+  if (typeof dbSet !== 'function' || !battleId || !battle) {
+    console.error('[pokepom-pvp] saveBattle precondition failed', { hasDbSet: typeof dbSet === 'function', battleId, hasBattle: !!battle });
+    return { ok: false, error: 'precondition' };
+  }
   try {
-    await dbSet(PM_PVP_BATTLES_PATH + '/' + battleId, battle);
-    return true;
+    const path = PM_PVP_BATTLES_PATH + '/' + battleId;
+    console.log('[pokepom-pvp] saveBattle dbSet path:', path, 'battle size:', JSON.stringify(battle).length, 'bytes');
+    const result = await dbSet(path, battle);
+    console.log('[pokepom-pvp] saveBattle dbSet returned:', result);
+    return { ok: true };
   } catch (e) {
-    console.error('[pokepom-pvp] saveBattle', battleId, e);
-    return false;
+    console.error('[pokepom-pvp] saveBattle error', battleId, e, e && e.message, e && e.code);
+    return { ok: false, error: (e && e.message) || String(e) };
   }
 }
 
@@ -8295,9 +8301,11 @@ async function pmPvpInitChallenge(opponentCode) {
 
     // 5. Sauvegarde atomique : battle d'abord, puis profils
     console.log('[pokepom-pvp] creating battle', battleId, 'p1:', player.code, 'p2:', oppProfile.code);
-    const saved = await pmSaveBattle(battleId, battle);
-    if (!saved) {
-      alert('Erreur : impossible de créer le combat sur le serveur.');
+    const saveResult = await pmSaveBattle(battleId, battle);
+    if (!saveResult || !saveResult.ok) {
+      const errMsg = saveResult && saveResult.error ? saveResult.error : 'inconnue';
+      console.error('[pokepom-pvp] save FAILED:', errMsg);
+      alert('Erreur Firebase lors de la création du combat :\n\n' + errMsg + '\n\nVérifie que les règles Firebase pour "pokepom_battles" sont publiées (.read et .write à true).');
       return;
     }
     console.log('[pokepom-pvp] battle saved successfully');
@@ -8305,9 +8313,6 @@ async function pmPvpInitChallenge(opponentCode) {
     // Vérification souple : on tente de relire le combat avec retry pour absorber
     // un éventuel délai de propagation Firebase (création initiale du nœud parent
     // pokepom_battles peut prendre quelques centaines de ms côté serveur).
-    // En cas d'échec définitif, on continue quand même : on stocke le combat en
-    // cache local pour que pmRenderPvpBattle puisse l'afficher immédiatement
-    // sans dépendre de la lecture Firebase.
     let verify = null;
     for (let attempt = 0; attempt < 4; attempt++) {
       verify = await pmLoadBattle(battleId);
@@ -8321,7 +8326,9 @@ async function pmPvpInitChallenge(opponentCode) {
       }
     }
     if (!verify) {
-      console.warn('[pokepom-pvp] battle saved but not readable after 4 attempts — continuing anyway with local cache');
+      console.error('[pokepom-pvp] battle save reported success but combat is unreadable — likely Firebase rules issue on pokepom_battles');
+      alert('Le combat a semblé être créé, mais il est introuvable.\n\nCela arrive presque toujours quand les règles Firebase rejettent silencieusement l\'écriture.\n\nVa dans la console Firebase → Realtime Database → Règles, et vérifie que le bloc "pokepom_battles" existe avec .read et .write à true. N\'oublie pas de cliquer sur "Publier".');
+      return;
     }
 
     // Pré-charger le cache local pour que l'écran de combat ait l'objet immédiatement
