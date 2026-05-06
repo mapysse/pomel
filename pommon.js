@@ -8518,7 +8518,23 @@ function _pmPvpRenderBattleUI(battle) {
   const myCode = state && state.code;
   const isP1 = battle.p1 && battle.p1.code === myCode;
   if (!isP1 && !(battle.p2 && battle.p2.code === myCode)) {
-    content.innerHTML = `<div style="color:#aa3030;">Ce combat ne te concerne pas.</div>`;
+    // Cas d'un combat orphelin : le profil pointe vers un battleId mais le combat
+    // a été créé pour deux autres joueurs. Probablement un héritage d'un bug
+    // antérieur. On log et on propose une récupération.
+    console.error('[pokepom-pvp] battle does not concern me — myCode:', myCode,
+      '| p1.code:', battle.p1 && battle.p1.code,
+      '| p2.code:', battle.p2 && battle.p2.code);
+    content.innerHTML = `
+      <div style="text-align:center; padding:20px;">
+        <div style="font-size:2.5rem; margin-bottom:8px;">⚠️</div>
+        <div style="font-weight:bold; margin-bottom:8px;">Combat orphelin détecté</div>
+        <div style="font-size:.85rem; color:var(--muted); margin-bottom:14px; line-height:1.5;">
+          Ce combat ne te concerne pas (joueurs ${battle.p1 && battle.p1.displayName || '?'} vs ${battle.p2 && battle.p2.displayName || '?'}).<br>
+          Ton profil pointait vers un combat fantôme. On va nettoyer ça.
+        </div>
+        <button onclick="pmPvpForceClearAndExit()" style="padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold;">Nettoyer et retourner au PvP</button>
+      </div>
+    `;
     return;
   }
 
