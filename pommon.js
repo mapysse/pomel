@@ -4096,21 +4096,100 @@ function pmBuildTeamSnapshot(player) {
   }));
 }
 
-// Charge tous les profils PvP (pour la liste de défi).
-// Retourne un array trié par proximité ELO avec le joueur courant.
+// Charge la liste des joueurs à défier — TOUS les joueurs Pomel.
+// 3 requêtes Firebase en bloc puis cross-référencement en mémoire :
+//   - 'accounts'      → tous les joueurs Pomel (au moins code et name)
+//   - 'pommon'        → données PokePom (équipe, collection)
+//   - 'pokepom_pvp'   → profils PvP (ELO, stats, currentBattleId)
+//
+// Pour chaque joueur, on construit une entrée enrichie avec :
+//   - code, displayName
+//   - elo (1000 si pas de profil PvP)
+//   - tier, wins, losses, currentBattleId
+//   - hasPokepom : a déjà joué à PokePom ?
+//   - hasTeam   : a une équipe PvP exposée (snapshot ou équipe live) ?
+//   - teamSnapshot : équipe pour aperçu (snapshot ou reconstruit depuis pommon)
+//
+// Tri : alphabétique par displayName (insensible à la casse).
 async function pmLoadPvpList(myElo) {
-  if (typeof dbGet !== 'function') return [];
+  if (typeof dbGet !== 'function') {
+    return { list: [], totalCount: 0, myProfileFound: false };
+  }
   try {
-    const snap = await dbGet(PM_PVP_PATH);
-    if (!snap) return [];
-    const all = Object.values(snap)
-      .filter(p => p && p.code && (!state || p.code !== state.code)); // exclut moi-même
-    // Tri : ELO le plus proche en premier
-    all.sort((a, b) => Math.abs((a.elo || 1000) - myElo) - Math.abs((b.elo || 1000) - myElo));
-    return all.slice(0, PM_PVP_LISTING_LIMIT);
+    // Charge les 3 nœuds en parallèle pour performance
+    const [accountsSnap, pommonSnap, pvpSnap] = await Promise.all([
+      dbGet('accounts').catch(() => null),
+      dbGet('pommon').catch(() => null),
+      dbGet(PM_PVP_PATH).catch(() => null)
+    ]);
+
+    if (!accountsSnap) {
+      // Pas d'accès aux comptes — fallback : ne montrer que les profils PvP existants
+      if (!pvpSnap) return { list: [], totalCount: 0, myProfileFound: false };
+      const others = Object.values(pvpSnap)
+        .filter(p => p && p.code && (!state || p.code !== state.code));
+      others.sort((a, b) => (a.displayName || a.code).localeCompare(b.displayName || b.code, 'fr', { sensitivity: 'base' }));
+      return { list: others, totalCount: others.length, myProfileFound: true };
+    }
+
+    const myCode = state && state.code;
+    const accounts = Object.values(accountsSnap).filter(a => a && a.code);
+    let myProfileFound = false;
+
+    // Construction de la liste cross-référencée
+    const list = [];
+    for (const acc of accounts) {
+      if (myCode && acc.code === myCode) {
+        myProfileFound = true;
+        continue; // exclut moi-même
+      }
+      const pommonData = pommonSnap && pommonSnap[acc.code] ? pommonSnap[acc.code] : null;
+      const pvpData = pvpSnap && pvpSnap[acc.code] ? pvpSnap[acc.code] : null;
+
+      // Détecter si le joueur a une équipe configurée
+      // Priorité : teamSnapshot du profil PvP (à jour) > équipe live de pommon
+      let teamSnapshot = null;
+      if (pvpData && Array.isArray(pvpData.teamSnapshot) && pvpData.teamSnapshot.length > 0) {
+        teamSnapshot = pvpData.teamSnapshot;
+      } else if (pommonData && Array.isArray(pommonData.team) && pommonData.team.length > 0
+                 && Array.isArray(pommonData.collection)) {
+        // Reconstruire un mini-snapshot depuis l'équipe live
+        teamSnapshot = pommonData.team
+          .map(uid => pommonData.collection.find(i => i && i.uid === uid))
+          .filter(Boolean)
+          .map(inst => ({
+            pokepomId: inst.pokepomId,
+            nickname: inst.nickname || (PM_DEX[inst.pokepomId] && PM_DEX[inst.pokepomId].name) || '?',
+            level: inst.level || 1,
+            customMoves: Array.isArray(inst.customMoves) ? inst.customMoves : null
+          }));
+      }
+
+      list.push({
+        code: acc.code,
+        displayName: acc.name || acc.code,
+        avatarId: (pvpData && pvpData.avatarId) || acc.avatarId || 'avatar_classic',
+        elo: (pvpData && typeof pvpData.elo === 'number') ? pvpData.elo : PM_ELO_START,
+        wins: (pvpData && pvpData.wins) || 0,
+        losses: (pvpData && pvpData.losses) || 0,
+        currentBattleId: (pvpData && pvpData.currentBattleId) || null,
+        hasPokepom: !!pommonData,
+        hasTeam: !!(teamSnapshot && teamSnapshot.length > 0),
+        teamSnapshot: teamSnapshot
+      });
+    }
+
+    // Tri alphabétique (insensible à la casse, FR)
+    list.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'fr', { sensitivity: 'base' }));
+
+    return {
+      list: list,
+      totalCount: accounts.length,
+      myProfileFound: myProfileFound
+    };
   } catch (e) {
     console.error('[pokepom-pvp] loadList', e);
-    return [];
+    return { list: [], totalCount: 0, myProfileFound: false };
   }
 }
 
@@ -6323,9 +6402,13 @@ function pmRenderHome(page, player) {
         <div onclick="pmGoTo('info')" style="display:flex; align-items:center; gap:5px; font-size:.72rem; color:#fff; cursor:pointer; font-weight:700; background:var(--primary); padding:4px 12px; border-radius:6px; transition:all .2s;" onmouseenter="this.style.filter='brightness(1.15)'" onmouseleave="this.style.filter=''">
           📖 Infos & Guide
         </div>
-        <div onclick="pmGoTo('pvp')" style="display:flex; align-items:center; gap:5px; font-size:.72rem; color:#fff; cursor:pointer; font-weight:700; background:#a83838; padding:4px 12px; border-radius:6px; transition:all .2s;" onmouseenter="this.style.filter='brightness(1.15)'" onmouseleave="this.style.filter=''">
-          ⚔️ PvP
-        </div>
+      </div>
+
+      <!-- Gros bouton PvP en bandeau -->
+      <div onclick="pmGoTo('pvp')" style="margin-top:8px; padding:10px 14px; background:linear-gradient(90deg, #a83838 0%, #c83838 50%, #a83838 100%); color:#fff; cursor:pointer; font-weight:800; border-radius:8px; text-align:center; font-size:.95rem; letter-spacing:.04em; box-shadow:0 2px 6px rgba(168,56,56,0.3); transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px;" onmouseenter="this.style.filter='brightness(1.1)'; this.style.transform='translateY(-1px)';" onmouseleave="this.style.filter=''; this.style.transform='';">
+        <span style="font-size:1.2rem;">⚔️</span>
+        <span>Affronter d'autres dresseurs</span>
+        <span style="font-size:1.2rem;">⚔️</span>
       </div>
 
       <div style="text-align:center; font-size:.65rem; color:var(--muted); margin-top:2px;">
@@ -7784,7 +7867,7 @@ async function pmRenderPvpList(page, player) {
       <div class="pm-header">
         <div>
           <div class="pm-title">⚔️ Choisir un adversaire</div>
-          <div class="pm-sub">Joueurs triés par proximité de rang</div>
+          <div class="pm-sub">Tous les joueurs Pomel · ordre alphabétique</div>
         </div>
         <button class="btn-outline" onclick="pmGoTo('pvp')">← Retour</button>
       </div>
@@ -7814,61 +7897,119 @@ async function pmRenderPvpList(page, player) {
 
   // Charger la liste (avec cache 30s pour éviter spam)
   const now = Date.now();
-  let list;
+  let result;
   if (_pmPvpListCache && (now - _pmPvpListCacheTime) < 30000) {
-    list = _pmPvpListCache;
+    result = _pmPvpListCache;
   } else {
-    list = await pmLoadPvpList(me.elo);
-    _pmPvpListCache = list;
+    result = await pmLoadPvpList(me.elo);
+    _pmPvpListCache = result;
     _pmPvpListCacheTime = now;
+  }
+
+  // Compatibilité descendante : si le cache est ancien (array brut), on le wrappe
+  let list, totalCount, myProfileFound;
+  if (Array.isArray(result)) {
+    list = result;
+    totalCount = list.length;
+    myProfileFound = true;
+  } else {
+    list = result.list || [];
+    totalCount = result.totalCount || 0;
+    myProfileFound = !!result.myProfileFound;
   }
 
   const content = document.getElementById('pm-pvp-list-content');
   if (!list || list.length === 0) {
+    // Diagnostic adapté
+    let title, message;
+    if (totalCount === 0) {
+      title = 'Aucun joueur trouvé';
+      message = 'La liste des comptes Pomel est inaccessible ou vide. Vérifie ta connexion.';
+    } else if (totalCount === 1 && myProfileFound) {
+      title = 'Tu es seul pour le moment';
+      message = 'Tu es le seul joueur Pomel. Tes amis apparaîtront dès qu\'ils créeront un compte.';
+    } else {
+      title = 'Aucun adversaire disponible';
+      message = 'La liste a été chargée mais aucun joueur n\'a pu être listé.';
+    }
     content.innerHTML = `
       <div style="text-align:center; padding:30px 12px;">
         <div style="font-size:2.5rem; margin-bottom:10px;">🔍</div>
-        <div style="font-weight:bold; margin-bottom:6px;">Aucun adversaire pour l'instant</div>
-        <div style="color:var(--muted); font-size:.85rem;">Sois le premier ! Tes amis te verront dès qu'ils ouvriront le PvP.</div>
+        <div style="font-weight:bold; margin-bottom:6px;">${title}</div>
+        <div style="color:var(--muted); font-size:.85rem; line-height:1.5;">${message}</div>
+        <button onclick="_pmPvpListCache = null; pmGoTo('pvpList');" style="margin-top:14px; padding:8px 18px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:.8rem;">
+          🔄 Rafraîchir
+        </button>
       </div>
     `;
     return;
   }
 
-  let html = `<div style="display:flex; flex-direction:column; gap:8px;">`;
+  // Sous-titre avec compteurs informatifs
+  const challengeable = list.filter(p => p.hasTeam && !p.currentBattleId).length;
+  let html = `<div style="font-size:.78rem; color:var(--muted); margin-bottom:8px;">`;
+  html += `${list.length} dresseur(s) Pomel · ${challengeable} défiable(s) · ordre alphabétique`;
+  html += `</div>`;
+  html += `<div style="display:flex; flex-direction:column; gap:8px;">`;
   list.forEach(p => {
     const tier = pmEloTier(p.elo || 1000);
     const total = (p.wins || 0) + (p.losses || 0);
     const inBattle = !!p.currentBattleId;
+    const noPokepom = !p.hasPokepom;
+    const noTeam = !p.hasTeam;
     const safeName = (typeof escapeHTML === 'function')
       ? escapeHTML(p.displayName || p.code)
       : (p.displayName || p.code).replace(/</g, '&lt;');
 
-    // Aperçu de l'équipe
+    // Aperçu de l'équipe selon disponibilité
     let teamPreview = '';
-    if (Array.isArray(p.teamSnapshot) && p.teamSnapshot.length > 0) {
+    if (!noTeam && Array.isArray(p.teamSnapshot)) {
       teamPreview = '<div style="display:flex; gap:2px; margin-top:4px;">';
       p.teamSnapshot.forEach((s, i) => {
         const cvId = `pm-pvplist-team-${p.code}-${i}`;
         teamPreview += `<canvas width="64" height="64" id="${cvId}" data-pokepom="${s.pokepomId}" style="image-rendering:pixelated; width:32px; height:32px;"></canvas>`;
       });
       teamPreview += '</div>';
+    } else if (noPokepom) {
+      teamPreview = '<div style="font-size:.68rem; color:#a86040; font-style:italic; margin-top:4px;">N\'a jamais joué au PokePom</div>';
+    } else {
+      teamPreview = '<div style="font-size:.68rem; color:#a86040; font-style:italic; margin-top:4px;">Pas d\'équipe configurée</div>';
     }
 
+    // Stats : si jamais joué de PvP, on cache la ligne wins/losses (peu informatif)
+    const statsHtml = (total > 0)
+      ? `<div style="font-size:.68rem; color:var(--muted);">${p.wins}V / ${p.losses}D · ${Math.round(p.wins*100/total)}% wr</div>`
+      : `<div style="font-size:.68rem; color:var(--muted);">Aucun combat PvP joué</div>`;
+
+    // Bouton selon l'état
+    let buttonHtml;
+    if (inBattle) {
+      buttonHtml = '<button disabled style="padding:6px 14px; background:#666; color:#aaa; border:none; border-radius:6px; cursor:not-allowed; font-size:.78rem;">En combat</button>';
+    } else if (noPokepom) {
+      buttonHtml = '<button disabled style="padding:6px 14px; background:#666; color:#aaa; border:none; border-radius:6px; cursor:not-allowed; font-size:.78rem;" title="Ce joueur n\'a jamais joué au PokePom">N/A</button>';
+    } else if (noTeam) {
+      buttonHtml = '<button disabled style="padding:6px 14px; background:#666; color:#aaa; border:none; border-radius:6px; cursor:not-allowed; font-size:.78rem;" title="Ce joueur n\'a pas configuré son équipe">Indisponible</button>';
+    } else {
+      buttonHtml = '<button onclick="pmPvpInitChallenge(\'' + p.code + '\')" style="padding:8px 14px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold; font-size:.82rem;">Défier ⚔</button>';
+    }
+
+    // Style ligne : grise si non défiable
+    const isDimmed = noPokepom || noTeam;
+    // Pour ceux sans profil PvP, on n'affiche pas le tier mais juste leur nom
+    const tierLine = (total > 0 || !noPokepom)
+      ? `<div style="font-size:.72rem; color:${tier.color}; font-weight:bold;">${tier.label} · ${p.elo || 1000} ELO</div>`
+      : `<div style="font-size:.72rem; color:var(--muted);">Pas encore classé</div>`;
+
     html += `
-      <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-left:4px solid ${tier.color}; border-radius:8px;">
-        <div style="font-size:1.6rem;">${tier.emoji}</div>
+      <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-left:4px solid ${isDimmed ? '#666' : tier.color}; border-radius:8px; ${isDimmed ? 'opacity:.65;' : ''}">
+        <div style="font-size:1.6rem;">${isDimmed ? '👤' : tier.emoji}</div>
         <div style="flex:1; min-width:0;">
           <div style="font-weight:bold; font-size:.92rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${safeName}</div>
-          <div style="font-size:.72rem; color:${tier.color}; font-weight:bold;">${tier.label} · ${p.elo || 1000} ELO</div>
-          <div style="font-size:.68rem; color:var(--muted);">${p.wins || 0}V / ${p.losses || 0}D${total > 0 ? ' · ' + Math.round((p.wins||0)*100/total) + '% wr' : ''}</div>
+          ${tierLine}
+          ${statsHtml}
           ${teamPreview}
         </div>
-        <div style="flex:0 0 auto;">
-          ${inBattle
-            ? '<button disabled style="padding:6px 14px; background:#666; color:#aaa; border:none; border-radius:6px; cursor:not-allowed; font-size:.78rem;">En combat</button>'
-            : '<button onclick="pmPvpInitChallenge(\'' + p.code + '\')" style="padding:8px 14px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold; font-size:.82rem;">Défier ⚔</button>'}
-        </div>
+        <div style="flex:0 0 auto;">${buttonHtml}</div>
       </div>
     `;
   });
