@@ -8253,11 +8253,22 @@ async function pmPvpInitChallenge(opponentCode) {
     };
 
     // 5. Sauvegarde atomique : battle d'abord, puis profils
+    console.log('[pokepom-pvp] creating battle', battleId, 'p1:', player.code, 'p2:', oppProfile.code);
     const saved = await pmSaveBattle(battleId, battle);
     if (!saved) {
       alert('Erreur : impossible de créer le combat sur le serveur.');
       return;
     }
+    console.log('[pokepom-pvp] battle saved successfully');
+
+    // Vérification immédiate : le combat est-il bien lisible ?
+    const verify = await pmLoadBattle(battleId);
+    if (!verify) {
+      console.error('[pokepom-pvp] battle saved but not readable! Path:', PM_PVP_BATTLES_PATH + '/' + battleId);
+      alert('Erreur : combat sauvegardé mais introuvable. Vérifie les règles Firebase pour pokepom_battles.');
+      return;
+    }
+    console.log('[pokepom-pvp] battle verified, status:', verify.status);
 
     // Mettre à jour les deux profils
     myProfile.currentBattleId = battleId;
@@ -8334,12 +8345,34 @@ async function pmRenderPvpBattle(page, player) {
   }
 
   _pmPvpCurrentBattleId = battleId;
+  console.log('[pokepom-pvp] battle screen — battleId from profile:', myProfile && myProfile.currentBattleId, '| from local:', _pmPvpCurrentBattleId);
 
   // Chargement initial + premier rendu
-  const battle = await pmLoadBattle(battleId);
+  // Retry mécanisme : Firebase peut prendre quelques ms à propager après écriture
+  let battle = await pmLoadBattle(battleId);
   if (!battle) {
+    console.warn('[pokepom-pvp] battle not found on first try, retrying...', battleId);
+    // Attente courte + 2e tentative (Firebase peut avoir un léger délai de propagation)
+    await new Promise(r => setTimeout(r, 800));
+    battle = await pmLoadBattle(battleId);
+  }
+  if (!battle) {
+    console.warn('[pokepom-pvp] battle still not found after retry', battleId);
+    // 3e tentative après délai plus long
+    await new Promise(r => setTimeout(r, 1500));
+    battle = await pmLoadBattle(battleId);
+  }
+  if (!battle) {
+    console.error('[pokepom-pvp] battle definitively not found', battleId);
     document.getElementById('pm-pvp-battle-content').innerHTML =
-      `<div style="color:#aa3030; text-align:center; padding:20px;">Combat introuvable. Il a peut-être été nettoyé.</div>`;
+      `<div style="color:#aa3030; text-align:center; padding:20px;">
+        <div style="font-weight:bold; margin-bottom:8px;">⚠️ Combat introuvable</div>
+        <div style="font-size:.85rem; color:var(--muted); margin-bottom:12px;">
+          ID : <code>${battleId}</code><br>
+          Le combat a peut-être été nettoyé ou n'a pas pu être créé.
+        </div>
+        <button onclick="pmPvpForceClearAndExit()" style="padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Réinitialiser et retourner au PvP</button>
+      </div>`;
     return;
   }
   _pmPvpLastBattle = battle;
@@ -8355,6 +8388,27 @@ async function pmRenderPvpBattle(page, player) {
 // Quitter l'écran de combat (retour vers hub PvP)
 function pmPvpExitBattleScreen() {
   _pmPvpStopPolling();
+  pmGoTo('pvp');
+}
+
+// Force le nettoyage du combat actuel (retire currentBattleId du profil)
+// Utilisé en dernier recours quand le combat est introuvable côté Firebase.
+// Sans cette fonction, le joueur resterait bloqué sur l'écran "combat introuvable"
+// indéfiniment puisque son profil garde un currentBattleId orphelin.
+async function pmPvpForceClearAndExit() {
+  _pmPvpStopPolling();
+  try {
+    const myProfile = await pmLoadPvpProfile();
+    if (myProfile && myProfile.currentBattleId) {
+      console.warn('[pokepom-pvp] clearing orphan battleId', myProfile.currentBattleId);
+      myProfile.currentBattleId = null;
+      await pmSavePvpProfile(myProfile);
+    }
+  } catch (e) {
+    console.error('[pokepom-pvp] forceClear', e);
+  }
+  _pmPvpCurrentBattleId = null;
+  _pmPvpLastBattle = null;
   pmGoTo('pvp');
 }
 
