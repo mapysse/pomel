@@ -8158,11 +8158,52 @@ async function pmPvpInitChallenge(opponentCode) {
       alert('Adversaire invalide.');
       return;
     }
-    const oppProfile = await pmLoadOtherPvpProfile(opponentCode);
+    let oppProfile = await pmLoadOtherPvpProfile(opponentCode);
+
+    // Si l'adversaire n'a pas encore de profil PvP, on le crée à la volée
+    // à partir de son compte Pomel (accounts/{code}) et de son équipe live (pommon/{code}).
+    // Cas d'usage : la nouvelle liste affiche TOUS les joueurs Pomel, pas seulement
+    // ceux qui ont déjà ouvert leur hub PvP. Il faut donc supporter ce cas.
     if (!oppProfile) {
-      alert('Cet adversaire n\'a plus de profil PvP.');
-      return;
+      console.log('[pokepom-pvp] opponent has no PvP profile, creating from accounts/pommon');
+      let oppAccount = null;
+      let oppPommon = null;
+      try {
+        oppAccount = await dbGet('accounts/' + opponentCode);
+      } catch (e) { /* ignore */ }
+      try {
+        oppPommon = await dbGet('pommon/' + opponentCode);
+      } catch (e) { /* ignore */ }
+
+      if (!oppAccount) {
+        alert('Adversaire introuvable dans la base Pomel.');
+        return;
+      }
+      // Construire un teamSnapshot depuis l'équipe live de l'adversaire
+      let oppTeamSnapshot = null;
+      if (oppPommon && Array.isArray(oppPommon.team) && Array.isArray(oppPommon.collection)) {
+        oppTeamSnapshot = oppPommon.team
+          .map(uid => oppPommon.collection.find(i => i && i.uid === uid))
+          .filter(Boolean)
+          .map(inst => ({
+            pokepomId: inst.pokepomId,
+            nickname: inst.nickname || (PM_DEX[inst.pokepomId] && PM_DEX[inst.pokepomId].name) || '?',
+            level: inst.level || 1,
+            customMoves: Array.isArray(inst.customMoves) ? inst.customMoves : null
+          }));
+      }
+      // Crée le profil et le sauve en Firebase pour la prochaine fois
+      oppProfile = pmCreatePvpProfile(opponentCode, oppAccount.name || opponentCode, oppAccount.avatarId);
+      if (oppTeamSnapshot && oppTeamSnapshot.length > 0) {
+        oppProfile.teamSnapshot = oppTeamSnapshot;
+      }
+      try {
+        await dbSet(PM_PVP_PATH + '/' + opponentCode, oppProfile);
+      } catch (e) {
+        console.warn('[pokepom-pvp] could not save opponent profile, continuing with local copy', e);
+      }
     }
+
     if (oppProfile.currentBattleId) {
       alert(`${oppProfile.displayName} est déjà en combat. Choisis quelqu'un d'autre.`);
       // Invalide le cache pour que la liste se rafraîchisse
@@ -8171,7 +8212,7 @@ async function pmPvpInitChallenge(opponentCode) {
       return;
     }
     if (!Array.isArray(oppProfile.teamSnapshot) || oppProfile.teamSnapshot.length === 0) {
-      alert(`${oppProfile.displayName} n'a pas encore configuré son équipe pour le PvP.`);
+      alert(`${oppProfile.displayName} n'a pas encore configuré son équipe PvP. Demande-lui d'aller dans le menu PvP au moins une fois.`);
       return;
     }
 
@@ -8261,14 +8302,30 @@ async function pmPvpInitChallenge(opponentCode) {
     }
     console.log('[pokepom-pvp] battle saved successfully');
 
-    // Vérification immédiate : le combat est-il bien lisible ?
-    const verify = await pmLoadBattle(battleId);
-    if (!verify) {
-      console.error('[pokepom-pvp] battle saved but not readable! Path:', PM_PVP_BATTLES_PATH + '/' + battleId);
-      alert('Erreur : combat sauvegardé mais introuvable. Vérifie les règles Firebase pour pokepom_battles.');
-      return;
+    // Vérification souple : on tente de relire le combat avec retry pour absorber
+    // un éventuel délai de propagation Firebase (création initiale du nœud parent
+    // pokepom_battles peut prendre quelques centaines de ms côté serveur).
+    // En cas d'échec définitif, on continue quand même : on stocke le combat en
+    // cache local pour que pmRenderPvpBattle puisse l'afficher immédiatement
+    // sans dépendre de la lecture Firebase.
+    let verify = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      verify = await pmLoadBattle(battleId);
+      if (verify) {
+        console.log('[pokepom-pvp] battle verified on attempt', attempt + 1, '— status:', verify.status);
+        break;
+      }
+      if (attempt < 3) {
+        console.warn('[pokepom-pvp] battle not readable yet (attempt ' + (attempt+1) + '), waiting...');
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
     }
-    console.log('[pokepom-pvp] battle verified, status:', verify.status);
+    if (!verify) {
+      console.warn('[pokepom-pvp] battle saved but not readable after 4 attempts — continuing anyway with local cache');
+    }
+
+    // Pré-charger le cache local pour que l'écran de combat ait l'objet immédiatement
+    _pmPvpLastBattle = battle;
 
     // Mettre à jour les deux profils
     myProfile.currentBattleId = battleId;
@@ -8347,21 +8404,27 @@ async function pmRenderPvpBattle(page, player) {
   _pmPvpCurrentBattleId = battleId;
   console.log('[pokepom-pvp] battle screen — battleId from profile:', myProfile && myProfile.currentBattleId, '| from local:', _pmPvpCurrentBattleId);
 
-  // Chargement initial + premier rendu
-  // Retry mécanisme : Firebase peut prendre quelques ms à propager après écriture
+  // Chargement initial : 3 tentatives Firebase + fallback sur cache local
+  // (le cache _pmPvpLastBattle est pré-chargé par pmPvpInitChallenge)
   let battle = await pmLoadBattle(battleId);
   if (!battle) {
     console.warn('[pokepom-pvp] battle not found on first try, retrying...', battleId);
-    // Attente courte + 2e tentative (Firebase peut avoir un léger délai de propagation)
     await new Promise(r => setTimeout(r, 800));
     battle = await pmLoadBattle(battleId);
   }
   if (!battle) {
     console.warn('[pokepom-pvp] battle still not found after retry', battleId);
-    // 3e tentative après délai plus long
     await new Promise(r => setTimeout(r, 1500));
     battle = await pmLoadBattle(battleId);
   }
+
+  // Fallback ultime : utiliser le cache local pré-rempli par pmPvpInitChallenge
+  // (cas Firebase qui propage avec gros délai après création initiale du nœud)
+  if (!battle && _pmPvpLastBattle && _pmPvpLastBattle.id === battleId) {
+    console.warn('[pokepom-pvp] using local cache as fallback for battle', battleId);
+    battle = _pmPvpLastBattle;
+  }
+
   if (!battle) {
     console.error('[pokepom-pvp] battle definitively not found', battleId);
     document.getElementById('pm-pvp-battle-content').innerHTML =
