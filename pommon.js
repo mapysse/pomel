@@ -8242,6 +8242,10 @@ let _pvpBattleCb  = null;        // callback du listener
 let _pvpCurrentBattle = null;    // état local du combat (mis à jour par le listener)
 let _pvpResolvingFlag = false;   // évite les résolutions concurrentes locales
 let _pvpFailoverTimer = null;    // si P1 ne résout pas dans les temps, P2 reprend
+let _pvpLastCreatedBattleId = null; // battleId fraîchement créé par pvpInitChallenge,
+                                    // utilisé comme source de vérité immédiate pour
+                                    // pmRenderPvpBattle qui suit (évite la race
+                                    // condition avec la propagation Firebase).
 
 function pvpDetachListener() {
   if (_pvpBattleRef && _pvpBattleCb) {
@@ -8495,6 +8499,7 @@ async function pvpInitChallenge(opponentCode) {
     ]);
 
     if (_pvpProfileCache) _pvpProfileCache.currentBattleId = battleId;
+    _pvpLastCreatedBattleId = battleId;  // pour pmRenderPvpBattle juste après
     _pvpListCache = null;
     pmGoTo('pvpBattle');
   } catch (e) {
@@ -9185,8 +9190,23 @@ async function pmRenderPvpBattle(page, player) {
     </div>
   `;
 
-  const profile = await pvpLoadProfile();
-  const battleId = profile && profile.currentBattleId;
+  // Source de vérité pour le battleId, dans l'ordre :
+  //   1. _pvpLastCreatedBattleId : combat juste créé par pvpInitChallenge (frais)
+  //   2. _pvpProfileCache.currentBattleId : profil en mémoire
+  //   3. Firebase (relecture, peut avoir un délai de propagation)
+  // L'ordre 1→3 évite la race où le créateur du combat lit Firebase avant
+  // que sa propre écriture currentBattleId ne soit propagée.
+  let battleId = _pvpLastCreatedBattleId;
+  _pvpLastCreatedBattleId = null; // consommé une fois
+
+  if (!battleId && _pvpProfileCache && _pvpProfileCache.currentBattleId) {
+    battleId = _pvpProfileCache.currentBattleId;
+  }
+  if (!battleId) {
+    const profile = await pvpLoadProfile();
+    battleId = profile && profile.currentBattleId;
+  }
+
   if (!battleId) {
     document.getElementById('pvp-battle-content').innerHTML = `
       <div style="text-align:center; padding:30px;">
@@ -9197,8 +9217,13 @@ async function pmRenderPvpBattle(page, player) {
     return;
   }
 
-  // Pre-fetch one-shot pour validation
-  const initial = await pvpRead(BATTLES_PATH + '/' + battleId);
+  // Pre-fetch one-shot pour validation, avec retry pour absorber le délai
+  // de propagation Firebase juste après création.
+  let initial = await pvpRead(BATTLES_PATH + '/' + battleId);
+  for (let attempt = 0; attempt < 3 && !initial; attempt++) {
+    await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+    initial = await pvpRead(BATTLES_PATH + '/' + battleId);
+  }
   if (!initial) {
     document.getElementById('pvp-battle-content').innerHTML = `
       <div style="text-align:center; padding:20px;">
