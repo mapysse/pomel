@@ -4224,9 +4224,24 @@ async function pmSaveBattle(battleId, battle) {
   }
   try {
     const path = PM_PVP_BATTLES_PATH + '/' + battleId;
-    console.log('[pokepom-pvp] saveBattle dbSet path:', path, 'battle size:', JSON.stringify(battle).length, 'bytes');
-    const result = await dbSet(path, battle);
-    console.log('[pokepom-pvp] saveBattle dbSet returned:', result);
+    // CRITIQUE : Firebase Realtime Database rejette les valeurs `undefined` et
+    // peut rejeter silencieusement tout l'objet si on en glisse une. On nettoie
+    // le payload via JSON.parse(JSON.stringify(...)) qui élimine undefined,
+    // fonctions, et symbols. Rapide et fiable.
+    const cleanBattle = JSON.parse(JSON.stringify(battle));
+    const sizeBytes = JSON.stringify(cleanBattle).length;
+    console.log('[pokepom-pvp] saveBattle dbSet path:', path, 'battle size:', sizeBytes, 'bytes');
+    if (sizeBytes > 256 * 1024) {
+      console.warn('[pokepom-pvp] saveBattle payload > 256KB, may hit Firebase limits');
+    }
+    // Préfère dbSetStrict si disponible (propage les erreurs Firebase).
+    // Sans ça, dbSet avale silencieusement les rejets Firebase et on croit que
+    // tout va bien alors que rien n'est sauvé.
+    if (typeof dbSetStrict === 'function') {
+      await dbSetStrict(path, cleanBattle);
+    } else {
+      await dbSet(path, cleanBattle);
+    }
     return { ok: true };
   } catch (e) {
     console.error('[pokepom-pvp] saveBattle error', battleId, e, e && e.message, e && e.code);
@@ -8098,7 +8113,13 @@ function pmDeserializeFighterFromPvp(data) {
     stages: data.stages ? { ...data.stages } : { atk: 0, def: 0, vit: 0 },
     burnTurns: data.burnTurns || 0,
     ko: !!data.ko,
-    moves: (data.moveIds || []).map(id => PM_MOVES[id]).filter(Boolean),
+    // CRITIQUE : on CLONE chaque move avec spread. Sans ça, pmExecuteMove qui fait
+    // `move.currentPp--` muterait directement les objets globaux PM_MOVES, corrompant
+    // tous les futurs combats (PvP ET PvE) jusqu'au reload de la page.
+    moves: (data.moveIds || [])
+      .map(id => PM_MOVES[id])
+      .filter(Boolean)
+      .map(m => ({ ...m, currentPp: m.pp })),
     instanceUid: data.instanceUid || null
   };
 }
@@ -8426,10 +8447,23 @@ async function pmRenderPvpBattle(page, player) {
   }
 
   // Fallback ultime : utiliser le cache local pré-rempli par pmPvpInitChallenge
-  // (cas Firebase qui propage avec gros délai après création initiale du nœud)
+  // (cas Firebase qui propage avec gros délai après création initiale du nœud).
+  // Si on a le cache local, on tente aussi de re-sauver le combat dans Firebase
+  // pour récupérer la situation (cas où la 1ère écriture a échoué silencieusement).
   if (!battle && _pmPvpLastBattle && _pmPvpLastBattle.id === battleId) {
     console.warn('[pokepom-pvp] using local cache as fallback for battle', battleId);
     battle = _pmPvpLastBattle;
+    // Tentative de re-sauvegarde silencieuse (au cas où Firebase aurait perdu la 1ère)
+    try {
+      const resave = await pmSaveBattle(battleId, battle);
+      if (resave && resave.ok) {
+        console.log('[pokepom-pvp] battle re-saved successfully from local cache');
+      } else {
+        console.warn('[pokepom-pvp] battle re-save failed:', resave && resave.error);
+      }
+    } catch (e) {
+      console.warn('[pokepom-pvp] battle re-save threw:', e);
+    }
   }
 
   if (!battle) {
@@ -8441,7 +8475,10 @@ async function pmRenderPvpBattle(page, player) {
           ID : <code>${battleId}</code><br>
           Le combat a peut-être été nettoyé ou n'a pas pu être créé.
         </div>
-        <button onclick="pmPvpForceClearAndExit()" style="padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Réinitialiser et retourner au PvP</button>
+        <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+          <button onclick="pmPvpDiagnostic()" style="padding:10px 18px; background:#5a3018; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">🔧 Diagnostic Firebase</button>
+          <button onclick="pmPvpForceClearAndExit()" style="padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Réinitialiser et retourner</button>
+        </div>
       </div>`;
     return;
   }
@@ -8480,6 +8517,115 @@ async function pmPvpForceClearAndExit() {
   _pmPvpCurrentBattleId = null;
   _pmPvpLastBattle = null;
   pmGoTo('pvp');
+}
+
+// Outil de diagnostic : tente une écriture+lecture minimale dans pokepom_battles
+// pour vérifier que les règles Firebase sont correctement configurées.
+// Affiche le résultat dans une alerte pour aider l'utilisateur à comprendre
+// pourquoi ses combats ne se créent pas.
+async function pmPvpDiagnostic() {
+  const lines = ['=== DIAGNOSTIC FIREBASE PVP ==='];
+  const testId = 'diag_' + Date.now().toString(36);
+  // Sélection de la fonction d'écriture qui propage les erreurs.
+  // On utilise dbSetStrict si dispo, sinon on wrappe dbSet pour intercepter.
+  const writeStrict = (typeof dbSetStrict === 'function')
+    ? dbSetStrict
+    : async (path, val) => {
+        try {
+          await db.ref(path).set(val);
+        } catch (e) {
+          throw e;
+        }
+      };
+
+  // Test 1 : écriture sur pokepom_pvp (devrait marcher si on a déjà un profil)
+  lines.push('\n[1] Test pokepom_pvp/...');
+  try {
+    const path = 'pokepom_pvp/_diagtest_' + testId;
+    await writeStrict(path, { test: true, ts: Date.now() });
+    const back = await dbGet(path);
+    if (back && back.test === true) {
+      lines.push('  ✅ Écriture + lecture OK');
+      try { await dbSet(path, null); } catch(e) {}
+    } else {
+      lines.push('  ❌ Écriture OK mais lecture renvoie null/incomplet : ' + JSON.stringify(back));
+    }
+  } catch (e) {
+    lines.push('  ❌ Erreur : ' + (e && e.message || e));
+  }
+
+  // Test 2 : écriture sur pokepom_battles (le fameux)
+  lines.push('\n[2] Test pokepom_battles/...');
+  try {
+    const path = 'pokepom_battles/_diagtest_' + testId;
+    await writeStrict(path, { test: true, ts: Date.now() });
+    const back = await dbGet(path);
+    if (back && back.test === true) {
+      lines.push('  ✅ Écriture + lecture OK — règles Firebase pokepom_battles correctes');
+      try { await dbSet(path, null); } catch(e) {}
+    } else {
+      lines.push('  ❌ Écriture OK mais lecture renvoie null : ' + JSON.stringify(back));
+      lines.push('     → Les règles autorisent .write mais pas .read, ou un bug Firebase');
+    }
+  } catch (e) {
+    lines.push('  ❌ Erreur écriture : ' + (e && e.message || e));
+    lines.push('     → Ajoute "pokepom_battles": { ".read": true, ".write": true } dans tes règles Firebase et clique sur Publier');
+  }
+
+  // Test 2bis : écriture d'un payload "complet" simulant un vrai combat,
+  // pour détecter une éventuelle limite de taille ou un champ rejeté.
+  lines.push('\n[2bis] Test pokepom_battles avec payload complet...');
+  try {
+    const path = 'pokepom_battles/_diagtest_full_' + testId;
+    const fakeBattle = {
+      id: 'fake',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      lastUpdate: new Date().toISOString(),
+      p1: { code: 'TEST1', displayName: 'Test1', avatarId: 'avatar_classic', eloAtStart: 1000, tierAtStart: 'novice' },
+      p2: { code: 'TEST2', displayName: 'Test2', avatarId: 'avatar_classic', eloAtStart: 1000, tierAtStart: 'novice' },
+      p1Team: [{ uid: 'u1', pokepomId: 'pomalis', name: 'Pomalis', type: 'plante', level: 5, hp: 80, maxHp: 80, atk: 50, def: 55, vit: 40, baseAtk: 50, baseDef: 55, baseVit: 40, stages: { atk: 0, def: 0, vit: 0 }, burnTurns: 0, ko: false, moveIds: ['fouet_roncier','photosynthese','lancer_seve','pollen_lourd'], instanceUid: 'u1' }],
+      p2Team: [{ uid: 'u2', pokepomId: 'pomalis', name: 'Pomalis', type: 'plante', level: 5, hp: 80, maxHp: 80, atk: 50, def: 55, vit: 40, baseAtk: 50, baseDef: 55, baseVit: 40, stages: { atk: 0, def: 0, vit: 0 }, burnTurns: 0, ko: false, moveIds: ['fouet_roncier','photosynthese','lancer_seve','pollen_lourd'], instanceUid: 'u2' }],
+      p1ActiveIdx: 0, p2ActiveIdx: 0,
+      turnNumber: 1,
+      turnDeadline: new Date(Date.now() + 3600000).toISOString(),
+      p1Action: null, p2Action: null,
+      resolving: false,
+      log: ['Test ! ', 'Tour 1 :'],
+      winner: null, endReason: null
+    };
+    const sizeBytes = JSON.stringify(fakeBattle).length;
+    lines.push('  payload size : ' + sizeBytes + ' bytes');
+    await writeStrict(path, fakeBattle);
+    const back = await dbGet(path);
+    if (back && back.id === 'fake') {
+      lines.push('  ✅ Payload complet écrit + relu OK');
+      try { await dbSet(path, null); } catch(e) {}
+    } else {
+      lines.push('  ❌ Écriture OK mais relecture incomplète : ' + JSON.stringify(back).slice(0,200));
+    }
+  } catch (e) {
+    lines.push('  ❌ Erreur : ' + (e && e.message || e));
+    if (e && e.code) lines.push('     code Firebase : ' + e.code);
+  }
+
+  // Test 3 : lecture de la liste accounts
+  lines.push('\n[3] Test accounts/...');
+  try {
+    const back = await dbGet('accounts');
+    if (back && typeof back === 'object') {
+      const count = Object.keys(back).length;
+      lines.push('  ✅ Lecture OK — ' + count + ' compte(s) trouvé(s)');
+    } else {
+      lines.push('  ❌ Lecture renvoie : ' + JSON.stringify(back));
+    }
+  } catch (e) {
+    lines.push('  ❌ Erreur : ' + (e && e.message || e));
+  }
+
+  const result = lines.join('\n');
+  console.log(result);
+  alert(result);
 }
 
 // Démarre le polling périodique
