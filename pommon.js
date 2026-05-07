@@ -8322,6 +8322,12 @@ async function pmPvpInitChallenge(opponentCode) {
 
     // 5. Sauvegarde atomique : battle d'abord, puis profils
     console.log('[pokepom-pvp] creating battle', battleId, 'p1:', player.code, 'p2:', oppProfile.code);
+    console.log('[pokepom-pvp] battle payload preview:', {
+      id: battle.id,
+      p1Team_size: battle.p1Team.length,
+      p2Team_size: battle.p2Team.length,
+      total_size_bytes: JSON.stringify(battle).length
+    });
     const saveResult = await pmSaveBattle(battleId, battle);
     if (!saveResult || !saveResult.ok) {
       const errMsg = saveResult && saveResult.error ? saveResult.error : 'inconnue';
@@ -8331,9 +8337,15 @@ async function pmPvpInitChallenge(opponentCode) {
     }
     console.log('[pokepom-pvp] battle saved successfully');
 
+    // Pré-charger le cache local IMMÉDIATEMENT (avant verify) pour que
+    // pmRenderPvpBattle puisse récupérer la situation même si Firebase met
+    // du temps à propager.
+    _pmPvpLastBattle = battle;
+
     // Vérification souple : on tente de relire le combat avec retry pour absorber
-    // un éventuel délai de propagation Firebase (création initiale du nœud parent
-    // pokepom_battles peut prendre quelques centaines de ms côté serveur).
+    // un éventuel délai de propagation Firebase. Si la vérif échoue, on continue
+    // quand même : pmRenderPvpBattle utilisera le cache local et tentera une
+    // re-sauvegarde. Bloquer ici laissait l'utilisateur sans recours.
     let verify = null;
     for (let attempt = 0; attempt < 4; attempt++) {
       verify = await pmLoadBattle(battleId);
@@ -8347,13 +8359,11 @@ async function pmPvpInitChallenge(opponentCode) {
       }
     }
     if (!verify) {
-      console.error('[pokepom-pvp] battle save reported success but combat is unreadable — likely Firebase rules issue on pokepom_battles');
-      alert('Le combat a semblé être créé, mais il est introuvable.\n\nCela arrive presque toujours quand les règles Firebase rejettent silencieusement l\'écriture.\n\nVa dans la console Firebase → Realtime Database → Règles, et vérifie que le bloc "pokepom_battles" existe avec .read et .write à true. N\'oublie pas de cliquer sur "Publier".');
-      return;
+      console.warn('[pokepom-pvp] battle save reported success but verify failed — continuing with local cache');
+      // On NE BLOQUE PAS. pmRenderPvpBattle a un fallback sur _pmPvpLastBattle
+      // et tentera une re-sauvegarde. Si ça échoue vraiment, l'utilisateur verra
+      // l'écran "combat introuvable" mais sans avoir été déjà bloqué ici.
     }
-
-    // Pré-charger le cache local pour que l'écran de combat ait l'objet immédiatement
-    _pmPvpLastBattle = battle;
 
     // Mettre à jour les deux profils
     myProfile.currentBattleId = battleId;
@@ -8603,6 +8613,76 @@ async function pmPvpDiagnostic() {
       try { await dbSet(path, null); } catch(e) {}
     } else {
       lines.push('  ❌ Écriture OK mais relecture incomplète : ' + JSON.stringify(back).slice(0,200));
+    }
+  } catch (e) {
+    lines.push('  ❌ Erreur : ' + (e && e.message || e));
+    if (e && e.code) lines.push('     code Firebase : ' + e.code);
+  }
+
+  // Test 2ter : payload IDENTIQUE à pmPvpInitChallenge, avec la VRAIE équipe
+  // du joueur courant. Si les autres tests passent mais celui-ci échoue, le bug
+  // vient de quelque chose de spécifique à l'équipe (instance corrompue, customMoves
+  // foireux, valeur invalide pour Firebase, etc.).
+  lines.push('\n[2ter] Test pokepom_battles avec ton équipe RÉELLE...');
+  try {
+    const player = (typeof pmGetPlayer === 'function') ? pmGetPlayer() : null;
+    if (!player) {
+      lines.push('  ⏭️  skipped (pas de joueur courant chargé)');
+    } else {
+      const realTeam = pmBuildPvpTeam(player);
+      const path = 'pokepom_battles/_diagtest_real_' + testId;
+      const realBattle = {
+        id: 'fake_real',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        lastUpdate: new Date().toISOString(),
+        p1: { code: 'TEST_P1', displayName: 'Test1', avatarId: 'avatar_classic', eloAtStart: 1000, tierAtStart: 'novice' },
+        p2: { code: 'TEST_P2', displayName: 'Test2', avatarId: 'avatar_classic', eloAtStart: 1000, tierAtStart: 'novice' },
+        p1Team: realTeam,
+        p2Team: realTeam, // même équipe pour le test, peu importe
+        p1ActiveIdx: 0, p2ActiveIdx: 0,
+        turnNumber: 1,
+        turnDeadline: new Date(Date.now() + 3600000).toISOString(),
+        p1Action: null, p2Action: null,
+        resolving: false,
+        log: ['Test équipe réelle'],
+        winner: null, endReason: null
+      };
+      // Nettoie undefined comme pmSaveBattle le fait
+      const cleanBattle = JSON.parse(JSON.stringify(realBattle));
+      const sizeBytes = JSON.stringify(cleanBattle).length;
+      lines.push('  payload size : ' + sizeBytes + ' bytes');
+      lines.push('  équipe : ' + realTeam.length + ' fighter(s)');
+      // Vérifie qu'aucun fighter n'a de move undefined ou de pokepomId manquant
+      let teamIssue = null;
+      realTeam.forEach((f, i) => {
+        if (!f.pokepomId) teamIssue = 'fighter ' + i + ' sans pokepomId';
+        if (!Array.isArray(f.moveIds)) teamIssue = 'fighter ' + i + ' sans moveIds (pas un tableau)';
+        else if (f.moveIds.length === 0) teamIssue = 'fighter ' + i + ' avec moveIds vide';
+        else if (f.moveIds.some(id => !id)) teamIssue = 'fighter ' + i + ' avec un moveId null/undefined';
+      });
+      if (teamIssue) {
+        lines.push('  ⚠️  PROBLÈME détecté dans ton équipe : ' + teamIssue);
+      }
+      await writeStrict(path, cleanBattle);
+      // Relecture immédiate puis avec délai
+      let back = await dbGet(path);
+      if (!back) {
+        await new Promise(r => setTimeout(r, 800));
+        back = await dbGet(path);
+      }
+      if (back && back.id === 'fake_real') {
+        lines.push('  ✅ Payload réel écrit + relu OK');
+        // Vérifie que p1Team est bien là après roundtrip Firebase
+        if (!Array.isArray(back.p1Team) || back.p1Team.length !== realTeam.length) {
+          lines.push('  ⚠️  MAIS p1Team est altéré : reçu ' + (Array.isArray(back.p1Team) ? back.p1Team.length : 'non-array') + ' fighter(s) au lieu de ' + realTeam.length);
+        }
+        try { await dbSet(path, null); } catch(e) {}
+      } else {
+        lines.push('  ❌❌ Écriture déclarée OK mais relecture renvoie : ' + (back ? JSON.stringify(back).slice(0, 200) : 'null'));
+        lines.push('     C\'EST EXACTEMENT LE BUG QUE TU VOIS — Firebase accepte mais ne stocke pas.');
+        lines.push('     Cause probable : .validate dans les rules, ou un champ avec une valeur que Firebase rejette silencieusement.');
+      }
     }
   } catch (e) {
     lines.push('  ❌ Erreur : ' + (e && e.message || e));
