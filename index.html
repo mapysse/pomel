@@ -4667,18 +4667,16 @@ async function dbSet(path, val) {
   }
 }
 
-// Variante qui propage l'erreur en cas d'échec définitif. Utilisée par les
-// systèmes qui ont besoin de savoir si l'écriture a réellement réussi (PvP).
-// Sans ça, dbSet retourne silencieusement même quand Firebase a refusé l'écriture
-// (rules, taille trop grande, valeur invalide, réseau...), et le code appelant
-// croit à tort que tout va bien.
+// Variante qui propage l'erreur : utilisée par le module PvP qui a besoin de
+// distinguer succès et échec d'écriture. dbSet (sans Strict) reste inchangé
+// pour la compatibilité avec tout le reste du code.
 async function dbSetStrict(path, val) {
   const MAX = 3;
   let lastErr = null;
   for (let i = 0; i < MAX; i++) {
     try {
       await db.ref(path).set(val);
-      return; // succès
+      return;
     } catch(e) {
       lastErr = e;
       if (i < MAX - 1) await new Promise(r => setTimeout(r, 200 * (i + 1)));
