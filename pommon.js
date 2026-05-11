@@ -7891,24 +7891,32 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PvP — RÉÉCRITURE COMPLÈTE (v2)
+// PvP v3 — Architecture "alternated turns"
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Architecture simplifiée :
-//   - Firebase nodes :
-//       pokepom_pvp/{code}              → profil (ELO, wins, losses, currentBattleId)
-//       pokepom_battles/{id}            → état d'un combat (équipes, actions, log)
-//       pokepom_pvp_distributed/{week}  → flag distribution hebdo
+// Principe (simple et robuste) :
+//   1. Au début de chaque tour, currentPlayer = celui qui a la vitesse la
+//      plus élevée (sur son PokePom actif). En cas d'égalité, P1.
+//   2. Le currentPlayer joue son action → on l'écrit dans pendingAction et on
+//      passe le currentPlayer à l'autre.
+//   3. L'autre joueur joue son action → comme il a maintenant LES DEUX actions,
+//      il résout le tour entièrement sur SON poste (pmExecuteMove + end-of-turn)
+//      et écrit le résultat dans Firebase.
+//   4. Les deux clients voient le résultat arriver via onValue. Nouveau tour.
 //
-//   - Listener Firebase natif (onValue) au lieu de polling manuel
-//   - Tours simultanés : chaque joueur écrit son action via UPDATE (pas SET total)
-//   - Résolution : RNG seedé sur (battleId, turnNumber) → les 2 clients calculent
-//     pareil, mais seul P1 écrit le résultat. Si P1 est offline > 8s après les
-//     2 actions, P2 prend le relais (failover déterministe)
-//   - Tous les payloads sont validés avant écriture
+// Visuellement c'est fluide (chacun voit "À toi" / "L'adversaire choisit"),
+// mais techniquement c'est strictement séquentiel → AUCUNE race condition.
+// Pas besoin de RNG seedé, pas de failover, pas de flag "resolving" :
+// par construction, à chaque instant un seul client peut écrire.
 //
-// Pas de cache local critique : si Firebase échoue, on s'arrête net avec un
-// message clair plutôt que de continuer dans un état incohérent.
+// Cas KO : si ton PokePom actif est KO en début de tour, ton UI affiche
+// uniquement la grille de switch (pas de moves). Le switch consomme ton tour
+// normalement (le tour continue, l'autre joue ensuite).
+//
+// Nodes Firebase :
+//   pokepom_pvp/{code}              → profil PvP (ELO, currentBattleId, ...)
+//   pokepom_battles/{id}            → état du combat
+//   pokepom_pvp_distributed/{week}  → flag distribution hebdo
 
 // ─────────────────────────────────────────────────────────────────────
 // Constantes
@@ -7918,11 +7926,10 @@ const PVP_PATH       = 'pokepom_pvp';
 const BATTLES_PATH   = 'pokepom_battles';
 const DISTRIB_PATH   = 'pokepom_pvp_distributed';
 const TURN_TIMEOUT_MS    = PM_PVP_TURN_TIMEOUT_MS;     // 1h par tour
-const RESOLVER_FAILOVER_MS = 8000;                      // 8s avant que P2 reprenne
 const ELO_START      = PM_ELO_START;
 
 // ─────────────────────────────────────────────────────────────────────
-// Helpers ELO
+// Helpers ELO (réutilisent les constantes globales du jeu)
 // ─────────────────────────────────────────────────────────────────────
 
 function pmEloTier(elo) {
@@ -7944,60 +7951,45 @@ function pmEloReward(tierId, win) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Validation/sanitization de payload
+// Helpers Firebase (sanitization + écritures sûres)
 // ─────────────────────────────────────────────────────────────────────
 //
-// Firebase Realtime Database rejette undefined ET les NaN. JSON roundtrip
-// les supprime / convertit. On force le passage pour être sûr qu'aucune
-// valeur problématique ne se glisse dans une écriture.
-function sanitize(obj) {
+// Firebase Realtime Database rejette undefined/NaN. On nettoie systématiquement
+// avant écriture pour éviter les erreurs silencieuses.
+
+function pvpSanitize(obj) {
   if (obj === null || obj === undefined) return null;
   if (typeof obj === 'number' && !isFinite(obj)) return 0;
   if (typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitize);
+  if (Array.isArray(obj)) return obj.map(pvpSanitize);
   const out = {};
   for (const k of Object.keys(obj)) {
-    const v = sanitize(obj[k]);
+    const v = pvpSanitize(obj[k]);
     if (v !== undefined) out[k] = v;
   }
   return out;
 }
 
-// Wrapper d'écriture qui propage les erreurs (utilise dbSetStrict si dispo,
-// sinon un fallback inline qui throw)
 async function pvpWrite(path, val) {
-  const clean = sanitize(val);
-  if (typeof dbSetStrict === 'function') {
-    return await dbSetStrict(path, clean);
-  }
-  // Fallback : écrit via l'API Firebase directement avec retry + throw
+  const clean = pvpSanitize(val);
+  if (typeof dbSetStrict === 'function') return await dbSetStrict(path, clean);
+  // Fallback
   const MAX = 3;
   let lastErr = null;
   for (let i = 0; i < MAX; i++) {
-    try {
-      await db.ref(path).set(clean);
-      return;
-    } catch (e) {
-      lastErr = e;
-      if (i < MAX - 1) await new Promise(r => setTimeout(r, 200 * (i + 1)));
-    }
+    try { await db.ref(path).set(clean); return; }
+    catch (e) { lastErr = e; if (i < MAX-1) await new Promise(r => setTimeout(r, 200 * (i + 1))); }
   }
   throw lastErr || new Error('pvpWrite failed: ' + path);
 }
 
-// Update ciblé : ne touche que les champs passés (atomique côté Firebase)
 async function pvpUpdate(path, updates) {
-  const clean = sanitize(updates);
+  const clean = pvpSanitize(updates);
   const MAX = 3;
   let lastErr = null;
   for (let i = 0; i < MAX; i++) {
-    try {
-      await db.ref(path).update(clean);
-      return;
-    } catch (e) {
-      lastErr = e;
-      if (i < MAX - 1) await new Promise(r => setTimeout(r, 200 * (i + 1)));
-    }
+    try { await db.ref(path).update(clean); return; }
+    catch (e) { lastErr = e; if (i < MAX-1) await new Promise(r => setTimeout(r, 200 * (i + 1))); }
   }
   throw lastErr || new Error('pvpUpdate failed: ' + path);
 }
@@ -8023,7 +8015,7 @@ function pvpDefaultProfile(code, displayName, avatarId) {
     wins: 0,
     losses: 0,
     abandons: 0,
-    currentBattleId: '',          // chaîne vide au lieu de null pour Firebase
+    currentBattleId: '',
     teamSnapshot: [],
     lastSeen: new Date().toISOString(),
     createdAt: new Date().toISOString()
@@ -8055,7 +8047,8 @@ async function pvpLoadProfile() {
     if (data) {
       _pvpProfileCache = pvpNormalizeProfile(data, state.code);
     } else {
-      _pvpProfileCache = pvpDefaultProfile(state.code, state.name || state.code, _pmMapAvatar);
+      _pvpProfileCache = pvpDefaultProfile(state.code, state.name || state.code,
+        (typeof _pmMapAvatar !== 'undefined') ? _pmMapAvatar : 'avatar_classic');
       await pvpWrite(path, _pvpProfileCache);
     }
   } catch (e) {
@@ -8068,11 +8061,8 @@ async function pvpLoadProfile() {
 async function pvpSaveProfile(profile) {
   if (!profile || !profile.code) return;
   _pvpProfileCache = profile;
-  try {
-    await pvpWrite(PVP_PATH + '/' + profile.code, profile);
-  } catch (e) {
-    console.error('[pvp] saveProfile', e);
-  }
+  try { await pvpWrite(PVP_PATH + '/' + profile.code, profile); }
+  catch (e) { console.error('[pvp] saveProfile', e); }
 }
 
 async function pvpLoadOtherProfile(code) {
@@ -8080,10 +8070,7 @@ async function pvpLoadOtherProfile(code) {
   try {
     const data = await pvpRead(PVP_PATH + '/' + code);
     return data ? pvpNormalizeProfile(data, code) : null;
-  } catch (e) {
-    console.error('[pvp] loadOtherProfile', code, e);
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 function pvpBuildTeamSnapshot(player) {
@@ -8098,6 +8085,9 @@ function pvpBuildTeamSnapshot(player) {
 // ─────────────────────────────────────────────────────────────────────
 // Sérialisation des fighters pour Firebase
 // ─────────────────────────────────────────────────────────────────────
+//
+// On stocke les moveIds (pas les objets) car PM_MOVES est global et grand.
+// Au moment de jouer un move, le résolveur reconstruit l'objet move via PM_MOVES[id].
 
 function pvpSerializeFighter(fighter) {
   return {
@@ -8114,10 +8104,18 @@ function pvpSerializeFighter(fighter) {
     baseAtk: fighter.baseAtk,
     baseDef: fighter.baseDef,
     baseVit: fighter.baseVit,
-    stages: { atk: fighter.stages.atk||0, def: fighter.stages.def||0, vit: fighter.stages.vit||0 },
+    stages: {
+      atk: (fighter.stages && fighter.stages.atk) || 0,
+      def: (fighter.stages && fighter.stages.def) || 0,
+      vit: (fighter.stages && fighter.stages.vit) || 0
+    },
     burnTurns: fighter.burnTurns || 0,
     ko: !!fighter.ko,
-    moveIds: fighter.moves.map(m => m.id)
+    moveIds: fighter.moves.map(m => m.id),
+    // PP courants par move (parallèle à moveIds). Au max au début, décrémentés
+    // par pmExecuteMove à chaque utilisation. Permet d'afficher les PP restants
+    // dans la grille des moves PvP (cohérent avec PvE).
+    movePps: fighter.moves.map(m => (typeof m.currentPp === 'number' ? m.currentPp : m.pp))
   };
 }
 
@@ -8136,18 +8134,30 @@ function pvpDeserializeFighter(data) {
     baseAtk: data.baseAtk,
     baseDef: data.baseDef,
     baseVit: data.baseVit,
-    stages: { atk: (data.stages&&data.stages.atk)||0, def: (data.stages&&data.stages.def)||0, vit: (data.stages&&data.stages.vit)||0 },
+    stages: {
+      atk: (data.stages && data.stages.atk) || 0,
+      def: (data.stages && data.stages.def) || 0,
+      vit: (data.stages && data.stages.vit) || 0
+    },
     burnTurns: data.burnTurns || 0,
     ko: !!data.ko,
-    // Clone profond des moves pour ne pas muter PM_MOVES global
+    // Clone profond de chaque move pour ne pas muter PM_MOVES global.
+    // Les PP courants sont restaurés depuis data.movePps si présent (préserve
+    // la consommation entre tours). Fallback m.pp si absent (1er tour).
     moves: (data.moveIds || [])
-      .map(id => PM_MOVES[id])
+      .map((id, i) => {
+        const base = PM_MOVES[id];
+        if (!base) return null;
+        const storedPp = (Array.isArray(data.movePps) && typeof data.movePps[i] === 'number')
+          ? data.movePps[i]
+          : base.pp;
+        return { ...base, currentPp: storedPp };
+      })
       .filter(Boolean)
-      .map(m => ({ ...m, currentPp: m.pp }))
   };
 }
 
-function pvpBuildTeam(player) {
+function pvpBuildTeamFromPlayer(player) {
   return pmGetTeam(player).map(inst => {
     const f = pmCreateFighter(inst, 1.0);
     f.hp = f.maxHp;
@@ -8158,7 +8168,7 @@ function pvpBuildTeam(player) {
   });
 }
 
-function pvpMaterializeOppTeam(snapshot) {
+function pvpBuildTeamFromSnapshot(snapshot) {
   return snapshot.map(s => {
     const tmpInst = {
       uid: 'opp_' + s.pokepomId + '_' + Math.random().toString(36).slice(2, 7),
@@ -8178,7 +8188,7 @@ function pvpMaterializeOppTeam(snapshot) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Liste des adversaires (lecture en bloc)
+// Liste des adversaires
 // ─────────────────────────────────────────────────────────────────────
 
 let _pvpListCache = null;
@@ -8192,8 +8202,7 @@ async function pvpLoadList() {
       pvpRead(PVP_PATH)
     ]);
     if (!accountsSnap) return [];
-    const accounts = Object.values(accountsSnap);
-    const list = accounts
+    const list = Object.values(accountsSnap)
       .filter(a => a && a.code && a.code !== state.code)
       .map(a => {
         const pvp = pvpSnap && pvpSnap[a.code] ? pvpSnap[a.code] : null;
@@ -8234,147 +8243,33 @@ async function pvpLoadList() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Listener temps réel sur le combat actif
+// Listener temps réel
 // ─────────────────────────────────────────────────────────────────────
 
-let _pvpBattleRef = null;        // db.ref() actuelle
-let _pvpBattleCb  = null;        // callback du listener
-let _pvpCurrentBattle = null;    // état local du combat (mis à jour par le listener)
-let _pvpResolvingFlag = false;   // évite les résolutions concurrentes locales
-let _pvpFailoverTimer = null;    // si P1 ne résout pas dans les temps, P2 reprend
-let _pvpLastCreatedBattleId = null; // battleId fraîchement créé par pvpInitChallenge,
-                                    // utilisé comme source de vérité immédiate pour
-                                    // pmRenderPvpBattle qui suit (évite la race
-                                    // condition avec la propagation Firebase).
+let _pvpListenerRef = null;
+let _pvpListenerCb = null;
+let _pvpCurrentBattle = null;  // copie locale de l'état Firebase, mise à jour par le listener
+let _pvpLastCreatedBattleId = null;
+let _pvpRewardClaimed = {};    // battleId → true (anti-double versement Pomels)
+let _pvpEndApplied = {};       // battleId → true (anti-double application ELO)
 
 function pvpDetachListener() {
-  if (_pvpBattleRef && _pvpBattleCb) {
-    try { _pvpBattleRef.off('value', _pvpBattleCb); } catch(e) {}
+  if (_pvpListenerRef && _pvpListenerCb) {
+    try { _pvpListenerRef.off('value', _pvpListenerCb); } catch(e) {}
   }
-  _pvpBattleRef = null;
-  _pvpBattleCb = null;
-  if (_pvpFailoverTimer) {
-    clearTimeout(_pvpFailoverTimer);
-    _pvpFailoverTimer = null;
-  }
+  _pvpListenerRef = null;
+  _pvpListenerCb = null;
 }
 
 function pvpAttachListener(battleId, onUpdate) {
   pvpDetachListener();
-  _pvpBattleRef = db.ref(BATTLES_PATH + '/' + battleId);
-  _pvpBattleCb = (snap) => {
+  _pvpListenerRef = db.ref(BATTLES_PATH + '/' + battleId);
+  _pvpListenerCb = (snap) => {
     const data = snap.exists() ? snap.val() : null;
     _pvpCurrentBattle = data;
     onUpdate(data);
   };
-  _pvpBattleRef.on('value', _pvpBattleCb);
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// RNG déterministe (seed = battleId + turnNumber)
-// ─────────────────────────────────────────────────────────────────────
-//
-// Permet aux 2 clients de calculer LE MÊME résultat de tour. Mulberry32 pour
-// la simplicité ; quality suffisante pour un jeu.
-function pvpMakeRng(seedStr) {
-  let h = 1779033703 ^ seedStr.length;
-  for (let i = 0; i < seedStr.length; i++) {
-    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  let a = h >>> 0;
-  return function() {
-    a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Moteur de résolution PvP (réutilise pmExecuteMove mais avec RNG injecté)
-// ─────────────────────────────────────────────────────────────────────
-//
-// Le moteur PvE existant utilise Math.random() partout. Pour une résolution
-// déterministe synchrone côté 2 clients, on doit substituer Math.random
-// pendant la durée de la résolution.
-function pvpRunTurnDeterministic(p1, p2, p1Action, p2Action, seed) {
-  const rng = pvpMakeRng(seed);
-  const orig = Math.random;
-  Math.random = rng;
-  const events = [];
-  try {
-    // 1. Switches d'abord (priorité absolue, ne consomment pas le tour)
-    let p1Switched = false, p2Switched = false;
-    let p1Active = p1.activeFighter;
-    let p2Active = p2.activeFighter;
-
-    if (p1Action.type === 'switch' && p1.team[p1Action.toIdx]) {
-      events.push({ kind: 'switch', side: 'p1', fromName: p1Active.name, toName: p1.team[p1Action.toIdx].name });
-      p1.activeIdx = p1Action.toIdx;
-      p1Active = pvpDeserializeFighter(p1.team[p1.activeIdx]);
-      p1.activeFighter = p1Active;
-      p1Switched = true;
-    }
-    if (p2Action.type === 'switch' && p2.team[p2Action.toIdx]) {
-      events.push({ kind: 'switch', side: 'p2', fromName: p2Active.name, toName: p2.team[p2Action.toIdx].name });
-      p2.activeIdx = p2Action.toIdx;
-      p2Active = pvpDeserializeFighter(p2.team[p2.activeIdx]);
-      p2.activeFighter = p2Active;
-      p2Switched = true;
-    }
-
-    // 2. Moves
-    if (!p1Switched && !p2Switched) {
-      // Combat normal : pmRunTurn applique end-of-turn aux deux
-      const turnEvents = pmRunTurn(p1Active, p2Active, p1Action.moveIdx, p2Action.moveIdx);
-      turnEvents.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-    } else if (p1Switched && !p2Switched) {
-      // p2 attaque p1 (qui vient d'arriver)
-      const move = p2Active.moves[p2Action.moveIdx];
-      if (move) {
-        const evs = pmExecuteMove(p2Active, p1Active, move);
-        evs.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-        const eot1 = pmApplyEndOfTurnEffects(p1Active);
-        eot1.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-        const eot2 = pmApplyEndOfTurnEffects(p2Active);
-        eot2.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-      }
-    } else if (!p1Switched && p2Switched) {
-      const move = p1Active.moves[p1Action.moveIdx];
-      if (move) {
-        const evs = pmExecuteMove(p1Active, p2Active, move);
-        evs.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-        const eot1 = pmApplyEndOfTurnEffects(p1Active);
-        eot1.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-        const eot2 = pmApplyEndOfTurnEffects(p2Active);
-        eot2.forEach(ev => events.push({ kind: 'engine', side: null, ev: ev }));
-      }
-    }
-    // Si les deux ont switché, rien d'autre — switches déjà loggés
-
-    // Mettre à jour les fighters dans le team (active = nouvelle source de vérité)
-    p1.team[p1.activeIdx] = pvpSerializeFighter(p1Active);
-    p2.team[p2.activeIdx] = pvpSerializeFighter(p2Active);
-  } finally {
-    Math.random = orig;
-  }
-  return events;
-}
-
-// Convertit les events du moteur en messages texte pour le log
-function pvpEventsToLog(events, p1Name, p2Name) {
-  const out = [];
-  for (const e of events) {
-    if (e.kind === 'switch') {
-      const playerName = e.side === 'p1' ? p1Name : p2Name;
-      out.push(`${playerName} retire ${e.fromName} et envoie ${e.toName} !`);
-    } else if (e.kind === 'engine' && typeof pmEventToText === 'function') {
-      const txt = pmEventToText(e.ev);
-      if (txt) out.push(txt);
-    }
-  }
-  return out;
+  _pvpListenerRef.on('value', _pvpListenerCb);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -8391,25 +8286,15 @@ async function pvpInitChallenge(opponentCode) {
     if (!player) { alert('Profil joueur introuvable.'); return; }
 
     const team = pmGetTeam(player);
-    if (team.length === 0) {
-      alert('Tu dois avoir au moins 1 PokePom dans ton équipe.');
-      return;
-    }
-    if (!opponentCode || opponentCode === state.code) {
-      alert('Adversaire invalide.');
-      return;
-    }
+    if (team.length === 0) { alert('Tu dois avoir au moins 1 PokePom dans ton équipe.'); return; }
+    if (!opponentCode || opponentCode === state.code) { alert('Adversaire invalide.'); return; }
 
     const myProfile = await pvpLoadProfile();
     if (!myProfile) { alert('Impossible de charger ton profil PvP.'); return; }
-    if (myProfile.currentBattleId) {
-      alert('Tu as déjà un combat en cours. Termine-le avant.');
-      return;
-    }
+    if (myProfile.currentBattleId) { alert('Tu as déjà un combat en cours.'); return; }
 
     let oppProfile = await pvpLoadOtherProfile(opponentCode);
     if (!oppProfile) {
-      // Crée un profil minimal à partir du compte
       const acc = await pvpRead('accounts/' + opponentCode);
       const pommon = await pvpRead('pommon/' + opponentCode);
       if (!acc) { alert('Adversaire introuvable.'); return; }
@@ -8425,7 +8310,7 @@ async function pvpInitChallenge(opponentCode) {
             customMoves: Array.isArray(inst.customMoves) ? inst.customMoves : []
           }));
       }
-      try { await pvpWrite(PVP_PATH + '/' + opponentCode, oppProfile); } catch (e) { /* non bloquant */ }
+      try { await pvpWrite(PVP_PATH + '/' + opponentCode, oppProfile); } catch (e) {}
     }
     if (oppProfile.currentBattleId) {
       alert(oppProfile.displayName + ' est déjà en combat.');
@@ -8438,16 +8323,15 @@ async function pvpInitChallenge(opponentCode) {
       return;
     }
 
-    // Construction des équipes
-    const myTeamSer = pvpBuildTeam(player);
-    const oppTeamSer = pvpMaterializeOppTeam(oppProfile.teamSnapshot);
+    // Build des équipes (full HP)
+    const myTeam  = pvpBuildTeamFromPlayer(player);
+    const oppTeam = pvpBuildTeamFromSnapshot(oppProfile.teamSnapshot);
 
-    // Battle ID + payload
     const battleId = 'b_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     const now = Date.now();
     const battle = {
       id: battleId,
-      status: 'active',          // 'active' | 'completed'
+      status: 'active',
       createdAt: new Date(now).toISOString(),
       lastUpdate: new Date(now).toISOString(),
       p1: {
@@ -8464,237 +8348,377 @@ async function pvpInitChallenge(opponentCode) {
         eloAtStart: oppProfile.elo,
         tierAtStart: pmEloTier(oppProfile.elo).id
       },
-      p1Team: myTeamSer,
-      p2Team: oppTeamSer,
+      p1Team: myTeam,
+      p2Team: oppTeam,
       p1ActiveIdx: 0,
       p2ActiveIdx: 0,
       turnNumber: 1,
-      // Actions : on utilise des chaînes vides au lieu de null pour éviter les
-      // pièges Firebase (null = supprimer le champ).
-      // p1Action absent / objet => on regarde par !!p1Action
       turnDeadline: new Date(now + TURN_TIMEOUT_MS).toISOString(),
+      // Le plus rapide commence
+      currentPlayer: '',          // sera fixé ci-dessous
+      pendingAction: null,        // action du 1er joueur, en attente de la 2e
+      pendingActionBy: '',        // 'p1' ou 'p2'
       log: [
         myProfile.displayName + ' défie ' + oppProfile.displayName + ' !',
-        'Tour 1 : choisissez vos actions.'
+        'Tour 1 — démarrage'
       ],
       winner: '',
-      endReason: '',
-      endApplied: false
+      endReason: ''
     };
+    // P1 (l'initiateur du défi) choisit toujours son action en premier.
+    // La vitesse n'est PAS révélée à ce stade : elle ne joue qu'à la résolution,
+    // ce qui ajoute de la stratégie (le joueur doit deviner la vitesse adverse
+    // en observant qui frappe en premier dans le récap du tour précédent).
+    battle.currentPlayer = 'p1';
+    battle.log.push(battle.p1.displayName + ' joue en premier (rappel : la vitesse de chacun n\'est révélée qu\'en cours de combat).');
 
-    console.log('[pvp] creating battle', battleId, 'size:', JSON.stringify(battle).length, 'bytes');
-    // Écriture stricte (throw si échec)
+    console.log('[pvp] creating battle', battleId, 'size:', JSON.stringify(battle).length);
     await pvpWrite(BATTLES_PATH + '/' + battleId, battle);
-    console.log('[pvp] battle saved successfully');
+    console.log('[pvp] battle saved');
 
-    // Maj des profils en parallèle
     await Promise.all([
       pvpUpdate(PVP_PATH + '/' + player.code, {
         currentBattleId: battleId,
         lastSeen: new Date().toISOString()
       }),
-      pvpUpdate(PVP_PATH + '/' + opponentCode, {
-        currentBattleId: battleId
-      })
+      pvpUpdate(PVP_PATH + '/' + opponentCode, { currentBattleId: battleId })
     ]);
 
     if (_pvpProfileCache) _pvpProfileCache.currentBattleId = battleId;
-    _pvpLastCreatedBattleId = battleId;  // pour pmRenderPvpBattle juste après
+    _pvpLastCreatedBattleId = battleId;
     _pvpListCache = null;
     pmGoTo('pvpBattle');
   } catch (e) {
     console.error('[pvp] initChallenge', e);
-    alert('Erreur lors du lancement du combat :\n\n' + (e && e.message || e) + '\n\nDétails dans la console (F12).');
+    alert('Erreur lors du lancement du combat :\n\n' + (e && e.message || e));
   } finally {
     _pvpInitInProgress = false;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Soumission d'une action (move ou switch) — UPDATE ciblé, pas SET total
+// Soumission d'une action
 // ─────────────────────────────────────────────────────────────────────
+//
+// L'action arrive dans 1 des 2 états possibles :
+//   - Cas 1 : pendingAction == null → c'est le 1er à jouer ce tour.
+//             On stocke pendingAction et on passe currentPlayer à l'autre.
+//   - Cas 2 : pendingAction != null → c'est le 2nd. On a les 2 actions,
+//             on résout localement TOUT le tour et on écrit le résultat.
+
+function pvpIdentifyMe(battle) {
+  if (!battle || !state) return null;
+  if (battle.p1.code === state.code) return 'p1';
+  if (battle.p2.code === state.code) return 'p2';
+  return null;
+}
+
+let _pvpSubmitting = false; // évite double-soumission par double-clic
 
 async function pvpSubmitMove(moveIdx) {
+  if (_pvpSubmitting) return;
   const battle = _pvpCurrentBattle;
   if (!battle || battle.status !== 'active') return;
-  const isP1 = battle.p1.code === state.code;
-  if (!isP1 && battle.p2.code !== state.code) return;
-  const myActionField = isP1 ? 'p1Action' : 'p2Action';
-  if (battle[myActionField]) return; // déjà joué
+  const me = pvpIdentifyMe(battle);
+  if (!me || me !== battle.currentPlayer) return;
 
-  const myActiveIdx = isP1 ? (battle.p1ActiveIdx||0) : (battle.p2ActiveIdx||0);
-  const myTeam = isP1 ? battle.p1Team : battle.p2Team;
-  const myActive = myTeam && myTeam[myActiveIdx];
+  const myTeam = me === 'p1' ? battle.p1Team : battle.p2Team;
+  const myActiveIdx = me === 'p1' ? (battle.p1ActiveIdx||0) : (battle.p2ActiveIdx||0);
+  const myActive = myTeam[myActiveIdx];
   if (!myActive || myActive.ko || myActive.hp <= 0) return;
-  if (!myActive.moveIds || !myActive.moveIds[moveIdx]) return;
+  const moveId = myActive.moveIds && myActive.moveIds[moveIdx];
+  if (!moveId) return;
 
-  const action = { type: 'move', moveIdx: moveIdx, activeIdx: myActiveIdx };
+  const action = { type: 'move', moveIdx: moveIdx, by: me };
+  _pvpSubmitting = true;
   try {
-    const updates = {};
-    updates[myActionField] = action;
-    updates.lastUpdate = new Date().toISOString();
-    await pvpUpdate(BATTLES_PATH + '/' + battle.id, updates);
+    await pvpHandleAction(battle, me, action);
   } catch (e) {
     console.error('[pvp] submitMove', e);
-    alert('Erreur lors de la soumission : ' + (e && e.message || e));
+    alert('Erreur soumission action : ' + (e && e.message || e));
+  } finally {
+    _pvpSubmitting = false;
   }
 }
 
 async function pvpSubmitSwitch(toIdx) {
+  if (_pvpSubmitting) return;
   const battle = _pvpCurrentBattle;
   if (!battle || battle.status !== 'active') return;
-  const isP1 = battle.p1.code === state.code;
-  if (!isP1 && battle.p2.code !== state.code) return;
-  const myActionField = isP1 ? 'p1Action' : 'p2Action';
-  if (battle[myActionField]) return;
+  const me = pvpIdentifyMe(battle);
+  if (!me || me !== battle.currentPlayer) return;
 
-  const myActiveIdx = isP1 ? (battle.p1ActiveIdx||0) : (battle.p2ActiveIdx||0);
-  const myTeam = isP1 ? battle.p1Team : battle.p2Team;
-  const target = myTeam && myTeam[toIdx];
+  const myTeam = me === 'p1' ? battle.p1Team : battle.p2Team;
+  const myActiveIdx = me === 'p1' ? (battle.p1ActiveIdx||0) : (battle.p2ActiveIdx||0);
+  const target = myTeam[toIdx];
   if (!target || target.ko || target.hp <= 0) return;
   if (toIdx === myActiveIdx) return;
 
-  const action = { type: 'switch', toIdx: toIdx, activeIdx: myActiveIdx };
+  const action = { type: 'switch', toIdx: toIdx, by: me };
+  _pvpSubmitting = true;
   try {
-    const updates = {};
-    updates[myActionField] = action;
-    updates.lastUpdate = new Date().toISOString();
-    await pvpUpdate(BATTLES_PATH + '/' + battle.id, updates);
+    await pvpHandleAction(battle, me, action);
   } catch (e) {
     console.error('[pvp] submitSwitch', e);
-    alert('Erreur lors de la soumission : ' + (e && e.message || e));
+    alert('Erreur soumission action : ' + (e && e.message || e));
+  } finally {
+    _pvpSubmitting = false;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Résolution de tour
+// Cœur de la logique : dispatch d'une action
+// ─────────────────────────────────────────────────────────────────────
+
+async function pvpHandleAction(battle, me, action) {
+  // Cas 1 : aucune action en attente → on est le 1er à jouer ce tour
+  if (!battle.pendingAction) {
+    // On stocke notre action, on passe la main à l'autre
+    const other = me === 'p1' ? 'p2' : 'p1';
+    const otherName = other === 'p1' ? battle.p1.displayName : battle.p2.displayName;
+    const myName    = me    === 'p1' ? battle.p1.displayName : battle.p2.displayName;
+    const updates = {
+      pendingAction: action,
+      pendingActionBy: me,
+      currentPlayer: other,
+      lastUpdate: new Date().toISOString()
+    };
+    // Log discret : "X a fait son choix, à Y de jouer"
+    const log = (battle.log || []).slice();
+    log.push(myName + ' a fait son choix.');
+    log.push("À " + otherName + " de jouer.");
+    updates.log = log;
+    await pvpUpdate(BATTLES_PATH + '/' + battle.id, updates);
+    return;
+  }
+
+  // Cas 2 : il y avait déjà une pendingAction → on a maintenant les 2 actions.
+  // On résout TOUT le tour ici, sur notre poste.
+  const firstAction  = battle.pendingAction;
+  const secondAction = action;
+  // L'ordre PvE-style : firstAction d'abord (P1 ou P2 selon qui a joué en 1er),
+  // puis secondAction. Mais en PvP avec vitesse, on a déjà ordonné par vitesse en
+  // début de tour via currentPlayer, donc firstAction est BIEN celui du joueur le
+  // plus rapide.
+  const firstBy  = battle.pendingActionBy;
+  const secondBy = me;
+
+  await pvpResolveTurn(battle, firstAction, firstBy, secondAction, secondBy);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Résolution complète d'un tour
 // ─────────────────────────────────────────────────────────────────────
 //
-// Convention : P1 résout dès que les 2 actions sont là.
-// Failover : si P1 ne résout pas dans les RESOLVER_FAILOVER_MS, P2 prend.
-async function pvpMaybeResolve(battle) {
-  if (!battle || battle.status !== 'active') return;
-  if (!battle.p1Action || !battle.p2Action) return;
-  if (_pvpResolvingFlag) return;
+// Réutilise pmExecuteMove + pmApplyEndOfTurnEffects (moteur PvE), donc cohérent
+// avec le combat PvE en termes de mécaniques (crits, type effectiveness, status...).
 
-  const isP1 = battle.p1.code === state.code;
-  const isP2 = battle.p2.code === state.code;
-  if (!isP1 && !isP2) return;
+async function pvpResolveTurn(battle, action1, by1, action2, by2) {
+  // Deserialize les fighters actifs (clone profond, ne mute pas le snapshot)
+  const teamP1 = battle.p1Team.map(f => ({ ...f, stages: { ...(f.stages||{}) } }));
+  const teamP2 = battle.p2Team.map(f => ({ ...f, stages: { ...(f.stages||{}) } }));
+  let p1Idx = battle.p1ActiveIdx || 0;
+  let p2Idx = battle.p2ActiveIdx || 0;
 
-  // P1 résout immédiatement. P2 attend RESOLVER_FAILOVER_MS au cas où P1 soit offline.
-  const delay = isP1 ? 0 : RESOLVER_FAILOVER_MS;
+  let p1Active = pvpDeserializeFighter(teamP1[p1Idx]);
+  let p2Active = pvpDeserializeFighter(teamP2[p2Idx]);
 
-  if (_pvpFailoverTimer) {
-    clearTimeout(_pvpFailoverTimer);
-    _pvpFailoverTimer = null;
+  const newLogs = [];
+  const logEvent = (ev) => {
+    if (typeof pmEventToText === 'function') {
+      const txt = pmEventToText(ev);
+      if (txt) newLogs.push(txt);
+    }
+  };
+
+  // Helper : applique une action sur les fighters actifs
+  // Retourne true si l'action était un switch (donc pas d'attaque)
+  const applyAction = (action, by) => {
+    if (action.type === 'switch') {
+      // Switch : retire le PokePom actif, envoie le nouveau (clone deserialized)
+      if (by === 'p1') {
+        // re-serialize l'actif en place avant de switcher
+        teamP1[p1Idx] = pvpSerializeFighter(p1Active);
+        const oldName = p1Active.name;
+        p1Idx = action.toIdx;
+        p1Active = pvpDeserializeFighter(teamP1[p1Idx]);
+        newLogs.push(battle.p1.displayName + ' retire ' + oldName + ' et envoie ' + p1Active.name + ' !');
+      } else {
+        teamP2[p2Idx] = pvpSerializeFighter(p2Active);
+        const oldName = p2Active.name;
+        p2Idx = action.toIdx;
+        p2Active = pvpDeserializeFighter(teamP2[p2Idx]);
+        newLogs.push(battle.p2.displayName + ' retire ' + oldName + ' et envoie ' + p2Active.name + ' !');
+      }
+      return true;
+    }
+    // type 'move'
+    const attacker = by === 'p1' ? p1Active : p2Active;
+    const defender = by === 'p1' ? p2Active : p1Active;
+    if (attacker.ko || attacker.hp <= 0) return false; // KO depuis l'action de l'autre
+    if (defender.ko || defender.hp <= 0) return false; // déjà KO, on n'attaque pas
+    let move = attacker.moves[action.moveIdx];
+    if (!move) return false;
+    // Lutte si plus de PP (comme en PvE). Substitue le move par Lutte si tous
+    // les moves de l'attaquant sont à 0 PP, ou si le move spécifique cliqué est à 0.
+    if (typeof pmHasNoPP === 'function' && typeof pmGetLutte === 'function') {
+      if (pmHasNoPP(attacker) || (typeof move.currentPp === 'number' && move.currentPp <= 0)) {
+        move = pmGetLutte();
+      }
+    }
+    const events = pmExecuteMove(attacker, defender, move);
+    events.forEach(logEvent);
+    return false;
+  };
+
+  // 1) Détermine l'ordre de résolution selon les règles complètes :
+  //    - Un switch est toujours prioritaire sur un move (comme en Pokémon classique)
+  //    - Sinon, un move avec priority:true devance un move normal
+  //    - Sinon, le plus rapide attaque en premier (sur sa vit courante, stages compris)
+  //    - Égalité de vitesse → tirage au sort 50/50
+  //
+  //  `currentPlayer` en début de tour est basé sur la vitesse seule (pour décider
+  //  qui voit "À toi" en 1er dans l'UI), mais ici à la résolution on connaît
+  //  les deux actions et on applique les règles complètes.
+
+  const isSwitch1 = action1.type === 'switch';
+  const isSwitch2 = action2.type === 'switch';
+  const getMovePriority = (action, fighter) => {
+    if (action.type !== 'move') return 0;
+    const move = fighter.moves[action.moveIdx];
+    return (move && move.priority) ? 1 : 0;
+  };
+  const prio1 = isSwitch1 ? 6 : getMovePriority(action1, by1 === 'p1' ? p1Active : p2Active);
+  const prio2 = isSwitch2 ? 6 : getMovePriority(action2, by2 === 'p1' ? p1Active : p2Active);
+
+  let firstAction = action1, firstBy = by1;
+  let secondAction = action2, secondBy = by2;
+
+  if (prio2 > prio1) {
+    // action2 passe en premier
+    firstAction = action2; firstBy = by2;
+    secondAction = action1; secondBy = by1;
+  } else if (prio1 === prio2) {
+    // Même priorité → vitesse
+    const fighter1 = by1 === 'p1' ? p1Active : p2Active;
+    const fighter2 = by2 === 'p1' ? p1Active : p2Active;
+    if (fighter2.vit > fighter1.vit) {
+      firstAction = action2; firstBy = by2;
+      secondAction = action1; secondBy = by1;
+    } else if (fighter2.vit === fighter1.vit) {
+      // Égalité → 50/50 (comme PvE)
+      if (Math.random() < 0.5) {
+        firstAction = action2; firstBy = by2;
+        secondAction = action1; secondBy = by1;
+      }
+    }
+    // sinon fighter1 plus rapide → on garde l'ordre par défaut (action1 first)
   }
 
-  _pvpFailoverTimer = setTimeout(async () => {
-    _pvpFailoverTimer = null;
-    // Re-vérifier l'état actuel : si entre-temps le tour a déjà avancé, ne rien faire
-    const fresh = await pvpRead(BATTLES_PATH + '/' + battle.id);
-    if (!fresh || fresh.status !== 'active') return;
-    if (!fresh.p1Action || !fresh.p2Action) return;
-    if (fresh.turnNumber !== battle.turnNumber) return; // déjà résolu par l'autre
+  // 2) Application des actions dans l'ordre déterminé
+  applyAction(firstAction, firstBy);
+  applyAction(secondAction, secondBy);
 
-    _pvpResolvingFlag = true;
-    try {
-      await pvpResolveTurn(fresh);
-    } catch (e) {
-      console.error('[pvp] resolveTurn', e);
-    } finally {
-      _pvpResolvingFlag = false;
-    }
-  }, delay);
-}
+  // 3) End-of-turn effects (burn etc.) sur les deux actifs courants
+  const eot1 = pmApplyEndOfTurnEffects(p1Active);
+  eot1.forEach(logEvent);
+  const eot2 = pmApplyEndOfTurnEffects(p2Active);
+  eot2.forEach(logEvent);
 
-async function pvpResolveTurn(battle) {
-  const seed = battle.id + ':' + battle.turnNumber;
-  const p1State = {
-    team: battle.p1Team.map(f => ({ ...f })),
-    activeIdx: battle.p1ActiveIdx || 0,
-    activeFighter: pvpDeserializeFighter(battle.p1Team[battle.p1ActiveIdx || 0])
-  };
-  const p2State = {
-    team: battle.p2Team.map(f => ({ ...f })),
-    activeIdx: battle.p2ActiveIdx || 0,
-    activeFighter: pvpDeserializeFighter(battle.p2Team[battle.p2ActiveIdx || 0])
-  };
-
-  const events = pvpRunTurnDeterministic(p1State, p2State, battle.p1Action, battle.p2Action, seed);
-  const newLogs = pvpEventsToLog(events, battle.p1.displayName, battle.p2.displayName);
+  // Re-serialize les actifs courants dans l'équipe
+  teamP1[p1Idx] = pvpSerializeFighter(p1Active);
+  teamP2[p2Idx] = pvpSerializeFighter(p2Active);
 
   // Détection fin de combat
-  const p1AllKo = p1State.team.every(f => f.ko || f.hp <= 0);
-  const p2AllKo = p2State.team.every(f => f.ko || f.hp <= 0);
-
+  const p1AllKo = teamP1.every(f => f.ko || f.hp <= 0);
+  const p2AllKo = teamP2.every(f => f.ko || f.hp <= 0);
+  let status = 'active';
   let winner = '';
   let endReason = '';
-  let status = 'active';
+
   if (p1AllKo && p2AllKo) {
     status = 'completed'; winner = 'p2'; endReason = 'ko';
-    newLogs.push('Les deux équipes K.O. — victoire à ' + battle.p2.displayName + ' par tirage.');
+    newLogs.push('Les deux équipes K.O. — victoire par tirage à ' + battle.p2.displayName + '.');
   } else if (p1AllKo) {
     status = 'completed'; winner = 'p2'; endReason = 'ko';
-    newLogs.push(battle.p2.displayName + ' remporte le combat !');
+    newLogs.push('🏆 ' + battle.p2.displayName + ' remporte le combat !');
   } else if (p2AllKo) {
     status = 'completed'; winner = 'p1'; endReason = 'ko';
-    newLogs.push(battle.p1.displayName + ' remporte le combat !');
+    newLogs.push('🏆 ' + battle.p1.displayName + ' remporte le combat !');
   }
 
+  // Forced switch : si l'un des actifs courants est KO mais qu'il reste des PokePoms,
+  // on bascule sur le 1er non-KO disponible automatiquement (le joueur n'a pas à
+  // gérer une UI de switch forcé séparée — c'est plus simple en PvP async).
+  // Le PvE laisse choisir, mais en PvP "alterné" ça compliquerait le flow.
+  if (status === 'active') {
+    if (teamP1[p1Idx].ko || teamP1[p1Idx].hp <= 0) {
+      const nextIdx = teamP1.findIndex(f => !f.ko && f.hp > 0);
+      if (nextIdx >= 0) {
+        p1Idx = nextIdx;
+        newLogs.push(battle.p1.displayName + ' envoie ' + teamP1[p1Idx].name + ' !');
+      }
+    }
+    if (teamP2[p2Idx].ko || teamP2[p2Idx].hp <= 0) {
+      const nextIdx = teamP2.findIndex(f => !f.ko && f.hp > 0);
+      if (nextIdx >= 0) {
+        p2Idx = nextIdx;
+        newLogs.push(battle.p2.displayName + ' envoie ' + teamP2[p2Idx].name + ' !');
+      }
+    }
+  }
+
+  // Préparer les updates
   const updates = {
-    p1Team: p1State.team,
-    p2Team: p2State.team,
-    p1ActiveIdx: p1State.activeIdx,
-    p2ActiveIdx: p2State.activeIdx,
+    p1Team: teamP1,
+    p2Team: teamP2,
+    p1ActiveIdx: p1Idx,
+    p2ActiveIdx: p2Idx,
     log: (battle.log || []).concat(newLogs),
     lastUpdate: new Date().toISOString(),
     status: status,
     winner: winner,
-    endReason: endReason
+    endReason: endReason,
+    pendingAction: null,
+    pendingActionBy: ''
   };
 
   if (status === 'active') {
-    updates.turnNumber = battle.turnNumber + 1;
+    const newTurn = (battle.turnNumber || 1) + 1;
+    updates.turnNumber = newTurn;
     updates.turnDeadline = new Date(Date.now() + TURN_TIMEOUT_MS).toISOString();
-    // Suppression des actions précédentes (Firebase: null = delete)
-    updates.p1Action = null;
-    updates.p2Action = null;
-    updates.log.push('Tour ' + (battle.turnNumber + 1) + ' : choisissez vos actions.');
+    // P1 choisit toujours son action en premier, quel que soit la vitesse.
+    // La vitesse joue uniquement à la résolution (qui frappe en premier dans
+    // le récap), pour préserver la stratégie : le joueur doit deviner la
+    // vitesse adverse en observant l'ordre des frappes des tours précédents.
+    updates.currentPlayer = 'p1';
+    updates.log.push('— Tour ' + newTurn + ' — ' + battle.p1.displayName + ' joue en premier.');
   }
 
   await pvpUpdate(BATTLES_PATH + '/' + battle.id, updates);
 
+  // Si combat terminé : appliquer ELO et récompenses
   if (status === 'completed') {
-    // Appliquer ELO/récompenses (un seul des 2 clients le fait : convention P1)
-    const isP1 = battle.p1.code === state.code;
-    if (isP1) {
-      try {
-        await pvpApplyBattleEnd({ ...battle, ...updates });
-      } catch (e) {
-        console.error('[pvp] applyEnd', e);
-      }
-    }
+    try {
+      await pvpApplyBattleEnd({ ...battle, ...updates });
+    } catch (e) { console.error('[pvp] applyBattleEnd', e); }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Application des conséquences ELO + récompenses (côté P1)
+// Fin de combat : ELO + Pomels
 // ─────────────────────────────────────────────────────────────────────
 
 async function pvpApplyBattleEnd(battle) {
-  if (battle.endApplied) return;
-  // Marque immédiatement pour idempotence
-  await pvpUpdate(BATTLES_PATH + '/' + battle.id, { endApplied: true });
+  if (_pvpEndApplied[battle.id]) return;
+  _pvpEndApplied[battle.id] = true;
 
   const p1Won = battle.winner === 'p1';
-  const p1Elo = battle.p1.eloAtStart;
-  const p2Elo = battle.p2.eloAtStart;
+  const newP1Elo = pmEloCalc(battle.p1.eloAtStart, battle.p2.eloAtStart, p1Won);
+  const newP2Elo = pmEloCalc(battle.p2.eloAtStart, battle.p1.eloAtStart, !p1Won);
 
-  const newP1Elo = pmEloCalc(p1Elo, p2Elo, p1Won);
-  const newP2Elo = pmEloCalc(p2Elo, p1Elo, !p1Won);
-
-  // Met à jour les profils des deux joueurs
+  // Met à jour les profils Firebase (relectures car les profils peuvent avoir
+  // changé entre temps, par ex. autres combats)
   const p1Profile = await pvpLoadOtherProfile(battle.p1.code);
   const p2Profile = await pvpLoadOtherProfile(battle.p2.code);
 
@@ -8716,55 +8740,24 @@ async function pvpApplyBattleEnd(battle) {
     await pvpSaveProfile(p2Profile);
   }
 
-  // Récompenses Pomels (chaque client se verse SES propres pomels)
-  // Note : c'est "côté P1 qui apply" mais comme on a stocké les profils, le delta
-  // ELO sera reflété. Le bonus pomels se fait localement après dans pvpRenderBattle.
-  if (_pvpProfileCache && state && state.code) {
-    const isP1 = battle.p1.code === state.code;
-    const iWon = (isP1 && p1Won) || (!isP1 && !p1Won);
-    const myStartTier = isP1 ? battle.p1.tierAtStart : battle.p2.tierAtStart;
-    const reward = pmEloReward(myStartTier, iWon);
-    if (reward > 0 && typeof addBalanceTransaction === 'function') {
-      try {
-        const oppName = isP1 ? battle.p2.displayName : battle.p1.displayName;
-        const updated = await addBalanceTransaction(state.code, reward, {
-          type: 'pokepom_pvp',
-          desc: (iWon ? 'Victoire PvP vs ' : 'Défaite PvP vs ') + oppName,
-          amount: reward,
-          date: new Date().toISOString()
-        });
-        if (updated && typeof migrateAccount === 'function') {
-          state = migrateAccount(updated);
-          if (typeof refreshUI === 'function') refreshUI();
-        }
-      } catch (e) {
-        console.warn('[pvp] reward transaction', e);
-      }
-    }
-  }
+  // Pomels : le joueur courant se verse SES propres pomels
+  await pvpClaimMyReward(battle);
 }
 
-// Quand le combat se termine côté NON-P1, on doit quand même verser les pomels
-// du joueur courant. On le fait au moment où le listener voit status='completed'.
-let _pvpRewardClaimed = {}; // battleId → true
-
-async function pvpClaimMyRewardIfNeeded(battle) {
+async function pvpClaimMyReward(battle) {
   if (!battle || battle.status !== 'completed') return;
   if (_pvpRewardClaimed[battle.id]) return;
   _pvpRewardClaimed[battle.id] = true;
 
-  const isP1 = battle.p1.code === state.code;
-  if (!isP1 && battle.p2.code !== state.code) return;
-  // P1 a déjà reçu ses pomels via pvpApplyBattleEnd
-  if (isP1) return;
-
+  const me = pvpIdentifyMe(battle);
+  if (!me) return;
   const p1Won = battle.winner === 'p1';
-  const iWon = !p1Won;
-  const myStartTier = battle.p2.tierAtStart;
+  const iWon = (me === 'p1' && p1Won) || (me === 'p2' && !p1Won);
+  const myStartTier = me === 'p1' ? battle.p1.tierAtStart : battle.p2.tierAtStart;
   const reward = pmEloReward(myStartTier, iWon);
   if (reward <= 0 || typeof addBalanceTransaction !== 'function') return;
   try {
-    const oppName = battle.p1.displayName;
+    const oppName = me === 'p1' ? battle.p2.displayName : battle.p1.displayName;
     const updated = await addBalanceTransaction(state.code, reward, {
       type: 'pokepom_pvp',
       desc: (iWon ? 'Victoire PvP vs ' : 'Défaite PvP vs ') + oppName,
@@ -8775,11 +8768,8 @@ async function pvpClaimMyRewardIfNeeded(battle) {
       state = migrateAccount(updated);
       if (typeof refreshUI === 'function') refreshUI();
     }
-  } catch (e) {
-    console.warn('[pvp] claim reward', e);
-  }
+  } catch (e) { console.warn('[pvp] claim reward', e); }
 
-  // Reset le currentBattleId du joueur courant si pas déjà fait
   if (_pvpProfileCache && _pvpProfileCache.currentBattleId === battle.id) {
     _pvpProfileCache.currentBattleId = '';
   }
@@ -8794,30 +8784,30 @@ async function pvpAbandon() {
   if (!battle || battle.status !== 'active') return;
   if (!confirm('Abandonner = défaite + perte d\'ELO. Confirmer ?')) return;
 
-  const isP1 = battle.p1.code === state.code;
+  const me = pvpIdentifyMe(battle);
+  if (!me) return;
+  const winner = me === 'p1' ? 'p2' : 'p1';
   const updates = {
     status: 'completed',
-    winner: isP1 ? 'p2' : 'p1',
+    winner: winner,
     endReason: 'forfeit',
+    pendingAction: null,
+    pendingActionBy: '',
+    lastUpdate: new Date().toISOString(),
     log: (battle.log || []).concat([
-      (isP1 ? battle.p1.displayName : battle.p2.displayName) + ' abandonne. Victoire à ' +
-      (isP1 ? battle.p2.displayName : battle.p1.displayName) + '.'
-    ]),
-    lastUpdate: new Date().toISOString()
+      (me === 'p1' ? battle.p1.displayName : battle.p2.displayName) + ' abandonne. Victoire à ' +
+      (me === 'p1' ? battle.p2.displayName : battle.p1.displayName) + '.'
+    ])
   };
   try {
     await pvpUpdate(BATTLES_PATH + '/' + battle.id, updates);
-    // L'abandon déclenche immédiatement applyEnd côté P1 (ou c'est nous si on est P1)
-    if (isP1) {
-      try { await pvpApplyBattleEnd({ ...battle, ...updates }); } catch (e) { console.error(e); }
-    }
+    await pvpApplyBattleEnd({ ...battle, ...updates });
   } catch (e) {
     console.error('[pvp] abandon', e);
     alert('Erreur abandon : ' + (e && e.message || e));
   }
 }
 
-// Force-clear un battleId orphelin dans le profil joueur (combat qui n'existe plus en Firebase)
 async function pvpForceClearAndExit() {
   pvpDetachListener();
   try {
@@ -8836,16 +8826,6 @@ async function pvpForceClearAndExit() {
 // Leaderboard PvP & distribution hebdomadaire
 // ─────────────────────────────────────────────────────────────────────
 
-function pvpWeekKey() {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().slice(0, 10);
-}
-
 async function pvpLoadLeaderboard(limit = 50) {
   try {
     const snap = await pvpRead(PVP_PATH);
@@ -8854,19 +8834,13 @@ async function pvpLoadLeaderboard(limit = 50) {
       .filter(p => p && p.code && typeof p.elo === 'number')
       .sort((a, b) => b.elo - a.elo)
       .slice(0, limit);
-  } catch (e) {
-    console.error('[pvp] loadLeaderboard', e);
-    return [];
-  }
+  } catch (e) { return []; }
 }
 
 async function pvpCheckWeeklyReset() {
-  // Lundi 9h+
   const now = new Date();
   if (now.getDay() !== 1) return;
   if (now.getHours() < 9) return;
-
-  // Semaine précédente
   const prev = new Date(now);
   prev.setDate(now.getDate() - 7);
   const prevDay = prev.getDay();
@@ -8875,22 +8849,16 @@ async function pvpCheckWeeklyReset() {
   prevMonday.setDate(prev.getDate() + diff);
   prevMonday.setHours(0, 0, 0, 0);
   const prevWeekKey = prevMonday.toISOString().slice(0, 10);
-
   const distributed = await pvpRead(DISTRIB_PATH + '/' + prevWeekKey);
   if (distributed) return;
-
-  // Lock
   await pvpWrite(DISTRIB_PATH + '/' + prevWeekKey, true);
-  // Re-check (anti-race)
   const recheck = await pvpRead(DISTRIB_PATH + '/' + prevWeekKey);
   if (!recheck) return;
-
   const snap = await pvpRead(PVP_PATH);
   if (!snap) return;
   const ranked = Object.values(snap)
     .filter(p => p && p.code && typeof p.elo === 'number' && (p.wins||0) + (p.losses||0) > 0)
     .sort((a, b) => b.elo - a.elo);
-
   if (typeof addBalanceTransaction === 'function') {
     await Promise.all(ranked.map(async (p, i) => {
       const amount = i < 3 ? PM_PVP_WEEKLY_PRIZES[i] : PM_PVP_WEEKLY_CONSOLATION;
@@ -8901,13 +8869,17 @@ async function pvpCheckWeeklyReset() {
           amount: amount,
           date: new Date().toISOString()
         });
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
     }));
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════════════════
+
 // ─────────────────────────────────────────────────────────────────────
-// UI : Hub PvP
+// Hub PvP
 // ─────────────────────────────────────────────────────────────────────
 
 async function pmRenderPvpHub(page, player) {
@@ -8929,13 +8901,11 @@ async function pmRenderPvpHub(page, player) {
   const profile = await pvpLoadProfile();
   if (!profile) {
     document.getElementById('pvp-hub-content').innerHTML =
-      '<div style="color:#c84848;">Impossible de charger ton profil PvP.</div>';
+      '<div style="color:var(--red);">Impossible de charger ton profil PvP.</div>';
     return;
   }
-
   pvpCheckWeeklyReset().catch(() => {});
 
-  // Mettre à jour le snapshot d'équipe
   const snapshot = pvpBuildTeamSnapshot(player);
   if (snapshot.length > 0) {
     profile.teamSnapshot = snapshot;
@@ -9028,7 +8998,7 @@ async function pmRenderPvpHub(page, player) {
       </div>
     </div>
     <div style="margin-top:14px; font-size:.74rem; color:var(--muted); text-align:center;">
-      Combats synchrones · 1h par tour · Soin auto avant combat<br>
+      Combats au tour par tour · le plus rapide commence · 1h par tour<br>
       Récompense : <strong>${PM_PVP_REWARDS[tier.id].win}</strong> Pomels en victoire, <strong>${PM_PVP_REWARDS[tier.id].loss}</strong> en défaite
     </div>
   `;
@@ -9040,7 +9010,6 @@ async function pmRenderPvpHub(page, player) {
     });
   }, 0);
 
-  // Leaderboard
   const lb = await pvpLoadLeaderboard(10);
   const lbEl = document.getElementById('pvp-lb-list');
   if (lbEl) {
@@ -9061,7 +9030,7 @@ async function pmRenderPvpHub(page, player) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// UI : Liste des adversaires
+// Liste des adversaires
 // ─────────────────────────────────────────────────────────────────────
 
 async function pmRenderPvpList(page, player) {
@@ -9171,7 +9140,7 @@ async function pmRenderPvpList(page, player) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// UI : Écran de combat (avec listener temps réel)
+// Écran de combat (UI réutilisant les classes PvE)
 // ─────────────────────────────────────────────────────────────────────
 
 async function pmRenderPvpBattle(page, player) {
@@ -9184,21 +9153,15 @@ async function pmRenderPvpBattle(page, player) {
         </div>
         <button class="btn-outline" onclick="pvpDetachListener(); pmGoTo('pvp');">← Retour</button>
       </div>
-      <div id="pvp-battle-content" class="pm-card" style="background:#f5edd6; color:#3a1a08; border:2px solid #5a3018;">
-        <div style="text-align:center; padding:20px;">Récupération de l'état…</div>
+      <div id="pvp-battle-content">
+        <div class="pm-card" style="text-align:center; padding:20px;">Récupération de l'état…</div>
       </div>
     </div>
   `;
 
-  // Source de vérité pour le battleId, dans l'ordre :
-  //   1. _pvpLastCreatedBattleId : combat juste créé par pvpInitChallenge (frais)
-  //   2. _pvpProfileCache.currentBattleId : profil en mémoire
-  //   3. Firebase (relecture, peut avoir un délai de propagation)
-  // L'ordre 1→3 évite la race où le créateur du combat lit Firebase avant
-  // que sa propre écriture currentBattleId ne soit propagée.
+  // Source de vérité pour le battleId
   let battleId = _pvpLastCreatedBattleId;
-  _pvpLastCreatedBattleId = null; // consommé une fois
-
+  _pvpLastCreatedBattleId = null;
   if (!battleId && _pvpProfileCache && _pvpProfileCache.currentBattleId) {
     battleId = _pvpProfileCache.currentBattleId;
   }
@@ -9206,19 +9169,17 @@ async function pmRenderPvpBattle(page, player) {
     const profile = await pvpLoadProfile();
     battleId = profile && profile.currentBattleId;
   }
-
   if (!battleId) {
     document.getElementById('pvp-battle-content').innerHTML = `
-      <div style="text-align:center; padding:30px;">
+      <div class="pm-card" style="text-align:center; padding:30px;">
         <div style="font-size:2.5rem;">🕊️</div>
         <div style="margin-top:8px; font-weight:bold;">Aucun combat en cours.</div>
-        <button onclick="pmGoTo('pvp')" style="margin-top:16px; padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Retour</button>
+        <button class="btn-primary" style="margin-top:16px;" onclick="pmGoTo('pvp')">Retour</button>
       </div>`;
     return;
   }
 
-  // Pre-fetch one-shot pour validation, avec retry pour absorber le délai
-  // de propagation Firebase juste après création.
+  // Pre-fetch avec retry pour la propagation Firebase
   let initial = await pvpRead(BATTLES_PATH + '/' + battleId);
   for (let attempt = 0; attempt < 3 && !initial; attempt++) {
     await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
@@ -9226,35 +9187,32 @@ async function pmRenderPvpBattle(page, player) {
   }
   if (!initial) {
     document.getElementById('pvp-battle-content').innerHTML = `
-      <div style="text-align:center; padding:20px;">
+      <div class="pm-card" style="text-align:center; padding:20px;">
         <div style="font-weight:bold; margin-bottom:8px;">⚠️ Combat introuvable</div>
         <div style="font-size:.85rem; margin-bottom:12px;">ID : <code>${battleId}</code></div>
-        <button onclick="pvpForceClearAndExit()" style="padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer;">Réinitialiser et retourner</button>
+        <button class="btn-primary" onclick="pvpForceClearAndExit()">Réinitialiser et retourner</button>
       </div>`;
     return;
   }
 
-  // Attache le listener temps réel — c'est lui qui drive tout le reste
   pvpAttachListener(battleId, async (battle) => {
     if (!battle) {
       document.getElementById('pvp-battle-content').innerHTML = `
-        <div style="text-align:center; padding:20px;">
+        <div class="pm-card" style="text-align:center; padding:20px;">
           <div style="font-weight:bold;">⚠️ Combat supprimé.</div>
-          <button onclick="pvpForceClearAndExit()" style="margin-top:14px; padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer;">Retour</button>
+          <button class="btn-primary" style="margin-top:14px;" onclick="pvpForceClearAndExit()">Retour</button>
         </div>`;
       return;
     }
+    // Reset du mode switch UI quand l'état Firebase change (nouveau tour)
+    _pvpUiSwitching = false;
     pvpRenderBattleUI(battle);
     if (battle.status === 'completed') {
-      await pvpClaimMyRewardIfNeeded(battle);
-      // Reset du currentBattleId si pas déjà fait (côté joueur courant)
+      await pvpClaimMyReward(battle);
       if (_pvpProfileCache && _pvpProfileCache.currentBattleId === battle.id) {
         _pvpProfileCache.currentBattleId = '';
         try { await pvpUpdate(PVP_PATH + '/' + state.code, { currentBattleId: '' }); } catch(e) {}
       }
-    } else if (battle.p1Action && battle.p2Action) {
-      // Tenter la résolution (P1 immédiate, P2 failover)
-      pvpMaybeResolve(battle);
     }
   });
 }
@@ -9263,178 +9221,258 @@ function pvpRenderBattleUI(battle) {
   const content = document.getElementById('pvp-battle-content');
   const subEl = document.getElementById('pvp-battle-sub');
   if (!content) return;
-  const myCode = state && state.code;
-  const isP1 = battle.p1.code === myCode;
-  const isP2 = battle.p2.code === myCode;
-  if (!isP1 && !isP2) {
+
+  const me = pvpIdentifyMe(battle);
+  if (!me) {
     content.innerHTML = `
-      <div style="text-align:center; padding:20px;">
+      <div class="pm-card" style="text-align:center; padding:20px;">
         <div style="font-size:2.5rem;">⚠️</div>
-        <div style="font-weight:bold; margin:8px 0;">Combat orphelin détecté</div>
-        <button onclick="pvpForceClearAndExit()" style="padding:10px 18px; background:#a83838; color:#fff; border:none; border-radius:6px; cursor:pointer;">Nettoyer et retourner</button>
+        <div style="font-weight:700; margin:8px 0;">Combat orphelin détecté</div>
+        <button class="btn-primary" onclick="pvpForceClearAndExit()">Nettoyer et retourner</button>
       </div>`;
     return;
   }
-
-  const me  = isP1 ? battle.p1 : battle.p2;
-  const opp = isP1 ? battle.p2 : battle.p1;
-  const myTeam   = (isP1 ? battle.p1Team : battle.p2Team) || [];
-  const oppTeam  = (isP1 ? battle.p2Team : battle.p1Team) || [];
-  const myActiveIdx  = isP1 ? (battle.p1ActiveIdx||0) : (battle.p2ActiveIdx||0);
-  const oppActiveIdx = isP1 ? (battle.p2ActiveIdx||0) : (battle.p1ActiveIdx||0);
-  const myAction  = isP1 ? battle.p1Action : battle.p2Action;
-  const oppAction = isP1 ? battle.p2Action : battle.p1Action;
+  const myKey  = me;
+  const oppKey = me === 'p1' ? 'p2' : 'p1';
+  const myInfo  = battle[myKey];
+  const oppInfo = battle[oppKey];
+  const myTeam  = battle[myKey + 'Team'] || [];
+  const oppTeam = battle[oppKey + 'Team'] || [];
+  const myActiveIdx  = battle[myKey + 'ActiveIdx']  || 0;
+  const oppActiveIdx = battle[oppKey + 'ActiveIdx'] || 0;
   const myActive  = myTeam[myActiveIdx];
   const oppActive = oppTeam[oppActiveIdx];
+  const isMyTurn = battle.currentPlayer === myKey;
 
+  // ───── Combat terminé ─────
   if (battle.status === 'completed') {
     pvpDetachListener();
-    const iWon = (isP1 && battle.winner === 'p1') || (isP2 && battle.winner === 'p2');
-    const titleColor = iWon ? '#3a8030' : '#a83030';
+    const iWon = battle.winner === myKey;
+    const titleColor = iWon ? 'var(--green)' : 'var(--red)';
     const titleEmoji = iWon ? '🏆' : '💔';
     const titleText  = iWon ? 'Victoire !' : 'Défaite';
     const reasonLabel = battle.endReason === 'forfeit' ? 'par abandon'
-      : battle.endReason === 'timeout' ? 'par timeout'
-      : 'par K.O.';
+      : battle.endReason === 'timeout' ? 'par timeout' : 'par K.O.';
     if (subEl) subEl.textContent = 'Combat terminé';
     content.innerHTML = `
-      <div style="text-align:center; padding:20px;">
+      <div class="pm-card" style="text-align:center; padding:20px;">
         <div style="font-size:3rem; margin-bottom:10px;">${titleEmoji}</div>
-        <div style="font-size:1.6rem; font-weight:bold; color:${titleColor};">${titleText}</div>
-        <div style="font-size:.9rem; color:#7a4828; margin-top:4px;">${reasonLabel}</div>
-        <div style="margin-top:16px; padding:12px; background:#fbf3da; border:1px solid #c8b07a; border-radius:8px; text-align:left; max-height:200px; overflow-y:auto;">
-          ${(battle.log||[]).map(l => `<div style="margin-bottom:3px; font-size:.84rem;">${l}</div>`).join('')}
+        <div style="font-size:1.6rem; font-weight:700; color:${titleColor};">${titleText}</div>
+        <div style="font-size:.9rem; color:var(--muted); margin-top:4px;">${reasonLabel}</div>
+        <div class="pm-battle-log" style="margin-top:16px; max-height:240px;">
+          ${(battle.log||[]).map(l => `<div class="pm-log-line">${l}</div>`).join('')}
         </div>
-        <button onclick="pvpDetachListener(); pmGoTo('pvp');" style="margin-top:18px; padding:12px 24px; background:#5a3018; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold;">Retour</button>
+        <button class="btn-primary" style="margin-top:18px;" onclick="pvpDetachListener(); pmGoTo('pvp');">Retour</button>
       </div>`;
     return;
   }
 
+  // ───── Sous-titre ─────
   let subText = `Tour ${battle.turnNumber}`;
-  if (myAction && !oppAction) subText += " · En attente de l'adversaire…";
-  else if (!myAction && oppAction) subText += " · L'adversaire a joué — à toi !";
-  else if (!myAction && !oppAction) subText += " · Choisis ton action";
-  else subText += ' · Résolution…';
+  if (isMyTurn) {
+    subText += battle.pendingAction ? " · À toi ! (l'adversaire a déjà joué)" : " · À toi de jouer";
+  } else {
+    subText += battle.pendingAction ? " · L'adversaire a fini, résolution…" : " · L'adversaire choisit son action…";
+  }
   if (subEl) subEl.textContent = subText;
 
-  let timerHtml = '';
-  if (battle.turnDeadline) {
-    const ms = new Date(battle.turnDeadline).getTime() - Date.now();
-    if (ms > 0) timerHtml = `<div style="font-size:.78rem; color:#7a4828; text-align:right;">⏱️ ${Math.floor(ms/60000)} min restantes</div>`;
-    else timerHtml = `<div style="font-size:.78rem; color:#aa3030; text-align:right; font-weight:bold;">⏱️ Temps écoulé !</div>`;
-  }
-
-  const renderActive = (f, side) => {
-    if (!f) return '<div></div>';
-    const hpPct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
-    const hpColor = hpPct > 50 ? '#3a8030' : hpPct > 20 ? '#a08020' : '#aa3030';
-    const burnIcon = f.burnTurns > 0 ? ' 🔥' : '';
-    const koIcon = f.ko ? ' ✗' : '';
-    return `<div style="display:flex; align-items:center; gap:10px; padding:8px; background:#fbf3da; border:1px solid #c8b07a; border-radius:8px;">
-      <canvas width="64" height="64" id="pvp-active-${side}" style="image-rendering:pixelated; width:56px; height:56px;"></canvas>
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:bold; font-size:.92rem;">${f.name}${burnIcon}${koIcon}</div>
-        <div style="font-size:.72rem; color:#7a4828;">Niv ${f.level} · ${PM_TYPE_EMOJI[f.type]||''} ${PM_TYPE_LABEL[f.type]||''}</div>
-        <div style="height:8px; background:#e8d8a8; border-radius:4px; margin-top:4px; overflow:hidden;">
-          <div style="width:${hpPct}%; height:100%; background:${hpColor};"></div>
-        </div>
-        <div style="font-size:.7rem; margin-top:2px; font-family:'Space Mono',monospace;">${f.hp}/${f.maxHp} PV</div>
-      </div>
-    </div>`;
+  // ───── Helpers de rendu ─────
+  const hpClass = (f) => {
+    const pct = f.hp / f.maxHp;
+    if (pct > 0.5) return 'ok';
+    if (pct > 0.2) return 'mid';
+    return 'low';
   };
-
+  const renderStatusBadges = (f) => {
+    const badges = [];
+    if (f.burnTurns > 0) badges.push('<span class="pm-battle-status-badge" style="background:rgba(235,88,70,0.2); color:var(--red);">🔥 Brûlure ' + f.burnTurns + 'T</span>');
+    ['atk','def','vit'].forEach(stat => {
+      const v = (f.stages && f.stages[stat]) || 0;
+      if (v !== 0) {
+        const sign = v > 0 ? '+' : '';
+        const color = v > 0 ? 'var(--green)' : 'var(--red)';
+        badges.push(`<span class="pm-battle-status-badge" style="color:${color};">${stat.toUpperCase()} ${sign}${v}</span>`);
+      }
+    });
+    return `<div class="pm-battle-status">${badges.join('')}</div>`;
+  };
   const renderTeamBar = (team, activeIdx, side, clickable) => {
-    let h = `<div style="display:flex; gap:4px; margin-top:6px; justify-content:center;">`;
+    let h = `<div style="display:flex; gap:6px; justify-content:center; margin-top:6px; flex-wrap:wrap;">`;
     team.forEach((f, i) => {
       const isActive = i === activeIdx;
       const isKo = f.ko || f.hp <= 0;
-      const dotColor = isKo ? '#aa3030' : isActive ? '#3a8030' : '#7a4828';
+      const borderColor = isKo ? 'var(--red)' : isActive ? 'var(--primary)' : 'var(--border)';
       const opacity = isKo ? 0.4 : 1;
       const click = clickable && !isKo && !isActive ? `onclick="pvpSubmitSwitch(${i})"` : '';
       const cursor = (clickable && !isKo && !isActive) ? 'pointer' : 'default';
-      h += `<div ${click} style="position:relative; padding:2px; opacity:${opacity}; cursor:${cursor};" title="${f.name}${isKo ? ' (K.O.)' : ''}">
-        <canvas width="32" height="32" id="pvp-mini-${side}-${i}" style="image-rendering:pixelated; width:32px; height:32px; border:2px solid ${dotColor}; border-radius:6px; background:#e8d8a8;"></canvas>
+      const hpPct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
+      const hpColor = hpPct > 50 ? 'var(--green)' : hpPct > 20 ? 'var(--yellow)' : 'var(--red)';
+      h += `<div ${click} title="${f.name}${isKo ? ' (K.O.)' : ''}"
+        style="position:relative; padding:3px; opacity:${opacity}; cursor:${cursor}; display:flex; flex-direction:column; align-items:center; gap:2px; min-width:42px;">
+        <canvas width="64" height="64" id="pvp-mini-${side}-${i}" class="pm-sprite"
+          style="width:36px; height:36px; border:2px solid ${borderColor}; border-radius:6px; background:var(--surface2);"></canvas>
+        <div style="width:36px; height:3px; background:var(--surface2); border-radius:2px; overflow:hidden;">
+          <div style="width:${hpPct}%; height:100%; background:${hpColor};"></div>
+        </div>
       </div>`;
     });
     h += `</div>`;
     return h;
   };
+  const renderSide = (info, fighter, team, activeIdx, side, isMe) => {
+    if (!fighter) return `<div class="pm-battle-side"><div style="color:var(--muted);">Aucun PokePom actif</div></div>`;
+    const hpPct = Math.max(0, Math.min(100, (fighter.hp / fighter.maxHp) * 100));
+    return `
+      <div class="pm-battle-side ${fighter.ko ? '' : 'active'}">
+        <div style="font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:700; text-align:center;">${info.displayName}${isMe ? ' (toi)' : ''}</div>
+        <canvas width="64" height="64" class="pm-sprite pm-sprite-lg" id="pvp-active-${side}"></canvas>
+        <div class="pm-battle-info">
+          <div class="pm-battle-name">${fighter.name}</div>
+          <div class="pm-battle-level">Niv ${fighter.level} · ${PM_TYPE_EMOJI[fighter.type]||''} ${PM_TYPE_LABEL[fighter.type]||''}</div>
+          <div class="pm-hp-bar"><div class="pm-hp-fill ${hpClass(fighter)}" style="width:${hpPct}%"></div></div>
+          <div class="pm-battle-hp-text">${fighter.hp} / ${fighter.maxHp} HP</div>
+          ${renderStatusBadges(fighter)}
+        </div>
+        ${renderTeamBar(team, activeIdx, side, false)}
+      </div>`;
+  };
 
-  // Choix d'action
-  const myAvailableSwitch = myTeam.filter((f, i) => i !== myActiveIdx && !(f.ko || f.hp <= 0)).length;
+  // ───── Panneau d'action ─────
   let actionHtml = '';
-  if (myAction) {
-    let desc = '?';
-    if (myAction.type === 'move') {
-      const f = myTeam[myAction.activeIdx !== undefined ? myAction.activeIdx : myActiveIdx];
-      const moveId = f && f.moveIds && f.moveIds[myAction.moveIdx];
-      const move = moveId && PM_MOVES[moveId];
-      desc = move ? move.name : 'Move';
-    } else if (myAction.type === 'switch') {
-      const t = myTeam[myAction.toIdx];
-      desc = t ? 'Switch → ' + t.name : 'Switch';
-    }
-    actionHtml = `<div style="margin-top:14px; padding:14px; background:#fbf3da; border:2px solid #c8b07a; border-radius:8px; text-align:center;">
-      <div style="font-size:1.1rem; margin-bottom:4px;">⏳</div>
-      <div style="font-weight:bold;">En attente de l'adversaire…</div>
-      <div style="font-size:.78rem; color:#7a4828; margin-top:4px;">Tu as choisi : <strong>${desc}</strong></div>
-    </div>`;
+  if (!isMyTurn) {
+    actionHtml = `
+      <div class="pm-card" style="text-align:center; padding:18px;">
+        <div style="font-size:1.4rem;">⏳</div>
+        <div style="font-weight:700; margin-top:6px;">L'adversaire choisit son action…</div>
+        <div style="font-size:.78rem; color:var(--muted); margin-top:6px;">
+          ${battle.pendingAction
+            ? '<strong>' + (battle.pendingActionBy === 'p1' ? battle.p1.displayName : battle.p2.displayName) + '</strong> a joué en premier — résolution dès que tu joueras.'
+            : 'Patience, l\'autre joueur réfléchit.'}
+        </div>
+      </div>`;
   } else if (myActive && (myActive.ko || myActive.hp <= 0)) {
-    if (myAvailableSwitch === 0) {
-      actionHtml = `<div style="margin-top:14px; padding:14px; background:#f8e0d8; border:2px solid #aa3030; border-radius:8px; text-align:center;"><div style="font-weight:bold; color:#aa3030;">Tous tes PokePoms sont K.O. !</div></div>`;
+    // KO : on n'arrive ici normalement pas (auto-switch dans résolution),
+    // mais safety net : grille de switch.
+    const available = myTeam.filter((f, i) => i !== myActiveIdx && !(f.ko || f.hp <= 0)).length;
+    if (available === 0) {
+      actionHtml = `<div class="pm-card" style="text-align:center; color:var(--red); font-weight:700;">Tous tes PokePoms sont K.O. !</div>`;
     } else {
-      actionHtml = `<div style="margin-top:14px; padding:14px; background:#f8e0d8; border:2px solid #aa3030; border-radius:8px;">
-        <div style="font-weight:bold; color:#aa3030; margin-bottom:8px; text-align:center;">${myActive.name} K.O. — choisis un remplaçant :</div>
-        <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">`;
+      actionHtml = `<div style="margin-bottom:10px; text-align:center; color:var(--yellow); font-weight:700;">${myActive.name} est K.O. ! Choisis un remplaçant :</div>`;
+      actionHtml += `<div class="pm-switch-grid">`;
       myTeam.forEach((f, i) => {
-        if (i === myActiveIdx || f.ko || f.hp <= 0) return;
-        actionHtml += `<button onclick="pvpSubmitSwitch(${i})" style="padding:8px 12px; background:#5a3018; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:.85rem;">${f.name} (${f.hp}/${f.maxHp})</button>`;
-      });
-      actionHtml += `</div></div>`;
-    }
-  } else if (myActive) {
-    actionHtml = `<div style="margin-top:14px;">
-      <div style="font-size:.78rem; font-weight:bold; margin-bottom:6px;">Choisis ton action :</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">`;
-    (myActive.moveIds || []).forEach((mid, i) => {
-      const m = PM_MOVES[mid];
-      if (!m) return;
-      actionHtml += `<button onclick="pvpSubmitMove(${i})" style="padding:10px; background:#fbf3da; border:2px solid #c8b07a; border-left:5px solid ${PM_TYPE_COLOR[m.type] || '#888'}; border-radius:6px; cursor:pointer; text-align:left; color:#3a1a08; font-family:inherit;">
-        <div style="font-weight:bold; font-size:.85rem;">${PM_TYPE_EMOJI[m.type] || ''} ${m.name}</div>
-        <div style="font-size:.7rem; color:#7a4828;">${m.power > 0 ? 'P.' + m.power + ' · ' : ''}${m.accuracy}%</div>
-      </button>`;
-    });
-    actionHtml += `</div>`;
-    if (myAvailableSwitch > 0) {
-      actionHtml += `<div style="font-size:.78rem; font-weight:bold; margin-bottom:4px;">Ou changer de PokePom :</div><div style="display:flex; gap:6px; flex-wrap:wrap;">`;
-      myTeam.forEach((f, i) => {
-        if (i === myActiveIdx || f.ko || f.hp <= 0) return;
-        actionHtml += `<button onclick="pvpSubmitSwitch(${i})" style="padding:6px 10px; background:#e8d8a8; color:#3a1a08; border:1px solid #c8b07a; border-radius:6px; cursor:pointer; font-family:inherit; font-size:.78rem;">⇄ ${f.name} (${f.hp}/${f.maxHp})</button>`;
+        const isActive = i === myActiveIdx;
+        const isKo = f.ko || f.hp <= 0;
+        const disabled = (isActive || isKo) ? 'disabled' : '';
+        const hpPct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
+        const hpColor = hpPct > 50 ? 'var(--green)' : hpPct > 20 ? 'var(--yellow)' : 'var(--red)';
+        const stateLabel = isKo ? ' <span style="color:var(--red); font-weight:700;">K.O.</span>'
+          : isActive ? ' <span style="color:var(--blue); font-weight:700;">(actif)</span>' : '';
+        actionHtml += `
+          <button class="pm-switch-btn" ${disabled} onclick="pvpSubmitSwitch(${i})">
+            <canvas width="48" height="48" class="pm-sprite" id="pvp-sw-${i}"></canvas>
+            <div style="font-weight:700; font-size:.88rem;">${f.name}${stateLabel}</div>
+            <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[f.type]}; font-size:.7rem;">${PM_TYPE_EMOJI[f.type]} ${PM_TYPE_LABEL[f.type]}</span>
+            <div style="font-size:.72rem; color:var(--muted); font-family:'Space Mono',monospace;">Niv ${f.level} · PV ${f.hp}/${f.maxHp}</div>
+            <div style="width:100%; height:5px; background:var(--surface2); border-radius:3px; overflow:hidden;">
+              <div style="height:100%; width:${hpPct}%; background:${hpColor};"></div>
+            </div>
+          </button>`;
       });
       actionHtml += `</div>`;
     }
-    actionHtml += `</div>`;
+  } else if (myActive) {
+    if (_pvpUiSwitching) {
+      // Grille de switch manuelle
+      actionHtml = `<div style="margin-bottom:10px; text-align:center; color:var(--muted); font-size:.85rem;">Choisis le PokePom à envoyer (consomme ton tour) :</div>`;
+      actionHtml += `<div class="pm-switch-grid">`;
+      myTeam.forEach((f, i) => {
+        const isActive = i === myActiveIdx;
+        const isKo = f.ko || f.hp <= 0;
+        const disabled = (isActive || isKo) ? 'disabled' : '';
+        const hpPct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
+        const hpColor = hpPct > 50 ? 'var(--green)' : hpPct > 20 ? 'var(--yellow)' : 'var(--red)';
+        const stateLabel = isKo ? ' <span style="color:var(--red); font-weight:700;">K.O.</span>'
+          : isActive ? ' <span style="color:var(--blue); font-weight:700;">(actif)</span>' : '';
+        actionHtml += `
+          <button class="pm-switch-btn" ${disabled} onclick="pvpSubmitSwitch(${i})">
+            <canvas width="48" height="48" class="pm-sprite" id="pvp-sw-${i}"></canvas>
+            <div style="font-weight:700; font-size:.88rem;">${f.name}${stateLabel}</div>
+            <span class="pm-type-badge" style="background:${PM_TYPE_COLOR[f.type]}; font-size:.7rem;">${PM_TYPE_EMOJI[f.type]} ${PM_TYPE_LABEL[f.type]}</span>
+            <div style="font-size:.72rem; color:var(--muted); font-family:'Space Mono',monospace;">Niv ${f.level} · PV ${f.hp}/${f.maxHp}</div>
+            <div style="width:100%; height:5px; background:var(--surface2); border-radius:3px; overflow:hidden;">
+              <div style="height:100%; width:${hpPct}%; background:${hpColor};"></div>
+            </div>
+          </button>`;
+      });
+      actionHtml += `</div>`;
+      actionHtml += `<button class="btn-outline" style="margin-top:10px; width:100%;" onclick="pvpCancelSwitch()">← Annuler</button>`;
+    } else {
+      // Grille des moves (style PvE) — avec affichage des PP restants
+      const myPps = (myActive && Array.isArray(myActive.movePps)) ? myActive.movePps : [];
+      // Si tous les moves sont à 0 PP, on signalera la "Lutte" comme en PvE.
+      // En PvP, comme on garde une exécution simple, on désactive juste les moves vides.
+      // (Le moteur pmExecuteMove substitue déjà "lutte" si plus de PP — voir pmRunTurn,
+      //  mais ici on appelle pmExecuteMove directement, donc on permet quand même
+      //  de cliquer un move sans PP : il sera lutté à la résolution.)
+      actionHtml = `<div class="pm-moves-grid">`;
+      (myActive.moveIds || []).forEach((mid, i) => {
+        const m = PM_MOVES[mid];
+        if (!m) return;
+        const desc = m.desc || '';
+        const maxPp = m.pp;
+        const ppLeft = (typeof myPps[i] === 'number') ? myPps[i] : maxPp;
+        const ppClass = ppLeft <= 0 ? 'empty' : ppLeft <= 1 ? 'low' : '';
+        const disabled = ppLeft <= 0 ? 'disabled' : '';
+        actionHtml += `
+          <button class="pm-move-btn" ${disabled} onclick="pvpSubmitMove(${i})">
+            <div class="pm-move-name" style="color:${PM_TYPE_COLOR[m.type] || 'inherit'};">${PM_TYPE_EMOJI[m.type] || '◌'} ${m.name}</div>
+            <div class="pm-move-info">
+              ${m.power > 0 ? 'Puiss. ' + m.power + ' · ' : ''}${m.accuracy}%
+              <span class="pm-move-pp ${ppClass}">· ${ppLeft}/${maxPp} PP</span>
+            </div>
+            ${desc ? `<div class="pm-move-desc">${desc}</div>` : ''}
+          </button>`;
+      });
+      actionHtml += `</div>`;
+      // Si plus aucun PP, on prévient
+      const allEmpty = (myActive.moveIds || []).every((mid, i) => {
+        const max = (PM_MOVES[mid] && PM_MOVES[mid].pp) || 0;
+        const left = (typeof myPps[i] === 'number') ? myPps[i] : max;
+        return left <= 0;
+      });
+      if (allEmpty) {
+        actionHtml += '<div style="margin-top:10px; text-align:center; color:var(--yellow); font-weight:700;">Plus aucun PP ! Tu vas utiliser Lutte.</div>';
+        actionHtml += '<button class="btn-primary" style="margin-top:10px; width:100%;" onclick="pvpSubmitMove(0)">Utiliser Lutte</button>';
+      }
+      const availableSwitches = myTeam.filter((f, i) => i !== myActiveIdx && !(f.ko || f.hp <= 0)).length;
+      if (availableSwitches > 0) {
+        actionHtml += `<button class="btn-outline" style="margin-top:10px; width:100%;" onclick="pvpOpenSwitch()">🔄 Changer de PokePom <span style="color:var(--muted); font-size:.8rem;">(consomme le tour)</span></button>`;
+      }
+    }
   }
 
-  const recentLog = (battle.log || []).slice(-10);
-  const logHtml = `<div style="margin-top:14px; padding:10px 12px; background:#fbf3da; border:1px solid #c8b07a; border-radius:6px; max-height:140px; overflow-y:auto;">
-    ${recentLog.map(l => `<div style="margin-bottom:3px; font-size:.82rem;">${l}</div>`).join('')}
-  </div>`;
-
-  const utilityHtml = `<div style="margin-top:14px; display:flex; gap:8px;">
-    <button onclick="pvpAbandon()" style="flex:1; padding:10px; background:#882020; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:.85rem;">🏳️ Abandonner</button>
-  </div>`;
+  // Log + timer
+  const recentLog = (battle.log || []).slice(-12);
+  const logHtml = `<div class="pm-battle-log" id="pvp-log">${recentLog.map(l => `<div class="pm-log-line">${l}</div>`).join('')}</div>`;
+  let timerHtml = '';
+  if (battle.turnDeadline) {
+    const ms = new Date(battle.turnDeadline).getTime() - Date.now();
+    if (ms > 0) timerHtml = `<div style="font-size:.78rem; color:var(--muted); text-align:right; margin-bottom:6px;">⏱️ ${Math.floor(ms/60000)} min restantes</div>`;
+    else timerHtml = `<div style="font-size:.78rem; color:var(--red); text-align:right; font-weight:700; margin-bottom:6px;">⏱️ Temps écoulé !</div>`;
+  }
+  const abandonHtml = `<button class="btn-outline" style="margin-top:10px; width:100%; color:var(--red); border-color:var(--red);" onclick="pvpAbandon()">🏳️ Abandonner</button>`;
 
   content.innerHTML = `
     ${timerHtml}
-    <div style="font-size:.7rem; color:#7a4828; text-transform:uppercase; margin-bottom:4px;">${opp.displayName}</div>
-    ${renderActive(oppActive, 'opp')}
-    ${renderTeamBar(oppTeam, oppActiveIdx, 'opp', false)}
-    <div style="height:14px;"></div>
-    <div style="font-size:.7rem; color:#7a4828; text-transform:uppercase; margin-bottom:4px;">${me.displayName} (toi)</div>
-    ${renderActive(myActive, 'me')}
-    ${renderTeamBar(myTeam, myActiveIdx, 'me', !myAction)}
-    ${actionHtml}${logHtml}${utilityHtml}
+    <div class="pm-battle-arena">
+      <div class="pm-battle-field">
+        ${renderSide(myInfo, myActive, myTeam, myActiveIdx, 'me', true)}
+        ${renderSide(oppInfo, oppActive, oppTeam, oppActiveIdx, 'opp', false)}
+      </div>
+      ${logHtml}
+      ${actionHtml}
+      ${abandonHtml}
+    </div>
   `;
 
   setTimeout(() => {
@@ -9442,7 +9480,24 @@ function pvpRenderBattleUI(battle) {
     if (oppActive) { const c = document.getElementById('pvp-active-opp'); if (c) drawPokePom(c, oppActive.pokepomId); }
     myTeam.forEach((f, i)  => { const c = document.getElementById('pvp-mini-me-' + i);  if (c) drawPokePom(c, f.pokepomId); });
     oppTeam.forEach((f, i) => { const c = document.getElementById('pvp-mini-opp-' + i); if (c) drawPokePom(c, f.pokepomId); });
+    myTeam.forEach((f, i) => { const c = document.getElementById('pvp-sw-' + i); if (c) drawPokePom(c, f.pokepomId); });
+    const log = document.getElementById('pvp-log');
+    if (log) log.scrollTop = log.scrollHeight;
   }, 0);
+}
+
+// Mode switch manuel (équivalent pmOpenSwitch / pmCancelSwitch)
+let _pvpUiSwitching = false;
+function pvpOpenSwitch() {
+  if (!_pvpCurrentBattle || _pvpCurrentBattle.status !== 'active') return;
+  const me = pvpIdentifyMe(_pvpCurrentBattle);
+  if (me !== _pvpCurrentBattle.currentPlayer) return;
+  _pvpUiSwitching = true;
+  pvpRenderBattleUI(_pvpCurrentBattle);
+}
+function pvpCancelSwitch() {
+  _pvpUiSwitching = false;
+  if (_pvpCurrentBattle) pvpRenderBattleUI(_pvpCurrentBattle);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -9455,6 +9510,8 @@ window.pvpSubmitSwitch    = pvpSubmitSwitch;
 window.pvpAbandon         = pvpAbandon;
 window.pvpForceClearAndExit = pvpForceClearAndExit;
 window.pvpDetachListener  = pvpDetachListener;
+window.pvpOpenSwitch      = pvpOpenSwitch;
+window.pvpCancelSwitch    = pvpCancelSwitch;
 window.pmRenderPvpHub     = pmRenderPvpHub;
 window.pmRenderPvpList    = pmRenderPvpList;
 window.pmRenderPvpBattle  = pmRenderPvpBattle;
