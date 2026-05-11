@@ -4203,6 +4203,19 @@ function pmApplyEndOfTurnEffects(fighter) {
   return events;
 }
 
+// Quand un PokePom sort du combat (switch volontaire ou KO), tous les buffs/nerfs
+// (stages atk/def/vit) et le statut de brûlure sont remis à zéro. C'est cohérent
+// avec la règle : ces effets sont liés au "moment de combat" du PokePom, pas
+// persistants. Réutilisé par le PvE (pmDoSwitch + KO auto-switch) et le PvP
+// (pvpResolveTurn) pour un comportement unifié.
+function pmResetFighterStateOnExit(fighter) {
+  if (!fighter) return;
+  fighter.stages = { atk: 0, def: 0, vit: 0 };
+  fighter.burnTurns = 0;
+  // hp et ko sont préservés intentionnellement — si le PokePom revient au combat
+  // plus tard, il garde ses HP actuels.
+}
+
 // Vérifie si le fighter n'a plus aucun PP
 function pmHasNoPP(fighter) {
   return fighter.moves.every(m => m.currentPp <= 0);
@@ -7492,8 +7505,14 @@ function pmDoSwitch(newIdx, costsTurn) {
   const newFighter = bs.teamFighters[newIdx];
   if (!newFighter || newFighter.ko || newIdx === bs.currentTeamIdx) return;
 
-  const oldName = bs.playerFighter.name;
+  const oldFighter = bs.playerFighter;
+  const oldName = oldFighter.name;
   const newName = newFighter.name;
+
+  // Le PokePom qui sort perd ses buffs/nerfs et sa brûlure. C'est la règle :
+  // les altérations sont liées à la présence sur le terrain. S'il revient plus
+  // tard, il revient "neutre".
+  pmResetFighterStateOnExit(oldFighter);
 
   bs.currentTeamIdx = newIdx;
   bs.playerFighter = newFighter;
@@ -7652,6 +7671,8 @@ function pmHandleBattleEnd() {
       bs.log.push(`<strong>Round ${bs.roundNum}</strong> : un ${bs.opponentFighter.name} (Niv ${nextOpp.level}) apparaît !`);
       return; // Continue le combat
     } else if (p.ko) {
+      // Reset stages/brûlure du PokePom KO qui sort du combat
+      pmResetFighterStateOnExit(p);
       // Switch vers suivant si dispo
       bs.currentTeamIdx++;
       const nextFighter = bs.teamFighters[bs.currentTeamIdx];
@@ -8335,7 +8356,7 @@ async function pvpInitChallenge(opponentCode) {
       createdAt: new Date(now).toISOString(),
       lastUpdate: new Date(now).toISOString(),
       p1: {
-        code: player.code,
+        code: state.code,
         displayName: myProfile.displayName,
         avatarId: myProfile.avatarId || 'avatar_classic',
         eloAtStart: myProfile.elo,
@@ -8373,11 +8394,12 @@ async function pvpInitChallenge(opponentCode) {
     battle.log.push(battle.p1.displayName + ' joue en premier (rappel : la vitesse de chacun n\'est révélée qu\'en cours de combat).');
 
     console.log('[pvp] creating battle', battleId, 'size:', JSON.stringify(battle).length);
+    console.log('[pvp] codes :', { myCode: state.code, p1Code: battle.p1.code, p2Code: battle.p2.code, opponentCode });
     await pvpWrite(BATTLES_PATH + '/' + battleId, battle);
     console.log('[pvp] battle saved');
 
     await Promise.all([
-      pvpUpdate(PVP_PATH + '/' + player.code, {
+      pvpUpdate(PVP_PATH + '/' + state.code, {
         currentBattleId: battleId,
         lastSeen: new Date().toISOString()
       }),
@@ -8407,9 +8429,19 @@ async function pvpInitChallenge(opponentCode) {
 //             on résout localement TOUT le tour et on écrit le résultat.
 
 function pvpIdentifyMe(battle) {
-  if (!battle || !state) return null;
+  if (!battle || !state) {
+    console.warn('[pvp] identifyMe : battle ou state manquant', { hasBattle: !!battle, hasState: !!state });
+    return null;
+  }
   if (battle.p1.code === state.code) return 'p1';
   if (battle.p2.code === state.code) return 'p2';
+  // Debug : pourquoi on ne reconnaît pas ?
+  console.warn('[pvp] identifyMe : mismatch', {
+    myCode: state.code,
+    p1Code: battle.p1 && battle.p1.code,
+    p2Code: battle.p2 && battle.p2.code,
+    battleId: battle.id
+  });
   return null;
 }
 
@@ -8535,15 +8567,17 @@ async function pvpResolveTurn(battle, action1, by1, action2, by2) {
   // Retourne true si l'action était un switch (donc pas d'attaque)
   const applyAction = (action, by) => {
     if (action.type === 'switch') {
-      // Switch : retire le PokePom actif, envoie le nouveau (clone deserialized)
+      // Switch : retire le PokePom actif (en resettant ses buffs/brûlure
+      // comme en PvE), envoie le nouveau (clone deserialized = état frais)
       if (by === 'p1') {
-        // re-serialize l'actif en place avant de switcher
+        pmResetFighterStateOnExit(p1Active);
         teamP1[p1Idx] = pvpSerializeFighter(p1Active);
         const oldName = p1Active.name;
         p1Idx = action.toIdx;
         p1Active = pvpDeserializeFighter(teamP1[p1Idx]);
         newLogs.push(battle.p1.displayName + ' retire ' + oldName + ' et envoie ' + p1Active.name + ' !');
       } else {
+        pmResetFighterStateOnExit(p2Active);
         teamP2[p2Idx] = pvpSerializeFighter(p2Active);
         const oldName = p2Active.name;
         p2Idx = action.toIdx;
@@ -8651,8 +8685,14 @@ async function pvpResolveTurn(battle, action1, by1, action2, by2) {
   // on bascule sur le 1er non-KO disponible automatiquement (le joueur n'a pas à
   // gérer une UI de switch forcé séparée — c'est plus simple en PvP async).
   // Le PvE laisse choisir, mais en PvP "alterné" ça compliquerait le flow.
+  // À chaque sortie de combat (KO ou switch), on reset les stages et la brûlure
+  // du PokePom qui sort (règle commune PvE/PvP).
   if (status === 'active') {
     if (teamP1[p1Idx].ko || teamP1[p1Idx].hp <= 0) {
+      // Reset direct sur la forme sérialisée (équivalent à pmResetFighterStateOnExit
+      // sur un fighter désérialisé, mais évite un round-trip)
+      teamP1[p1Idx].stages = { atk: 0, def: 0, vit: 0 };
+      teamP1[p1Idx].burnTurns = 0;
       const nextIdx = teamP1.findIndex(f => !f.ko && f.hp > 0);
       if (nextIdx >= 0) {
         p1Idx = nextIdx;
@@ -8660,6 +8700,8 @@ async function pvpResolveTurn(battle, action1, by1, action2, by2) {
       }
     }
     if (teamP2[p2Idx].ko || teamP2[p2Idx].hp <= 0) {
+      teamP2[p2Idx].stages = { atk: 0, def: 0, vit: 0 };
+      teamP2[p2Idx].burnTurns = 0;
       const nextIdx = teamP2.findIndex(f => !f.ko && f.hp > 0);
       if (nextIdx >= 0) {
         p2Idx = nextIdx;
